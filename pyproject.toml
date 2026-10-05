@@ -1,0 +1,42 @@
+[project]
+name = "claude-spine"
+version = "0.1.0"
+description = "MCP server for production Spine 4.2 rigs: clean meshes, heat-diffused weights, constraints, slot-game juice and FX, budget QA"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "kumikilongyeyo" }, { name = "Egor Fedorov (original spine-mcp)" }]
+keywords = ["mcp", "spine", "spine2d", "animation", "rigging", "gamedev", "slots"]
+dependencies = [
+  # mcp 2.0 removed mcp.server.fastmcp, which the server is built on.
+  "mcp[cli]>=1.2,<2",
+  "pydantic>=2.6",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pillow>=10",
+  "psd-tools>=1.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+claude-spine = "claude_spine.server:main"
+
+[project.urls]
+Homepage = "https://github.com/kumikilongyeyo/CLAUDE-SPINE"
+Upstream = "https://github.com/egorfedorov/spine-mcp"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["claude_spine"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"validator/pose.mjs" = "claude_spine/_validator/pose.mjs"
+"validator/package.json" = "claude_spine/_validator/package.json"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

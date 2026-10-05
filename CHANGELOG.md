@@ -1,0 +1,14 @@
+# Changelog
+
+## 0.1.0 — 2026-10-05
+
+First release of the restructured fork of egorfedorov/spine-mcp.
+
+- Typed Spine 4.2 IR (Pydantic) with exact runtime defaults and pass-through of unknown fields; bone-index remapping for weighted vertices.
+- Contour meshes: padded trace → DP simplify (never clips art) → joint-aware refinement → verified conforming Delaunay with an exact CDT fallback.
+- Bone-heat weights (cotangent Laplacian, visibility-aware heat), ≤4 influences, exact normalisation.
+- IK, Spine 4.2 physics presets, transform constraints, one-call strand rigs, 2.5D turn rig.
+- Symbol animation contract + juice presets on inserted juice bones; FX presets with procedural textures; Spine events for SFX/particles/rollups.
+- QA: structural validation, spine-core runtime load + playback check, mobile budget with draw-call estimate, runtime-driven GIF previews.
+- MaxRects atlas packer (whitespace strip, PMA, sequence-safe region names).
+- 24 MCP tools; 369 tests including mesh fuzzing and a Spine editor round-trip.

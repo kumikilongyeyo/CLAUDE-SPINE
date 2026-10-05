@@ -1,0 +1,9 @@
+{
+  "name": "claude-spine-validator",
+  "private": true,
+  "type": "module",
+  "description": "Loads skeletons in the official spine-core runtime to prove they load, and dumps posed geometry for previews",
+  "dependencies": {
+    "@esotericsoftware/spine-core": "4.2.120"
+  }
+}
