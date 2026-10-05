@@ -310,7 +310,7 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     win_highlight, multiplier_stack, win_rollup; payouts: coin_fountain, cascade_pop; features: wild_land, expanding_wild,
     scatter_trigger, free_spins_transition; bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill; ambient: weather,
     god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm; UI: button_press, idle_shimmer, focus_glow, padlock,
-    popup; recipes that move your reel / symbol / screen / button bones do it through inserted carrier bones, never your
+    popup; saber = a port of Video Copilot's Saber beams with 12 presets and an ae_hint for the saber AE template; recipes that move your reel / symbol / screen / button bones do it through inserted carrier bones, never your
     own keys), and the hybrids portal and electric_frame, whose plasma / lightning part is
     After Effects: they return a ring_hint to pass to ae_fx_to_spine (guide explains). Procedural textures, additive only (one draw call), one group bone per recipe so it
     recolours, resizes and retimes as one piece, and it merges into any animation with into=.

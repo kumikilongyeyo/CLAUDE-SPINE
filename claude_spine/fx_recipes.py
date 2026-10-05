@@ -2268,4 +2268,5 @@ from . import fx_ui  # noqa: E402,F401   button_press, idle_shimmer, focus_glow,
 from . import fx_ambient  # noqa: E402,F401   weather, god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm
 from . import fx_features  # noqa: E402,F401   wild_land, expanding_wild, scatter_trigger, free_spins_transition
 from . import fx_bonus  # noqa: E402,F401   pick_reveal, hold_respin, jackpot_wheel, meter_fill
+from . import fx_saber  # noqa: E402,F401   saber (Spine half; the AE half is ae_templates/saber.jsx)
 from . import fx_bundles  # noqa: E402,F401   sequence, win_banner

@@ -68,6 +68,7 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | focus_glow | 9-slice line + glow + wash breathing on the LED curve; phase enter (1/t flash, no pop) / loop / exit (fade to 0) | loop 2 s |
 | padlock | procedural padlock: unlock (shackle springs open, jiggle, pops off with a shine) / break (cracks, shards on parabolas) / lock (swings shut, bounces, clicks) | one-shot 1.75 s |
 | popup | toast/panel springs in (exact overshoot + jelly) with puff flash + ring and a shine; phase out = anticipation + collapse | one-shot 0.9 s |
+| saber | port of Video Copilot's Saber: hot core along a line / polyline / circle / rect, glow bands at doubling widths falling as (r0/r)^bias, travelling-wave writhe and flicker on integer cycles, draw on / off; 12 presets; the same beam in AE via the saber template (text cores too) | loop 2 s, hybrid |
 | weather | rain / snow / embers / petals at terminal velocity, drag-lagged gusts, parallax depth layers, streaks along velocity, tumbling petals, rising flickering embers | loop 4 s |
 | god_rays | fan of light shafts from a source, slow sweep, occluder dimming in sequence, dust in the beams (+ AE volumetric rays) | loop 8 s, hybrid |
 | water_surface | capillary rings r ~ sqrt(t) at every symbol landing, glints; fx_water_land (+ AE caustics behind the reels) | window 2.6 s, hybrid |
@@ -437,6 +438,36 @@ button's overshoot, the shimmer's glint and the popup's peak; the popup opens wi
   the body picture, so `art={"body": ...}` shatters YOUR lock. Sub-recipe art is prefixed: `art={"shine_rays": ...}`.
 - UI 9-slices are `tex_ui_frame` (1 texture px = 1 unit, any corner radius, exactly 0 at the border).
   `examples/build_ui_demo.py` builds the six-cell demo (`docs/ui.gif`).
+
+## Saber (a port of Video Copilot's Saber)
+
+Saber is Video Copilot's free After Effects plug-in for energy beams, lightsabers, lasers, neon, electric and fire
+outlines and haze. It is ported twice, sharing ONE preset table (`PRESETS` inside `ae_templates/saber.jsx`):
+
+    fx_recipe recipe=saber project=p.json options={preset: default, start: [-240, -60], end: [230, 70]}
+    fx_recipe recipe=saber project=p.json into=win options={preset: neon, core: rect, rect: [440, 200, 40], draw: on}
+    fx_recipe recipe=saber project=p.json options={preset: fire, core: circle, radius: 105}      -> ae_hint: saber
+    ae_template name=saber params={preset: gold, core: text, text: "BIG WIN", draw: on}          (text cores: AE only)
+
+- Presets: default (blue saber), red, green, purple, gold, neon, laser, electric, fire, energy, plasma, haze. Any style
+  option (color, core_color, core_size, intensity, spread, bias, distortion, noise_size, noise_speed, flicker, haze)
+  wins over the preset; in the AE template the style parameters default to null = take the preset.
+- Glow falloff: a glowing tube's light falls off as 1/distance. Both halves build the glow from octaves: bands (Spine)
+  or Gaussian-blurred copies (AE) at doubling radii whose peaks fall as (r0 / r)^bias. bias 1 = equal light per octave
+  = 1/r (the real thing); < 1 spreads into haze; > 1 tightens into a laser.
+- Distortion: Spine moves the shared row bones sideways with travelling waves (wavelengths noise_size x 1, 1/2, 1/4, each
+  moving a whole number of cycles per loop; around a closed path a whole number of waves, so no seam); AE uses
+  Turbulent Displace with a cycled evolution. Flicker is a product of two sines with integer cycles. Both loop exactly.
+- Draw on / off (Saber's start / end offset): Spine collapses the rows past the head onto it and shrinks them, AE uses
+  Trim Paths (Linear Wipe for text). Events fx_saber_on / fx_saber_off; the AE result says seq_mode once.
+- Every band is a strip mesh on ONE set of row bones, so the whole beam costs one draw call and no deform keys. Wide
+  bands use normals smoothed over their own width and are clamped to 0.65 x the local radius of curvature, so they
+  never fold in a tight ring; polyline corners are rounded (Chaikin) like Saber's round joins; open ends fade out
+  along the beam instead of stopping square.
+- The ae_hint renders the same beam in AE: comp centred on the recipe's group bone, `px` comp pixels per design unit,
+  additive; put it in with ae_fx_to_spine using the hint's args, then lower or drop the Spine beam.
+- Why not the plug-in itself: a template that needs Saber renders nowhere Saber is missing (a render farm, a teammate's
+  aerender). This port uses AE's own effects only. `examples/build_saber_demo.py` renders `docs/saber.gif`.
 
 ## Ice and water
 
