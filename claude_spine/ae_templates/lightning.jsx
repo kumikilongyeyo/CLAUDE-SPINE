@@ -1,0 +1,20 @@
+/*TEMPLATE {"name":"lightning","doc":"A forking bolt between two points that flickers (new shape every frame) and fades. Link two symbols, a strike, a charge. Positions are fractions of the comp.","params":{"width":512,"height":256,"duration":0.5,"fps":24,"start":[0.05,0.5],"end":[0.95,0.5],"color":"7FB8FF","core":"FFFFFF","segments":22,"amplitude":0.35,"branching":0.25,"bolt_width":0.03,"seed":3,"flicker":1,"glow":1.0}} */
+var W = P.width, H = P.height, D = P.duration, comp = AEFX.comp(P.comp || "lightning", W, H, P.fps, D);
+var l = comp.layers.addSolid([0, 0, 0], "bolt", W, H, 1);
+var lt = AEFX.fx(l, "ADBE Lightning");
+AEFX.set(lt, "Start point", [W * P.start[0], H * P.start[1]]);
+AEFX.set(lt, "End point", [W * P.end[0], H * P.end[1]]);
+AEFX.set(lt, "Segments", P.segments);
+AEFX.set(lt, "Amplitude", P.amplitude * 100);
+AEFX.set(lt, "Branching", P.branching);
+AEFX.set(lt, "Width", Math.max(1, W * P.bolt_width));
+AEFX.set(lt, "Core Width", 0.16);
+var oc = AEFX.rgb(P.color); oc.push(1); AEFX.set(lt, "Outside Color", oc);
+var ic = AEFX.rgb(P.core); ic.push(1); AEFX.set(lt, "Inside Color", ic);
+AEFX.set(lt, "Speed", 1);
+AEFX.find(lt, "Random Seed").expression = "Math.floor(time * " + P.fps + " * " + P.flicker + ") % 100 + " + P.seed;
+AEFX.keys(l.opacity, [[0, 100], [D * 0.25, 100], [D * 0.55, 70], [D, 0]], false);
+var g = comp.layers.addSolid([1, 1, 1], "glow", W, H, 1); g.adjustmentLayer = true;
+var gf = AEFX.fx(g, "ADBE Glo2");
+gf.property("Glow Threshold").setValue(55); gf.property("Glow Radius").setValue(H * 0.08 * P.glow); gf.property("Glow Intensity").setValue(0.7 * P.glow);
+return AEFX.done(comp, '"mode":"additive"');

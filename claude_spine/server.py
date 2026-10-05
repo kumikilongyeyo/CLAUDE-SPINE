@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge
+from . import ae_bridge, ae_templates
 from . import atlas as atlas_mod
 from . import fx as fx_mod
 from . import juice as juice_mod
@@ -325,6 +325,23 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
     return _saved(p, res)
+
+
+@mcp.tool()
+def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -> dict:
+    """Build an After Effects FX comp from a template: returns a script to run in AE (nothing is rendered here).
+
+    name="" lists the templates with their parameters and defaults. Otherwise name is one of: glow_pulse,
+    shockwave, sparkle, relief_shimmer (light wave over a picture, traced by its relief or a depth map),
+    fire, lightning, burst (parabolic sparks), splash. params override the defaults (comp= names the comp;
+    save_as= saves the open AE project to that .aep right after, which aerender needs).
+    Then: run the returned `run_with` with the After Effects MCP's ae_run_script (it creates the comp in an
+    ae_fx_templates folder of the OPEN project and returns its name, size, fps, frames), save the project, and
+    pass the comp to ae_fx_to_spine (use mode="additive" when the result says so). After Effects caches
+    rendered frames by comp name: when tuning, give each attempt a new comp name."""
+    if not name:
+        return {"templates": ae_templates.list_templates()}
+    return ae_templates.build_script(name, params or {}, out_dir or None)
 
 
 @mcp.tool()

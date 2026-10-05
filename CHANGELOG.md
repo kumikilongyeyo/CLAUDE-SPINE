@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `ae_template` (26th tool) + `claude_spine/ae_templates/`: eight parameterised After Effects FX templates as ExtendScript (glow_pulse, shockwave, sparkle, relief_shimmer, fire, lightning, burst, splash). `ae_template` returns a script; running it in AE builds one ready-to-render comp, which goes straight to `ae_fx_to_spine`. Built-in AE effects only, so scripts render anywhere with `aerender`. Verified end to end (template → AE → save → aerender → Spine → spine-core runtime).
+
 - `ae_fx_to_spine` (25th tool): After Effects → Spine bridge. Renders a saved `.aep` comp headless with `aerender` (never touches the project open in AE), reads AE's premultiplied TIFF alpha, trims empty frames, writes straight-alpha sprites to `images/ae/` and plays them as a Spine sequence at the comp's own speed. `hit_ae` + `hit_at` land an AE moment on a Spine one; `fit_duration` stretches a sequence to a loop length; `max_frames`/`max_size` shrink it. Frames already on disk work too (`frames_dir` + `fps`). Reproduces the coin project's hand-made fire flipbook byte for byte. 11 new tests.
 
 ## 0.1.0 — 2026-10-05

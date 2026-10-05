@@ -44,7 +44,7 @@ check everything.
 | Bones | `add_bones`, `add_chain`, `reparent_slot` | Add bones in world coordinates. Art never moves |
 | Mesh | `rig_mesh` | Region → contour mesh with bone-heat weights |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
-| Motion | `juice_apply`, `fx_generate`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, FX presets, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
+| Motion | `juice_apply`, `fx_generate`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, FX presets, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
 | QA | `validate`, `qa_budget`, `preview` | Structural and runtime validation, mobile budget, GIF previews |
 | Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
 
