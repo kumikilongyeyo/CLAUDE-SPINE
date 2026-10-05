@@ -422,6 +422,20 @@ def tex_smoke(n: int = 256, seed: int = 8) -> Image.Image:
     return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
 
 
+
+def tex_trail(color: str = "FFD25A", w: int = 64, h: int = 512) -> Image.Image:
+    """A comet tail laid out vertically: v=0 (top) is the head, bright and wide, fading and narrowing to nothing at v=1."""
+    y, x = np.mgrid[0:h, 0:w].astype(float)
+    xn = (x - (w - 1) / 2) / ((w - 1) / 2)
+    v = y / (h - 1)
+    width = 0.55 * (1 - v) ** 0.8 + 0.06
+    core = np.exp(-(xn / (width * 0.35)) ** 2)
+    halo = 0.45 * np.exp(-(xn / width) ** 2)
+    a = (core + halo) * (1 - v) ** 1.4 * np.clip(v / 0.02, 0, 1) ** 0.5
+    a *= np.clip((1 - np.abs(xn)) / 0.1, 0, 1)
+    return _colorize(np.clip(a, 0, 1), *_palette(color))
+
+
 # texture name -> factory (white textures are tinted per slot; coloured ones are named with their colour)
 WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
     "fx/wisp": tex_wisp, "fx/beam": tex_beam, "fx/mote": tex_mote, "fx/reflect": tex_reflect,
@@ -487,6 +501,41 @@ def ease_out(u, p=3.0):
 def times_dense(t0: float, t1: float, rate: float) -> list[float]:
     n = max(2, int(math.ceil((t1 - t0) * rate)) + 1)
     return [float(v) for v in np.linspace(t0, t1, n)]
+
+
+def rr_point(s_: float, w: float, h: float, r: float) -> tuple[float, float, float]:
+    """Point and tangent angle (deg) at fraction s_ of a rounded rectangle's perimeter, clockwise from the top-left
+    end of the top edge (y up). The angle keeps decreasing lap after lap (-360 per lap), so keys never wrap."""
+    r = max(0.0, min(r, w / 2, h / 2))
+    sw, sh, arc = w - 2 * r, h - 2 * r, math.pi * r / 2
+    # (kind, length, start point or arc centre, edge direction or arc start angle); angles are continuous around the loop
+    segs = [("L", sw, (-w / 2 + r, h / 2), 0.0), ("A", arc, (w / 2 - r, h / 2 - r), 90.0),
+            ("L", sh, (w / 2, h / 2 - r), -90.0), ("A", arc, (w / 2 - r, -h / 2 + r), 0.0),
+            ("L", sw, (w / 2 - r, -h / 2), -180.0), ("A", arc, (-w / 2 + r, -h / 2 + r), -90.0),
+            ("L", sh, (-w / 2, -h / 2 + r), -270.0), ("A", arc, (-w / 2 + r, h / 2 - r), -180.0)]
+    total = sum(sg[1] for sg in segs) or 1.0
+    lap = math.floor(s_)
+    d = (s_ - lap) * total
+    for k, (kind, ln, p0, a0) in enumerate(segs):
+        if d <= ln or k == len(segs) - 1:
+            d = min(d, ln)
+            if kind == "L":
+                x, y, ang = p0[0] + math.cos(math.radians(a0)) * d, p0[1] + math.sin(math.radians(a0)) * d, a0
+            else:
+                phi = math.radians(a0) - (d / max(arc, 1e-9)) * math.pi / 2      # clockwise quarter arc
+                x, y, ang = p0[0] + r * math.cos(phi), p0[1] + r * math.sin(phi), math.degrees(phi) - 90.0
+            return x, y, ang - 360.0 * lap
+        d -= ln
+    return -w / 2 + r, h / 2, -360.0 * lap
+
+
+def _bez(p0, p1, p2, t):
+    x = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0]
+    y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]
+    dx = 2 * (1 - t) * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0])
+    dy = 2 * (1 - t) * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1])
+    return x, y, math.degrees(math.atan2(dy, dx))
+
 
 
 def _br(t, f, p=0.0):
@@ -1188,9 +1237,18 @@ def portal(c: Ctx, P: dict) -> dict:
     c.color_keys(s_fl, ts_fine := times_dense(0, D, 24), lambda u: hexa(flash_c, c.a(0.95 * fa(u))))
     c.bone_keys(b_fl, "scale", ts_fine, lambda u: (0.75 + 0.5 * fa(u),) * 2)
     c.color_keys(s_fc, ts_fine, lambda u: hexa("F4E6FF", c.a(0.8 * fa(u) ** 1.4)))
-    return c.result(duration=D * c.k, loop=D, ring_after=ring_after,
-                    ring_hint=dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
-                                   note="AE ring: ae_template portal_ring -> save -> ae_fx_to_spine with these args; scale ~ 1.8 for a 384px comp"))
+    hint = dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
+                note="AE ring: ae_template portal_ring -> save -> ae_fx_to_spine with these args; scale ~ 1.8 for a 384px comp")
+    return c.result(duration=D * c.k, loop=D, ring_after=ring_after, ring_hint=hint, ae_hint=hint)
+
+
+def _frame_glow(c: Ctx, parent: str, Wd: float, Hd: float, tag: str = "under", role: str = "under"):
+    """Soft glow hugging a Wd x Hd frame, as a 9-slice of the rrglow texture: the glow keeps its thickness and corners at
+    any aspect (a stretched square texture floods the ends of a long bar)."""
+    inset = 0.26 * 256                      # the outline sits 26% of the half-size in from the texture edge
+    tw = 512
+    s9, cb = c.slice9(parent, "fx/rrglow", Wd + 2 * inset, Hd + 2 * inset, 150.0, make=lambda: tex_rrglow(), tag=tag, role=role)
+    return s9
 
 
 def electric_frame(c: Ctx, P: dict) -> dict:
@@ -1203,9 +1261,8 @@ def electric_frame(c: Ctx, P: dict) -> dict:
     grp = c.bone("frame", c.group, 0, 0)
     ts = times_dense(0, D, 16)
     br = lambda u, n, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * n * u / D + ph)  # noqa: E731
-    b_g = c.bone("under", grp, sx=Wd / max(Wd, Hd), sy=Hd / max(Wd, Hd))     # the glow texture is square: stretch it to the frame
-    side = max(Wd, Hd) / 0.74 * 0.94
-    s_under = c.slot(b_g, "fx/rrglow", side, make=lambda: tex_rrglow(), role="under")
+    s_under = _frame_glow(c, grp, Wd, Hd)
+    b_g = c.sk.slot(s_under).bone
     slots = [s_under]
     sparks = []
     for i in range(ns):
@@ -1227,7 +1284,7 @@ def electric_frame(c: Ctx, P: dict) -> dict:
     ring_after = c.slots[0]
     c.show(slots, 0, None)
     c.color_keys(s_under, ts, lambda u: hexa(col, c.a(0.55 + 0.25 * br(u, 3, 0.6) + 0.12 * br(u, 7))))
-    c.bone_keys(b_g, "scale", ts, lambda u: (1.0 + 0.025 * br(u, 3, 0.6),) * 2)   # keys multiply the setup scale
+    c.bone_keys(b_g, "scale", ts, lambda u: (1.0 + 0.012 * br(u, 3, 0.6),) * 2)
     for sp in sparks:
         sc, ro, att = [], [], [(0.0, None)]
         for q in range(sp["rep"]):
@@ -1244,9 +1301,9 @@ def electric_frame(c: Ctx, P: dict) -> dict:
         c.ab.bone(sp["b"], "scale", _uniq(sorted(sc, key=lambda a: a[0])), "quad_in_out")
         c.ab.bone(sp["b"], "rotate", _uniq(sorted(ro, key=lambda a: a[0])), "linear")
         c.ab.slot_attachment(sp["s"], att)
-    return c.result(duration=D * c.k, loop=D, ring_after=ring_after,
-                    ring_hint=dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
-                                   note="AE line: ae_template electric_frame -> save -> ae_fx_to_spine with these args; scale ~ 0.95 for the default 512 comp and a 400 frame"))
+    hint = dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
+                note="AE line: ae_template electric_frame -> save -> ae_fx_to_spine with these args; scale ~ 0.95 for the default 512 comp and a 400 frame")
+    return c.result(duration=D * c.k, loop=D, ring_after=ring_after, ring_hint=hint, ae_hint=hint)
 
 
 def crosshair(c: Ctx, P: dict) -> dict:
@@ -1425,6 +1482,8 @@ def puff(c: Ctx, P: dict) -> dict:
     size = float(P["size"])
     blend = str(P["blend"])
     rise = float(P["rise"])
+    if not P["lobes"]:
+        n = 0                                     # realistic puff: the smoke body comes from After Effects (smoke_puff)
     rng = np.random.default_rng(c.seed + 71)
     grp = c.bone("puff", c.group, 0, 0)
     b_fl, b_ring = c.bone("flash", grp), c.bone("ring", grp)
@@ -1439,9 +1498,10 @@ def puff(c: Ctx, P: dict) -> dict:
                           delay=rng.uniform(0, 0.08), tint=("FFFFFF" if rng.random() < 0.5 else col)))
     # a bigger core puff in the middle
     bc = c.bone("core", grp)
-    sc = c.slot(bc, "fx/cloud", size * 1.5, blend=blend, role="cloud")
+    sc = c.slot(bc, "fx/cloud", size * 1.5, blend=blend, role="cloud") if P["lobes"] else None
+    ring_after = s_ring
     ts = times_dense(0, D, 30)
-    c.show([s_fl, s_ring, sc] + [x["s"] for x in blobs], 0, D)
+    c.show([x for x in (s_fl, s_ring, sc) if x] + [x["s"] for x in blobs], 0, D)
     fl = lambda u: math.exp(-((u - 0.05) / 0.10) ** 2)  # noqa: E731
     c.color_keys(s_fl, ts, lambda u: hexa(flash_c, c.a(0.95 * fl(u))))
     c.bone_keys(b_fl, "scale", ts, lambda u: (0.5 + 1.0 * ease_out(u / 0.25, 2.5),) * 2)
@@ -1455,10 +1515,13 @@ def puff(c: Ctx, P: dict) -> dict:
         c.bone_keys(bl["b"], "scale", ts, lambda u, bl=bl: ((0.25 + (bl["g"] - 0.25) * ease_out((u - bl["delay"]) / 0.55, 2.2)) if u >= bl["delay"] else 0.0,) * 2)
         c.bone_keys(bl["b"], "rotate", ts, lambda u, bl=bl: bl["rot"] * ease_out((u - bl["delay"]) / 0.9, 1.6) if u >= bl["delay"] else 0.0)
         c.color_keys(bl["s"], ts, lambda u, bl=bl: hexa(bl["tint"], c.a(0.95 * env(u, bl["delay"]))))
-    c.bone_keys(bc, "scale", ts, lambda u: (0.3 + 1.1 * ease_out(u / 0.5, 2.2),) * 2)
-    c.color_keys(sc, ts, lambda u: hexa("FFFFFF", c.a(0.95 * env(u, 0.0))))
+    if sc:
+        c.bone_keys(bc, "scale", ts, lambda u: (0.3 + 1.1 * ease_out(u / 0.5, 2.2),) * 2)
+        c.color_keys(sc, ts, lambda u: hexa("FFFFFF", c.a(0.95 * env(u, 0.0))))
     c.ab.event(c.T(0.0), "fx_puff")
-    return c.result(duration=D * c.k, blobs=n)
+    hint = dict(parent=c.group, front_of=ring_after, mode="alpha", seq_mode="once", start=c.T(0.0),
+                note="realistic smoke: ae_template smoke_puff -> save -> ae_fx_to_spine with these args (scale ~ size*2.6/comp size)")
+    return c.result(duration=D * c.k, blobs=n, ae_hint=hint)
 
 
 def smoke_glow(c: Ctx, P: dict) -> dict:
@@ -1499,6 +1562,135 @@ def smoke_glow(c: Ctx, P: dict) -> dict:
         c.bone_keys(bl["b"], "rotate", tsd, lambda u, bl=bl, q=q: bl["rot"] * q(u))
         c.color_keys(bl["s"], tsd, lambda u, bl=bl, q=q: hexa(col, c.a(alpha * bl["amp"] * math.sin(math.pi * q(u)) ** 1.1)))
     return c.result(duration=D * c.k, loop=D, blobs=n)
+
+
+def _trail_keys(c: Ctx, nodes: list[str], rows: int, height: float, ts, pos_at):
+    """Key a strand mesh so it lies along a moving curve: row i (bottom = tail end ... top = head) follows
+    pos_at(u, lag_fraction) -> (x, y, tangent_deg). Rows rotate so the strip's width is always across the curve;
+    angles are unwrapped, so a tangent crossing +-180 never spins a row the long way round."""
+    for i, nb in enumerate(nodes):
+        lagf = (rows - 1 - i) / (rows - 1)
+        y0 = -height / 2 + i * height / (rows - 1)
+        vals = [pos_at(u, lagf) for u in ts]
+        c.ab.bone(nb, "translate", _uniq([(c.T(u), v[0], v[1] - y0) for u, v in zip(ts, vals)]), "linear")
+        ang = np.degrees(np.unwrap(np.radians([v[2] + 90.0 for v in vals])))
+        c.ab.bone(nb, "rotate", _uniq([(c.T(u), float(a)) for u, a in zip(ts, ang)]), "linear")
+
+
+def meteor_trace(c: Ctx, P: dict) -> dict:
+    """A bright head with a comet tail racing around a rounded-rectangle frame, shedding sparks. Loops exactly."""
+    D = float(P["duration"])
+    col = _hexn(P["color"], "FFD25A")
+    W, H, R_ = float(P["width"]), float(P["height"]), float(P["corner"])
+    laps, tail = int(P["laps"]), float(P["tail"])
+    rows = 24
+    grp = c.bone("trace", c.group, 0, 0)
+    s_under = _frame_glow(c, grp, W, H) if P["underglow"] else None
+    s_tail, nodes = c.strand(grp, f"fx/trail_{col}", float(P["thickness"]) * 2.4, 100.0, rows, make=lambda: tex_trail(col), tag="tail", role="tail")
+    b_head = c.bone("head", grp)
+    s_hg = c.slot(b_head, "fx/glow", float(P["size"]) * 2.2, role="glow")
+    s_hs = c.slot(b_head, "fx/spark", float(P["size"]) * 1.4, role="spark")
+    rng = np.random.default_rng(c.seed + 91)
+    nsp = int(P["sparks"])
+    sparks = []
+    for i in range(nsp):
+        bn = c.bone(f"sp{i}", grp)
+        sl = c.slot(bn, "fx/mote", float(rng.uniform(8, 18)), role="mote")
+        sparks.append(dict(b=bn, s=sl, t=i * D / max(nsp, 1), life=float(rng.uniform(0.35, 0.6)), out=float(rng.uniform(8, 26))))
+    slots = [x for x in (s_under, s_tail, s_hg, s_hs) if x]
+    c.show(slots, 0, None)
+    ts = times_dense(0, D, 30)
+    per = lambda u: laps * u / D  # noqa: E731
+
+    def pos_at(u, lagf):
+        x, y, a = rr_point(per(u) - lagf * tail, W, H, R_)
+        return x, y, a
+    _trail_keys(c, nodes, rows, 100.0, ts, pos_at)
+    c.color_keys(s_tail, ts, lambda u: hexa("FFFFFF", c.a(0.95)))
+    c.bone_keys(b_head, "translate", ts, lambda u: pos_at(u, 0.0)[:2])
+    c.bone_keys(b_head, "rotate", ts, lambda u: 360.0 * 2 * u / D)
+    c.color_keys(s_hg, ts, lambda u: hexa(col, c.a(0.75 + 0.2 * math.sin(2 * math.pi * 6 * u / D))))
+    c.color_keys(s_hs, ts, lambda u: hexa("FFFFFF", c.a(0.9)))
+    if s_under:
+        c.color_keys(s_under, ts, lambda u: hexa(col, c.a(0.22 + 0.06 * math.sin(2 * math.pi * 2 * u / D))))
+    for sp in sparks:
+        t0, life = sp["t"], sp["life"]
+        x0, y0, a0 = rr_point(per(t0), W, H, R_)
+        nx, ny = math.cos(math.radians(a0 + 90)), math.sin(math.radians(a0 + 90))      # outward-ish normal (CW path: left of travel is outside)
+        tts = times_dense(t0, min(D, t0 + life), 20)
+        c.bone_keys(sp["b"], "translate", tts, lambda u, x0=x0, y0=y0, nx=nx, ny=ny, t0=t0, sp=sp, life=life: (
+            x0 + nx * sp["out"] * (u - t0) / life, y0 + ny * sp["out"] * (u - t0) / life - 10 * ((u - t0) / life) ** 2))
+        c.color_keys(sp["s"], tts, lambda u, t0=t0, life=life: hexa(col, c.a(0.95 * max(0.0, 1 - (u - t0) / life))))
+        c.ab.slot_attachment(sp["s"], [(0.0, None), (c.T(t0), "fx"), (c.T(min(D, t0 + life)), None)])
+    return c.result(duration=D * c.k, loop=D, laps=laps)
+
+
+def projectile(c: Ctx, P: dict) -> dict:
+    """A glowing shot flies from the anchor to target (tx, ty) on an arc, comet tail behind it, then an impact flash."""
+    T = float(P["flight"])
+    col = _hexn(P["color"], "FFD25A")
+    tx, ty, arc = float(P["tx"]), float(P["ty"]), float(P["arc"])
+    tail = float(P["tail"])
+    size = float(P["size"])
+    rows = 20
+    p0, p2 = (0.0, 0.0), (tx, ty)
+    mx, my = tx / 2, ty / 2
+    ln = math.hypot(tx, ty) or 1.0
+    nx, ny = -ty / ln, tx / ln                          # left normal of the chord
+    if ny < 0:
+        nx, ny = -nx, -ny                                # arc bulges upward
+    p1 = (mx + nx * arc, my + ny * arc)
+    grp = c.bone("shot", c.group, 0, 0)
+    s_tail, nodes = c.strand(grp, f"fx/trail_{col}", size * 0.7 * 2.4, 100.0, rows, make=lambda: tex_trail(col), tag="tail", role="tail")
+    b_head = c.bone("head", grp)
+    s_hg = c.slot(b_head, "fx/glow", size * 2.0, role="glow")
+    s_hs = c.slot(b_head, "fx/spark", size * 1.3, role="spark")
+    b_imp = c.bone("impact", grp, tx, ty)
+    s_ig = c.slot(b_imp, "fx/glow", size * 4.0, role="impact_glow")
+    s_ir = c.slot(b_imp, "fx/ring", size * 3.2, role="impact_ring")
+    s_is = c.slot(b_imp, f"fx/starburst_{col}", size * 3.0, make=lambda: tex_starburst(col), role="impact_star")
+    rng = np.random.default_rng(c.seed + 101)
+    nsp = int(P["sparks"])
+    sparks = []
+    for i in range(nsp):
+        bn = c.bone(f"sp{i}", grp)
+        sl = c.slot(bn, "fx/mote", float(rng.uniform(7, 15)), role="mote")
+        sparks.append(dict(b=bn, s=sl, t=T * (i + 0.5) / nsp, life=float(rng.uniform(0.3, 0.55)), dx=float(rng.uniform(-14, 14)), dy=float(rng.uniform(-22, 4))))
+    D = T + 0.75
+    ease = lambda q: q * q * (3 - 2 * q) * 0.35 + q * 0.65  # noqa: E731  (a touch of acceleration)
+
+    def pos_at(u, lagf):
+        q = max(0.0, min(1.0, (u - lagf * tail * T) / T))
+        return _bez(p0, p1, p2, ease(q))
+    tsf = times_dense(0, T + tail * T, 40)
+    c.ab.slot_attachment(s_tail, [(0.0, "fx") if c.T(0) == 0 else (0.0, None), (c.T(0), "fx"), (c.T(T + tail * T), None)])
+    c.ab.slot_attachment(s_hg, [(0.0, "fx") if c.T(0) == 0 else (0.0, None), (c.T(0), "fx"), (c.T(T), None)])
+    c.ab.slot_attachment(s_hs, [(0.0, "fx") if c.T(0) == 0 else (0.0, None), (c.T(0), "fx"), (c.T(T), None)])
+    _trail_keys(c, nodes, rows, 100.0, tsf, pos_at)
+    c.color_keys(s_tail, tsf, lambda u: hexa("FFFFFF", c.a(smooth(u, 0, 0.06) * (1 - smooth(u, T, T + tail * T)))))
+    c.bone_keys(b_head, "translate", tsf, lambda u: pos_at(u, 0.0)[:2])
+    c.bone_keys(b_head, "rotate", tsf, lambda u: 540.0 * u)
+    c.color_keys(s_hg, tsf, lambda u: hexa(col, c.a(0.85)))
+    # impact
+    tsi = times_dense(T, D, 30)
+    for sl in (s_ig, s_ir, s_is):
+        c.ab.slot_attachment(sl, [(0.0, None), (c.T(T), "fx"), (c.T(D), None)])
+    fl = lambda u: ease_out((u - T) / 0.08, 2) if u < T + 0.08 else max(0.0, 1 - (u - T - 0.08) / 0.55) ** 1.5  # noqa: E731
+    c.color_keys(s_ig, tsi, lambda u: hexa(col, c.a(0.9 * fl(u))))
+    c.bone_keys(b_imp, "scale", tsi, lambda u: (0.4 + 0.8 * ease_out((u - T) / 0.25, 2.5),) * 2)
+    c.color_keys(s_is, tsi, lambda u: hexa("FFFFFF", c.a(fl(u))))
+    c.color_keys(s_ir, tsi, lambda u: hexa(col, c.a(0.8 * (1 - smooth(u, T, T + 0.5)))))
+    for sp in sparks:
+        t0, life = sp["t"], sp["life"]
+        x0, y0, _ = pos_at(t0, 0.0)
+        tts = times_dense(t0, t0 + life, 20)
+        c.bone_keys(sp["b"], "translate", tts, lambda u, x0=x0, y0=y0, t0=t0, sp=sp, life=life: (
+            x0 + sp["dx"] * (u - t0) / life, y0 + sp["dy"] * (u - t0) / life))
+        c.color_keys(sp["s"], tts, lambda u, t0=t0, life=life: hexa(col, c.a(0.95 * max(0.0, 1 - (u - t0) / life))))
+        c.ab.slot_attachment(sp["s"], [(0.0, None), (c.T(t0), "fx"), (c.T(t0 + life), None)])
+    c.ab.event(c.T(0.0), "fx_projectile_launch")
+    c.ab.event(c.T(T), "fx_projectile_hit")
+    return c.result(duration=D * c.k, hit_at=c.T(T), target=[tx, ty])
 
 
 # ------------------------------------------------------------------ registry
@@ -1600,7 +1792,8 @@ RECIPES: dict[str, dict[str, Any]] = {
                 "hide a swap, punctuate a pop. Event fx_puff.",
         anchor="Puff centre.",
         options=dict(color2=("FFD27A", "flash colour"), radius=(110.0, "how far the lobes travel"), size=(130.0, "lobe size"),
-                     blend=("normal", "normal (opaque cartoon puff) | additive (glowing)"), rise=(24.0, "upward drift in units"))),
+                     blend=("normal", "normal (opaque cartoon puff) | additive (glowing)"), rise=(24.0, "upward drift in units"),
+                     lobes=(True, "cartoon cloud lobes; False = flash + ring only, add the realistic smoke from After Effects (ae_hint)"))),
     "smoke_glow": dict(
         fn=smoke_glow, duration=4.0, kind="loop", color="FF9F8A", count=14,
         summary="Rising smoke haze filling a box with a glow at its base (flame light); loops exactly. Behind a glowing cell, "
@@ -1608,6 +1801,23 @@ RECIPES: dict[str, dict[str, Any]] = {
         anchor="Box centre (width x height).",
         options=dict(width=(130.0, "box width"), height=(350.0, "box height"), color2=("FFC24A", "glow at the base"),
                      blend=("normal", "normal | additive"), alpha=(0.5, "smoke opacity"))),
+    "meteor_trace": dict(
+        fn=meteor_trace, duration=2.0, kind="loop", color="FFD25A", count=0,
+        summary="A bright head with a comet tail racing around a rounded-rectangle frame (any width/height/corner), shedding "
+                "sparks, over a faint underglow. Loops exactly; laps per loop is an integer.",
+        anchor="Frame centre.",
+        options=dict(width=(150.0, "frame width"), height=(150.0, "frame height"), corner=(14.0, "corner radius"),
+                     laps=(1, "laps per loop"), tail=(0.22, "tail length as a fraction of the perimeter"),
+                     thickness=(24.0, "tail thickness"), size=(60.0, "head size"), sparks=(10, "sparks shed per loop"),
+                     underglow=(True, "faint glow hugging the whole frame"))),
+    "projectile": dict(
+        fn=projectile, duration=0.6, kind="window", color="FFD25A", count=0,
+        summary="A glowing shot flies on an arc from the anchor to (tx, ty) with a comet tail and sparks, then an impact flash, "
+                "ring and starburst. Events fx_projectile_launch and fx_projectile_hit.",
+        anchor="Launch point; tx, ty are the target relative to it.",
+        options=dict(tx=(320.0, "target x relative to the launch point"), ty=(-60.0, "target y"), arc=(90.0, "how high the arc bows"),
+                     flight=(0.6, "flight time in seconds"), tail=(0.45, "tail length as a fraction of the flight time"),
+                     size=(40.0, "head size"), sparks=(10, "sparks shed during the flight"))),
     "twinkles": dict(
         fn=twinkles, duration=5.8, kind="window", count=9,
         summary="Four-point stars that pop, spin and vanish, two or three times each, around the subject.",
@@ -1640,6 +1850,10 @@ ROLES: dict[str, dict[str, str]] = {
                   "ring": "the two shock rings", "core": "the hot centre"},
     "cell_glow": {"frame": "9-slice frame art: give slice (corner size in art px) and px (units per art px)", "fill": "9-slice fill art",
                   "mote": "one starfield dot", "spark": "one pop sparkle", "ring": "the pop shock ring", "glow": "the pop glow"},
+    "meteor_trace": {"tail": "the comet tail: a vertical strip, head at the TOP, fading downward (bent along the path)",
+                     "glow": "light around the head", "spark": "the head star", "mote": "one shed spark", "under": "the frame underglow"},
+    "projectile": {"tail": "the comet tail strip, head at the TOP", "glow": "light around the head", "spark": "the head star",
+                   "mote": "one shed spark", "impact_glow": "impact light", "impact_ring": "impact ring", "impact_star": "impact starburst"},
     "puff": {"cloud": "one cloud lobe (also the core), roughly round, centred", "glow": "the flash", "ring": "the soft ring"},
     "smoke_glow": {"smoke": "one smoke blob, soft, centred", "glow": "the glow at the base"},
 }

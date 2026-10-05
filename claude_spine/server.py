@@ -302,7 +302,8 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     """Authored FX layers lifted from real reference clips: lotus set (rune_ring, burst_flare, rim_wisps, bloom_aura,
     floor_glow, fireflies, twinkles, plus magic_reveal = all seven timed like the clip, 13.2 s), light_beam (style
     gold | ribbon | blue), crosshair / hit_burst / lock_on (reticle locks on, fires, impact), cell_glow (resizable
-    9-slice glowing cells that pop), puff (cartoon smoke puff), smoke_glow (rising haze with a base glow), and the hybrids portal and electric_frame, whose plasma / lightning part is
+    9-slice glowing cells that pop), puff (cartoon smoke puff, or flash + ring for an AE smoke_puff), smoke_glow (rising haze with a base glow),
+    meteor_trace (comet racing around a frame), projectile (shot on an arc + impact), and the hybrids portal and electric_frame, whose plasma / lightning part is
     After Effects: they return a ring_hint to pass to ae_fx_to_spine (guide explains). Procedural textures, additive only (one draw call), one group bone per recipe so it
     recolours, resizes and retimes as one piece, and it merges into any animation with into=.
 

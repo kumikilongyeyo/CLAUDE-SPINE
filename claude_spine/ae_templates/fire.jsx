@@ -1,4 +1,4 @@
-/*TEMPLATE {"name":"fire","doc":"A soft painterly column of flame: turbulent noise shaped into tongues, coloured hot-to-cool, with a glow. Torch, burning symbol, power-up. `loop` makes the noise cycle seamlessly (no upward drift) so it can sit in a Spine loop.","params":{"width":384,"height":576,"duration":0.67,"fps":24,"hot":"FFD860","mid":"FF6A10","cool":"D01808","scale":40,"speed":500,"contrast":70,"body":0.5,"taper":1.6,"flame_height":1.25,"threshold":0.2,"softness":0.8,"core":0.6,"turbulence":30,"glow":1.0,"loop":true,"seed":1}} */
+/*TEMPLATE {"name":"fire","doc":"A soft painterly column of flame: turbulent noise shaped into tongues, coloured hot-to-cool, with a glow. Torch, burning symbol, power-up. `loop` makes the noise cycle seamlessly (no upward drift) so it can sit in a Spine loop. `edge_fade` (0..0.5) feathers the left/right edges and the base so a narrow tongue never shows the comp border.","params":{"width":384,"height":576,"duration":0.67,"fps":24,"hot":"FFD860","mid":"FF6A10","cool":"D01808","scale":40,"speed":500,"contrast":70,"body":0.5,"taper":1.6,"flame_height":1.25,"threshold":0.2,"softness":0.8,"core":0.6,"turbulence":30,"glow":1.0,"loop":true,"seed":1,"edge_fade":0}} */
 var W = P.width, H = P.height, D = P.duration, name = P.comp || "fire";
 var hot = AEFX.rgb(P.hot), mid = AEFX.rgb(P.mid), cool = AEFX.rgb(P.cool);
 
@@ -53,4 +53,11 @@ col.moveAfter(matte);
 var tt = AEFX.fx(col, "ADBE Tritone");
 AEFX.set(tt, "Highlights", hot); AEFX.set(tt, "Midtones", mid); AEFX.set(tt, "Shadows", cool);
 col.setTrackMatte(matte, TrackMatteType.LUMA);
+if (P.edge_fade > 0) {                      // feather the sides: faint noise reaches the comp border otherwise
+  var fm = col.property("ADBE Mask Parade").addProperty("ADBE Mask Atom");
+  var fs = new Shape(), ex = W * P.edge_fade;
+  fs.vertices = [[ex, -H], [W - ex, -H], [W - ex, H * 0.95], [ex, H * 0.95]]; fs.closed = true;   // and round off the base
+  fm.property("ADBE Mask Shape").setValue(fs);
+  fm.property("ADBE Mask Feather").setValue([ex * 1.6, H * 0.08]);
+}
 return AEFX.done(comp);

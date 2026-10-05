@@ -1,6 +1,7 @@
 """FX recipes: every recipe builds, validates, renders in the runtime, and honours the shared arguments."""
 import asyncio
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -238,8 +239,12 @@ def test_portal_leaves_a_slot_for_the_ae_ring(proj):
 def test_electric_frame_hint_and_sparks(proj):
     res = R.apply(proj, "electric_frame", options={"width": 300.0, "height": 200.0, "sparks": 6})
     assert res["ring_hint"]["front_of"] == res["ring_after"] and len(res["slots"]) == 1 + 6
-    under = next(b for b in proj.data.bones if b.name.endswith("under"))
-    assert under.scaleX == pytest.approx(1.0) and under.scaleY == pytest.approx(200 / 300)
+    # the underglow is a 9-slice on four corner bones whose outline lands on width x height at any aspect
+    tl = next(b for b in proj.data.bones if b.name.endswith("under_tl"))
+    br = next(b for b in proj.data.bones if b.name.endswith("under_br"))
+    inset = 0.26 * 256
+    assert (tl.x, tl.y) == (pytest.approx(-150 - inset), pytest.approx(100 + inset))
+    assert (br.x, br.y) == (pytest.approx(150 + inset), pytest.approx(-100 - inset))
 
 
 def test_the_portal_and_frame_ae_templates_exist_and_build():
@@ -437,3 +442,71 @@ def test_cell_glow_fill_options(proj):
     fill = next(s for s in proj.data.slots if s.blend == "normal")
     ks = proj.data.animations[res["animation"]].slots[fill.name]["rgba"]
     assert all(k.color[:6] == "C98A7A" for k in ks) and max(int(k.color[6:8], 16) for k in ks) <= int(0.3 * 255) + 1
+
+
+# ---------------------------------------------------------------- meteor, projectile, realistic puff, new AE templates
+def test_rr_point_walks_the_perimeter_continuously():
+    pts = [R.rr_point(i / 400, 200, 100, 20) for i in range(401)]
+    for (x0, y0, a0), (x1, y1, a1) in zip(pts, pts[1:]):
+        assert math.hypot(x1 - x0, y1 - y0) < 3.0                      # no jumps (perimeter ~566 / 400 steps)
+        assert a1 <= a0 + 1e-6                                          # clockwise: the angle only ever decreases
+    assert pts[0][:2] == pytest.approx(pts[-1][:2], abs=1e-6) and pts[-1][2] == pytest.approx(pts[0][2] - 360)
+    assert R.rr_point(0.5, 200, 100, 20)[:2] == pytest.approx((80, -50))   # half way = far end of the bottom edge
+
+
+def test_meteor_trace_tail_follows_the_frame_and_loops(proj):
+    res = R.apply(proj, "meteor_trace", options={"width": 200.0, "height": 120.0, "corner": 16.0})
+    a = proj.data.animations[res["animation"]]
+    head = next(b for b in a.bones if b.endswith("_head"))
+    ks = a.bones[head]["translate"]
+    assert (ks[0].x, ks[0].y) == pytest.approx((ks[-1].x, ks[-1].y), abs=0.01)     # closes the loop
+    for k in ks:                                                         # the head stays on the outline
+        on_x = abs(abs(k.x) - 100) < 0.6 and abs(k.y) <= 60.1
+        on_y = abs(abs(k.y) - 60) < 0.6 and abs(k.x) <= 100.1
+        in_corner = abs(k.x) > 84 - 1e-6 and abs(k.y) > 44 - 1e-6
+        assert on_x or on_y or in_corner
+    rows = [b for b in a.bones if "_tail_n" in b]
+    for b in rows:                                                       # unwrapped: no row ever spins round
+        r = [k.value for k in a.bones[b]["rotate"]]
+        assert max(abs(r1 - r0) for r0, r1 in zip(r, r[1:])) < 60
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_projectile_reaches_its_target_and_fires_events(proj):
+    res = R.apply(proj, "projectile", start=0.2, options={"tx": -300.0, "ty": 50.0, "flight": 0.5})
+    a = proj.data.animations[res["animation"]]
+    head = next(b for b in a.bones if b.endswith("_head"))
+    last = [k for k in a.bones[head]["translate"] if k.time <= 0.7 + 1e-6][-1]
+    assert (last.x, last.y) == pytest.approx((-300, 50), abs=0.5)
+    ev = {e.name: e.time for e in a.events}
+    assert ev["fx_projectile_launch"] == pytest.approx(0.2) and ev["fx_projectile_hit"] == pytest.approx(0.7)
+    rows = [b for b in a.bones if "_tail_n" in b]
+    for b in rows:                                                       # shooting left crosses +-180: still no spins
+        r = [k.value for k in a.bones[b]["rotate"]]
+        assert max(abs(r1 - r0) for r0, r1 in zip(r, r[1:])) < 60
+
+
+def test_realistic_puff_leaves_room_for_the_ae_smoke(proj):
+    res = R.apply(proj, "puff", options={"lobes": False})
+    assert res["blobs"] == 0 and not any("fx/cloud" == proj.data.skin("default").attachments[s]["fx"].path for s in res["slots"])
+    h = res["ae_hint"]
+    assert h["parent"] == res["group_bone"] and h["front_of"] in res["slots"] and h["mode"] == "alpha"
+
+
+def test_frame_glows_are_9_slices(proj):
+    for n in ("electric_frame", "meteor_trace"):
+        res = R.apply(proj, n, name=n + "_x", options={"width": 900.0, "height": 110.0})
+        meshes = [proj.data.skin("default").attachments[s]["fx"] for s in res["slots"]
+                  if proj.data.skin("default").attachments[s]["fx"].path == "fx/rrglow"]
+        assert meshes and all(m.type == "mesh" and m.hull == 12 for m in meshes)
+
+
+def test_new_ae_templates_build():
+    from claude_spine import ae_templates
+    t = ae_templates.list_templates()
+    assert {"smoke_puff", "smoke_haze"} <= set(t)
+    assert t["fire"]["params"]["edge_fade"] == 0                         # off by default: old fire renders are unchanged
+    src = open(ae_templates.build_script("smoke_haze", {})["script"]).read()
+    assert "Cycle Evolution" in src and '"black"' in src
+    src = open(ae_templates.build_script("fire", {"edge_fade": 0.2})["script"]).read()
+    assert "ADBE Mask Feather" in src

@@ -35,6 +35,8 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | cell_glow | glowing cell frame(s) with a twinkling starfield, pop = flash + burst + sparkles; resizable 9-slice | window 3.2 s |
 | puff | cartoon puff of smoke: flash, cloud lobes burst out and thin, soft ring (clears a symbol) | one-shot 1.15 s |
 | smoke_glow | rising smoke haze filling a box + flame-colour glow at its base | loop 4 s |
+| meteor_trace | bright head + comet tail racing around a rounded-rect frame, shedding sparks | loop 2 s |
+| projectile | glowing shot on an arc to (tx, ty) with a comet tail, then impact flash/ring/star | one-shot ~1.35 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
 ## Your own art (`art=`)
@@ -68,6 +70,16 @@ bounding box, so its centre is the target point), or a dict `{path, blend, scale
 
 All three land in the same animation; draw order follows call order (later = in front; use front_of / behind to change it). Flames
 licking a frame are an After Effects `fire` flipbook placed with ae_fx_to_spine (not a recipe yet).
+
+## Realistic smoke, flames and haze (After Effects templates)
+
+- `smoke_puff`: a billowing cloud that bursts, rolls and erodes from its thin parts (alpha). Pair with
+  `fx_recipe recipe=puff options={lobes: false}` (flash + ring, and an `ae_hint`), then `ae_fx_to_spine` the comp with that hint.
+- `smoke_haze`: a soft churning haze that fills a box and loops (alpha); put it in front of a cell's fill.
+- `fire` with `edge_fade` (0.15-0.2) for narrow flame tongues that never show the comp border. ONE tongue flipbook is enough for a
+  whole frame: add it once with ae_fx_to_spine, then clone the slot along the edges with different bone scale/rotation and a
+  different sequence `index` per clone (loop phase), so the flames never move in step and the atlas holds one flipbook.
+- `electric_frame` re-rendered at any aspect (e.g. width 1024, height 160, green) gives a long energy bar.
 
 ## Hybrids: Spine recipe + After Effects part
 
@@ -162,6 +174,15 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
   ~9% of the comp with Complexity 6 for lace.
 - AE caches rendered frames by comp name: give each attempt a new comp name. `save_as` in a template switches the OPEN
   project to the new file (the old .aep stays intact on disk).
+- A tail that follows a curve: rows of a strand mesh on bones that each sit on the path at a lag, ROTATED to the tangent + 90
+  so the strip's width stays across the curve. Unwrap the angles (np.unwrap) or a row spins 360 the moment the tangent crosses
+  +-180 (any shot fired leftward). Perimeter walkers must return a continuous, ever-decreasing angle lap after lap.
+- `a or b and c` is `a or (b and c)`: a segment test written like that matched every corner arc and parked the meteor in the first corner.
+- A square glow stretched to a long bar floods its ends; frame glows are 9-slices (`_frame_glow`) so the edge keeps its thickness.
+- AE 2026: Easy Levels' Input Black/White cannot be keyframed (canVaryOverTime false); animate the noise Brightness instead.
+  A mask on a MULTIPLY layer leaves the noise outside the mask; mask the noise itself and keep a black solid at the bottom of
+  a luma precomp, or a transparent area turns into a hard white rectangle. Fire's faint noise reaches the comp sides: use edge_fade.
+  ae_run_script needs an explicit `return`.
 - Flare streaks wider than the view clip hard; keep them ~1.2x the subject, and give streaks real thickness
   (a 1-px hairline reads as a scratch).
 - GIF previews of soft gradients dither to 10+ MB. Judge on the contact sheet; share a quantised/resized GIF.
