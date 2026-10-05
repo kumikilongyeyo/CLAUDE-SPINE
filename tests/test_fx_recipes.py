@@ -34,7 +34,7 @@ def _dur(p, anim):
 def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
-    assert all(s.blend == "additive" for s in proj.data.slots)
+    assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)
     assert v["ok"], v["errors"]
@@ -191,3 +191,60 @@ def test_docs_guide_mirrors_the_tool_guide():
     from claude_spine.fx_recipes_guide import GUIDE
     doc = Path(__file__).resolve().parents[1] / "docs" / "FX_RECIPES.md"
     assert doc.read_text() == GUIDE
+
+
+# ---------------------------------------------------------------- beams, portal, electric frame
+@pytest.mark.parametrize("style", ["gold", "ribbon", "blue"])
+def test_light_beam_styles_and_loop_closure(proj, style):
+    res = R.apply(proj, "light_beam", options={"style": style})
+    assert res["loop"] == 4.0 and res["strands"] >= 2
+    a = proj.data.animations[res["animation"]]
+    # every strand row translates, and the loop closes: first and last key of a row match
+    rows = [b for b in a.bones if "_n" in b and a.bones[b].get("translate")]
+    assert rows
+    for b in rows[:20]:
+        ks = a.bones[b]["translate"]
+        assert ks[0].time == 0 and ks[-1].time == pytest.approx(4.0)
+        assert ks[0].x == pytest.approx(ks[-1].x, abs=0.01)
+    # ribbons are weighted meshes (no deform keys, which blow the mobile budget)
+    assert not any("deform" in tls for sk in a.attachments.values() for sl in sk.values() for tls in sl.values())
+    meshes = [att for att in proj.data.skin("default").attachments.values() for att in att.values() if att.type == "mesh"]
+    assert meshes and all(m.hull == len(m.uvs) // 2 for m in meshes)
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_light_beam_unknown_style_and_style_defaults(proj):
+    with pytest.raises(ValueError, match="unknown style"):
+        R.apply(proj, "light_beam", options={"style": "green"})
+    g = R.apply(proj, "light_beam", name="g", options={"style": "gold"})
+    b = R.apply(proj, "light_beam", name="b", options={"style": "blue"})
+    assert b["dust"] > g["dust"] and R.apply(proj, "light_beam", name="x", count=5)["dust"] == 5
+    assert R.apply(proj, "light_beam", name="r", options={"style": "ribbon"})["sparks"] > 0
+
+
+def test_portal_leaves_a_slot_for_the_ae_ring(proj):
+    res = R.apply(proj, "portal")
+    hint = res["ring_hint"]
+    assert hint["parent"] == res["group_bone"] and hint["front_of"] == res["ring_after"] and hint["mode"] == "additive"
+    names = [s.name for s in proj.data.slots]
+    after = names.index(res["ring_after"])
+    assert names[after + 1].endswith("flash") or "flash" in names[after + 1], "flashes must draw above the ring"
+    disc = next(s for s in proj.data.slots if "disc" in s.name)
+    assert disc.blend == "normal"          # the disc hides the scene; everything else is light
+
+
+def test_electric_frame_hint_and_sparks(proj):
+    res = R.apply(proj, "electric_frame", options={"width": 300.0, "height": 200.0, "sparks": 6})
+    assert res["ring_hint"]["front_of"] == res["ring_after"] and len(res["slots"]) == 1 + 6
+    under = next(b for b in proj.data.bones if b.name.endswith("under"))
+    assert under.scaleX == pytest.approx(1.0) and under.scaleY == pytest.approx(200 / 300)
+
+
+def test_the_portal_and_frame_ae_templates_exist_and_build():
+    from claude_spine import ae_templates
+    t = ae_templates.list_templates()
+    assert {"portal_ring", "electric_frame"} <= set(t)
+    for n in ("portal_ring", "electric_frame"):
+        r = ae_templates.build_script(n, {"comp": f"x_{n}"})
+        src = open(r["script"]).read()
+        assert "Turbulent Displace" in src and "Cycle Evolution" in src, "must loop seamlessly"

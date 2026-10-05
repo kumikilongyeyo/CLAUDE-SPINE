@@ -11,7 +11,10 @@ as Spine primitives, so it can be placed, recoloured, resized and mixed with any
     floor_glow    warm glow and streaky reflection underneath a subject
     fireflies     drifting motes, each with its own looping life and twinkle
     twinkles      four-point stars popping and spinning
-    magic_reveal  all seven, timed like the reference clip (13.2 s), into one animation
+    light_beam    vertical beam: column glow, filaments (weaving ribbons), dust, glints (gold | ribbon | blue)
+    portal        swirling disc + arms + specks + comets + flashes; its plasma ring is After Effects (hybrid)
+    electric_frame violet underglow + sparks; its lightning line is After Effects (hybrid)
+    magic_reveal  the seven lotus recipes, timed like the reference clip (13.2 s), into one animation
 
 Rules every recipe follows (they are why the output is cheap and drops into a game):
 
@@ -35,7 +38,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .fx import tex_glow, tex_ring, tex_spark, _rgba
-from .ir import Bone, RegionAttachment, Slot
+from .ir import Bone, MeshAttachment, RegionAttachment, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
 
@@ -199,10 +202,108 @@ def tex_reflect(w: int = 128, h: int = 256) -> Image.Image:
     return _rgba(np.ones((h, w)), np.clip(a, 0, 1) * 0.9)
 
 
+def tex_column(w: int = 128, h: int = 512) -> Image.Image:
+    """Soft vertical column of light: gaussian across, smooth ends."""
+    y, x = np.mgrid[0:h, 0:w].astype(float)
+    xn = (x - (w - 1) / 2) / ((w - 1) / 2)
+    yn = y / (h - 1)
+    a = np.exp(-(xn / 0.42) ** 2) * np.minimum(smooth_arr(yn, 0.0, 0.16), smooth_arr(1 - yn, 0.0, 0.16))
+    a *= np.clip((1 - np.abs(xn)) / 0.12, 0, 1)
+    return _rgba(np.ones((h, w)), np.clip(a, 0, 1))
+
+
+def smooth_arr(t, a, b):
+    u = np.clip((t - a) / max(b - a, 1e-9), 0, 1)
+    return u * u * (3 - 2 * u)
+
+
+def tex_strand(color: str = "FFD21F", w: int = 64, h: int = 512) -> Image.Image:
+    """One glowing vertical filament: hot thin core, soft halo, tapered ends, a little brightness drift along it."""
+    y, x = np.mgrid[0:h, 0:w].astype(float)
+    xn = (x - (w - 1) / 2) / ((w - 1) / 2)
+    yn = y / (h - 1)
+    a = np.exp(-(xn / 0.11) ** 2) + 0.38 * np.exp(-(xn / 0.46) ** 2)
+    a *= np.minimum(smooth_arr(yn, 0.0, 0.12), smooth_arr(1 - yn, 0.0, 0.12))
+    a *= 0.82 + 0.18 * np.sin(yn * 23.0) * np.sin(yn * 7.0 + 1.0)
+    a *= np.clip((1 - np.abs(xn)) / 0.1, 0, 1)
+    return _colorize(np.clip(a, 0, 1), *_palette(color))
+
+
+
+def tex_disc(color: str = "4A78FF", n: int = 384) -> Image.Image:
+    """Dark indigo disc, a touch brighter toward the rim, soft edge. Meant for normal blend (it occludes)."""
+    x, y = _grid(n)
+    d = np.hypot(x, y)
+    rim = smooth_arr(d, 0.35, 0.95)
+    base = _mix((8, 6, 52), _mix(_rgb(color), (20, 20, 120), 0.45), 0.0)
+    rgb = np.zeros((n, n, 3))
+    for i in range(3):
+        rgb[..., i] = (base[i] * (1 - rim) + _mix(_rgb(color), (14, 14, 110), 0.55)[i] * rim) / 255.0
+    a = np.clip((1 - d) / 0.05, 0, 1)
+    return _rgba(rgb, a)
+
+
+def tex_swirl(arms: int = 3, color: str = "4A78FF", n: int = 512, twist: float = 2.3, seed: int = 2) -> Image.Image:
+    """Spiral arms (logarithmic-ish), brighter and tighter toward the rim, hollow centre. Rotate it with a bone."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(n)
+    r = np.hypot(x, y)
+    th = np.arctan2(y, x)
+    # a little noise in the arm phase so the arms are not mathematically clean
+    lo = rng.random((12, 12))
+    nz = np.asarray(Image.fromarray((lo * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC), np.float32) / 255
+    ph = th * arms / (2 * math.pi) - twist * (1 - r) * arms * 0.5 + 0.18 * (nz - 0.5)
+    f = ph - np.floor(ph)
+    w = 0.11 + 0.10 * (1 - r)
+    arm = np.exp(-((f - 0.5) / w) ** 2)
+    a = arm * smooth_arr(r, 0.06, 0.34) * (1 - smooth_arr(r, 0.82, 0.98)) * (0.55 + 0.45 * r)
+    return _colorize(np.clip(a, 0, 1), (215, 235, 255), _rgb(color), _mix(_rgb(color), (70, 20, 190), 0.55))
+
+
+def tex_comet(color: str = "BFE8FF", n: int = 512, sweep: float = 210.0, turns: float = 0.8) -> Image.Image:
+    """A single thin spiral streak with a bright head and a fading tail (the white curl that whips around inside the portal)."""
+    S = 2
+    N = n * S
+    img = Image.new("L", (N, N), 0)
+    d = ImageDraw.Draw(img)
+    c = N / 2
+    m = 120
+    pts = []
+    for i in range(m + 1):
+        t = i / m                          # 0 = head (outer), 1 = tail
+        ang = math.radians(sweep) * t
+        rad = (N / 2) * (0.84 - 0.62 * t ** 0.9)
+        pts.append((c + math.cos(-ang) * rad, c + math.sin(-ang) * rad, t))
+    for i in range(m):
+        a0, a1 = pts[i], pts[i + 1]
+        t = a0[2]
+        d.line([(a0[0], a0[1]), (a1[0], a1[1])], fill=int(255 * (1 - t) ** 1.25), width=max(1, int((6.5 - 4.2 * t) * S)))
+    base = np.asarray(img, np.float32) / 255
+    a = np.clip(_blur(base, 1.2 * S) * 1.2 + _blur(base, 6 * S) * 0.7, 0, 1)
+    a = np.asarray(Image.fromarray((a * 255).astype(np.uint8), "L").resize((n, n), Image.LANCZOS), np.float32) / 255
+    return _colorize(a, (255, 255, 255), _rgb(color), _mix(_rgb(color), (60, 90, 255), 0.5))
+
+
+
+def tex_rrglow(w: float = 400, h: float = 400, corner: float = 0.14, spread: float = 0.16, n: int = 512) -> Image.Image:
+    """Soft glow hugging a rounded rectangle (strongest on the outline, fading both outward and inward). Texture is square; the slot is sized w x h."""
+    x, y = _grid(n)
+    hx = hy = 0.74
+    cr = corner
+    qx, qy = np.abs(x) - (hx - cr), np.abs(y) - (hy - cr)
+    d = np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - cr
+    out = np.exp(-(np.maximum(d, 0) / spread) ** 2)
+    inn = 0.9 * np.exp(-(np.maximum(-d, 0) / (spread * 0.9)) ** 2)     # inside: fades inward, no fill
+    a = np.where(d > 0, out, inn)
+    a *= np.clip((1 - np.hypot(x, y) * 0.74) / 0.08, 0, 1)
+    return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
+
+
 # texture name -> factory (white textures are tinted per slot; coloured ones are named with their colour)
 WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
     "fx/wisp": tex_wisp, "fx/beam": tex_beam, "fx/mote": tex_mote, "fx/reflect": tex_reflect,
-    "fx/glow": tex_glow, "fx/ring": tex_ring, "fx/spark": tex_spark,
+    "fx/glow": tex_glow, "fx/ring": tex_ring, "fx/spark": tex_spark, "fx/column": tex_column,
+    "fx/rrglow": lambda: tex_rrglow(),
 }
 
 
@@ -261,9 +362,9 @@ class Ctx:
         return im.size
 
     def slot(self, bone: str, tex: str, width: float, color: str = "FFFFFFFF", ox: float = 0.0, oy: float = 0.0,
-             height: float | None = None, make: Callable[[], Image.Image] | None = None) -> str:
+             height: float | None = None, make: Callable[[], Image.Image] | None = None, blend: str = "additive") -> str:
         nm = self.sk.unique_name(bone, "slot")
-        s = Slot(name=nm, bone=bone, color=color, blend="additive")
+        s = Slot(name=nm, bone=bone, color=color, blend=blend)
         if self.last_slot is not None:
             self.sk.add_slot(s, after=self.last_slot)
         elif self.behind:
@@ -278,6 +379,50 @@ class Ctx:
         self.sk.set_attachment(nm, "fx", RegionAttachment(path=tex, x=ox, y=oy, width=round(width, 2), height=round(h, 2)))
         self.slots.append(nm)
         return nm
+
+    def strand(self, parent: str, tex: str, width: float, height: float, rows: int, x: float = 0.0,
+               color: str = "FFFFFFFF", make: Callable[[], Image.Image] | None = None, tag: str = "st"):
+        """A tall ribbon mesh whose rows are each pinned to one bone, so animating those bones' translateX bends
+        it into any wave (a weighted mesh costs no deform keys). Returns (slot, [row bones bottom->top])."""
+        sk = self.sk
+        base = self.bone(tag, parent, x, 0)
+        ys = [-height / 2 + i * height / (rows - 1) for i in range(rows)]
+        nodes = [self.bone(f"{tag}_n{i}", base, 0, y) for i, y in enumerate(ys)]
+        nm = sk.unique_name(base, "slot")
+        s = Slot(name=nm, bone=base, color=color, blend="additive")
+        if self.last_slot is not None:
+            sk.add_slot(s, after=self.last_slot)
+        elif self.behind:
+            sk.add_slot(s, before=self.behind)
+        elif self.front_of:
+            sk.add_slot(s, after=self.front_of)
+        else:
+            sk.add_slot(s)
+        self.last_slot = nm
+        self.tex(tex, make)
+        hw = width / 2
+        verts: list[float] = []
+        for i in range(rows):                       # hull order: left column up, then right column down
+            verts += [1, sk.bone_index(nodes[i]), -hw, 0, 1]
+        for i in range(rows - 1, -1, -1):
+            verts += [1, sk.bone_index(nodes[i]), hw, 0, 1]
+        uvs: list[float] = []
+        for i in range(rows):
+            uvs += [0.0, round(1 - i / (rows - 1), 5)]
+        for i in range(rows - 1, -1, -1):
+            uvs += [1.0, round(1 - i / (rows - 1), 5)]
+        tris: list[int] = []
+        n2 = 2 * rows
+        for i in range(rows - 1):
+            Li, Li1, Ri, Ri1 = i, i + 1, n2 - 1 - i, n2 - 2 - i
+            tris += [Li, Ri, Ri1, Li, Ri1, Li1]
+        edges = []
+        for i in range(n2):
+            edges += [i * 2, ((i + 1) % n2) * 2]
+        sk.set_attachment(nm, "fx", MeshAttachment(path=tex, uvs=uvs, triangles=tris, vertices=verts, hull=n2, edges=edges,
+                                                    width=round(width, 2), height=round(height, 2)))
+        self.slots.append(nm)
+        return nm, nodes
 
     # -- keys (local time u at design speed -> animation time)
     def T(self, u: float) -> float:
@@ -581,6 +726,271 @@ def twinkles(c: Ctx, P: dict) -> dict:
     return c.result(duration=dur * c.k, stars=used)
 
 
+def _styles() -> dict[str, dict]:
+    return {
+        "gold": dict(color="FFD21F", column_color="FFB000", column_alpha=0.5, column_width=220, strands=5, wave=0.3,
+                     dust=10, dust_width=45, sparks=0, core_width=24, strand_width=1.0, dust_size=1.0, dust_tint="FFFFFF"),
+        "ribbon": dict(color="FFD21F", column_color="FFB000", column_alpha=0.34, column_width=240, strands=5, wave=1.7,
+                       dust=8, dust_width=60, sparks=9, core_width=16, strand_width=2.3, dust_size=1.0, dust_tint="FFFFFF"),
+        "blue": dict(color="3FB4FF", column_color="1F3CFF", column_alpha=0.5, column_width=380, strands=2, wave=0.15,
+                     dust=150, dust_width=50, sparks=0, core_width=11, strand_width=1.0, dust_size=0.85, dust_tint="C8F3FF"),
+    }
+
+
+def light_beam(c: Ctx, P: dict) -> dict:
+    style = P["style"]
+    st = _styles().get(style)
+    if st is None:
+        raise ValueError(f"unknown style {style!r}; one of {sorted(_styles())}")
+    g = lambda k: st[k] if P.get(k) in (None, "") else P[k]  # noqa: E731
+    D = float(P["duration"])
+    H = float(P["height"])
+    color = _hexn(P["color"], st["color"])
+    col_c = _hexn(g("column_color"), st["column_color"])
+    ns = int(g("strands"))
+    wave = float(g("wave"))
+    nd = int(P["count"] or g("dust"))
+    dw = float(g("dust_width"))
+    core_w = float(g("core_width"))
+    sw_k = float(g("strand_width"))
+    dsz = float(g("dust_size"))
+    dust_tint = _hexn(g("dust_tint"), "FFFFFF")
+    rows = max(6, int(round(H / 40)) + 1)
+    rng = np.random.default_rng(c.seed + 21)
+    grp = c.bone("beam", c.group, 0, 0)
+    tname = f"fx/strand_{color}"
+    mk = lambda: tex_strand(color)  # noqa: E731
+    all_slots: list[str] = []
+    # ---- column glow behind everything
+    b_col = c.bone("column", grp)
+    s_col = c.slot(b_col, "fx/column", float(g("column_width")), oy=0, height=H * 1.02)
+    all_slots.append(s_col)
+    cap = _hexn(P["cap"], "") if P["cap"] else ""
+    caps = []
+    if cap:
+        for nm_, yy, sy_ in (("cap_top", H / 2, 0.45), ("cap_bot", -H / 2, 0.45)):
+            bb = c.bone(nm_, grp, 0, yy, sy=sy_)
+            caps.append((c.slot(bb, "fx/glow", float(g("column_width")) * 1.25), bb))
+        all_slots += [x[0] for x in caps]
+    # ---- strands
+    strands = []
+    for i in range(ns):
+        if i == 0:
+            xo, w_, al, A, lam, m = 0.0, core_w, 1.0, 3.0 * wave, 430.0, 1
+        else:
+            side = -1 if i % 2 else 1
+            xo = side * (10 + 9 * ((i + 1) // 2))
+            w_ = rng.uniform(5.5, 9.5) * sw_k
+            al = rng.uniform(0.42, 0.72)
+            A = (6 + 4 * i) * wave
+            lam = rng.uniform(240, 460)
+            m = int(rng.choice([1, 2]))
+        sl, nodes = c.strand(grp, tname, w_ * 2.4, H, rows, x=xo, make=mk, tag=f"st{i}")
+        strands.append(dict(s=sl, nodes=nodes, a=al, A=A, lam=lam, m=m * (1 if i % 2 else -1), ph=rng.uniform(0, 2 * math.pi),
+                            fl=int(rng.integers(2, 6)), flph=rng.uniform(0, 6.28)))
+        all_slots.append(sl)
+    # white-hot line down the middle of the core
+    hot_t = "fx/strand_FFFFFF"
+    sl, nodes = c.strand(grp, hot_t, core_w * 0.55 * 2.4, H * 0.96, rows, x=0.0, make=lambda: tex_strand("FFFFFF"), tag="hot")
+    strands.append(dict(s=sl, nodes=nodes, a=0.95, A=3.0 * wave, lam=430.0, m=1, ph=strands[0]["ph"], fl=3, flph=0.0))
+    all_slots.append(sl)
+    # ---- dust motes
+    dust = []
+    for i in range(nd):
+        bn = c.bone(f"d{i}", grp)
+        size = float(rng.choice([rng.uniform(7, 13), rng.uniform(16, 28)], p=[0.8, 0.2])) * dsz
+        sl = c.slot(bn, "fx/mote", size)
+        yy = (rng.beta(2.2, 2.2) - 0.5) * H * 0.95
+        xx = float(np.clip(rng.normal(0, dw / 2.0), -dw * 1.2, dw * 1.2)) * (0.5 + 0.7 * (1 - abs(yy) / (H / 2)))
+        dust.append(dict(b=bn, s=sl, x=xx, y=yy, m=int(rng.choice([1, 1, 2])), ph=rng.uniform(0, 1), vy=rng.uniform(-60, 90),
+                         swx=rng.uniform(3, 12), tw=int(rng.integers(3, 9)), twph=rng.uniform(0, 6.28), amp=rng.uniform(0.55, 1.0),
+                         col=color if rng.random() < 0.55 else dust_tint))
+        all_slots.append(sl)
+    # ---- sparks (small four-point glints that pop along the beam)
+    spk = []
+    for i in range(int(g("sparks"))):
+        bn = c.bone(f"sp{i}", grp, rng.uniform(-40, 40), rng.uniform(-H * 0.42, H * 0.42))
+        sl = c.slot(bn, "fx/spark", rng.uniform(26, 56))
+        spk.append(dict(b=bn, s=sl, t=rng.uniform(0, D), life=rng.uniform(0.25, 0.55), rot=rng.uniform(40, 120) * rng.choice([-1, 1])))
+        all_slots.append(sl)
+    c.show(all_slots, 0, None)
+
+    # ---- animation: everything is a function of t/D with integer cycle counts, so the loop closes exactly
+    ts = times_dense(0, D, 12)
+    br = lambda u, n, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * n * u / D + ph)  # noqa: E731
+    c.color_keys(s_col, ts, lambda u: hexa(col_c, c.a(float(g("column_alpha")) * (0.8 + 0.2 * br(u, 1, 0.5)))))
+    for sl, bb in caps:
+        c.color_keys(sl, ts, lambda u: hexa(cap, c.a(0.7 * (0.75 + 0.25 * br(u, 2)))))
+    for sd in strands:
+        for i, nb in enumerate(sd["nodes"]):
+            y = -H / 2 + i * H / (rows - 1)
+            env = math.sin(math.pi * (y + H / 2) / H) ** 0.8
+            c.bone_keys(nb, "translate", ts, lambda u, y=y, env=env, sd=sd: (
+                sd["A"] * env * math.sin(2 * math.pi * (y / sd["lam"] - sd["m"] * u / D) + sd["ph"]), 0.0))
+        c.color_keys(sd["s"], ts, lambda u, sd=sd: hexa("FFFFFF", c.a(sd["a"] * (0.78 + 0.22 * br(u, sd["fl"], sd["flph"])))))
+    for m in dust:
+        tsd = set(times_dense(0, D, 8))
+        for k in range(1, m["m"] + 1):         # a key pair at each respawn
+            wrap = (k - m["ph"]) * D / m["m"]
+            if 0 < wrap < D:
+                tsd.update([wrap - 0.002, wrap])
+        wrap0 = (0 - m["ph"]) % 1.0
+        tsd = sorted(t for t in tsd if 0 <= t <= D)
+
+        def state(u, m=m):
+            q = (u * m["m"] / D + m["ph"]) % 1.0
+            env = math.sin(math.pi * q) ** 1.0
+            tw = 0.6 + 0.4 * math.sin(2 * math.pi * m["tw"] * u / D + m["twph"])
+            return (m["x"] + m["swx"] * math.sin(2 * math.pi * (q + m["ph"])), m["y"] + m["vy"] * (q - 0.5),
+                    min(1.0, 1.2 * env * tw * m["amp"]))
+        c.bone_keys(m["b"], "translate", tsd, lambda u, m=m: state(u, m)[:2])
+        c.color_keys(m["s"], tsd, lambda u, m=m: hexa(m["col"], c.a(state(u, m)[2])))
+    for k in spk:
+        a0, a1 = c.T(k["t"]), c.T(k["t"] + k["life"])
+        if k["t"] + k["life"] > D:
+            k["t"] = D - k["life"]
+            a0, a1 = c.T(k["t"]), c.T(D)
+        c.ab.bone(k["b"], "scale", _uniq([(a0, 0, 0), (c.T(k["t"] + k["life"] * 0.4), 1, 1), (a1, 0, 0)]), "quad_in_out")
+        c.ab.bone(k["b"], "rotate", _uniq([(a0, 0), (a1, k["rot"])]), "linear")
+        c.ab.slot_attachment(k["s"], [(0.0, None), (a0, "fx"), (a1, None)])
+        c.ab.slot_color(k["s"], [(0.0, hexa(color if int(k["rot"]) % 2 else "FFFFFF", c.a(1.0)))], "linear")
+    return c.result(duration=D * c.k, loop=D, strands=ns, dust=nd, sparks=len(spk))
+
+
+def portal(c: Ctx, P: dict) -> dict:
+    D = float(P["duration"])
+    color = _hexn(P["color"], "4A78FF")
+    flash_c = _hexn(P["color2"], "B050FF")
+    nsp, ncm, arms = int(P["specks"]), int(P["comets"]), int(P["arms"])
+    rng = np.random.default_rng(c.seed + 31)
+    grp = c.bone("portal", c.group, 0, 0)
+    ts = times_dense(0, D, 12)
+    all_slots: list[str] = []
+    br = lambda u, n, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * n * u / D + ph)  # noqa: E731
+    # back glow
+    b_glow = c.bone("glow", grp)
+    s_glow = c.slot(b_glow, "fx/glow", 800)
+    # the disc occludes the scene (normal blend); everything else is light
+    b_disc = c.bone("disc", grp)
+    s_disc = c.slot(b_disc, f"fx/disc_{color}", 400, color=hexa("FFFFFF", c.a(float(P["disc_alpha"]))), make=lambda: tex_disc(color), blend="normal")
+    b_sw1, b_sw2 = c.bone("swirl_a", grp), c.bone("swirl_b", grp)
+    s_sw1 = c.slot(b_sw1, f"fx/swirl{arms}_{color}", 410, make=lambda: tex_swirl(arms, color))
+    s_sw2 = c.slot(b_sw2, f"fx/swirl{arms + 2}_{color}", 330, make=lambda: tex_swirl(arms + 2, color, seed=5, twist=3.1))
+    all_slots += [s_glow, s_disc, s_sw1, s_sw2]
+    # specks orbiting inward
+    specks = []
+    for i in range(nsp):
+        piv = c.bone(f"sp{i}", grp)
+        mb = c.bone(f"sp{i}m", piv, 100, 0)
+        sl = c.slot(mb, "fx/mote", float(rng.uniform(5, 11)))
+        specks.append(dict(piv=piv, mb=mb, s=sl, r0=float(rng.uniform(70, 185)), a0=float(rng.uniform(0, 360)),
+                           rev=int(rng.choice([1, 1, 2])) * int(rng.choice([1, -1])), m=int(rng.choice([1, 1, 2])), ph=float(rng.uniform(0, 1)),
+                           tw=int(rng.integers(3, 9)), twph=float(rng.uniform(0, 6.28)), amp=float(rng.uniform(0.5, 0.95)),
+                           col=str(rng.choice(["E8DCC8", "FFFFFF", "BFE8FF"]))))
+        all_slots.append(sl)
+    # comet streaks
+    comets = []
+    for i in range(ncm):
+        bn = c.bone(f"cm{i}", grp)
+        sl = c.slot(bn, "fx/comet", 400 - i * 40, make=lambda: tex_comet())
+        comets.append(dict(b=bn, s=sl, rev=3 * (1 if i % 2 == 0 else -1), ph=i * 180.0 + float(rng.uniform(0, 40)), n=int(2 + i),
+                           pph=float(rng.uniform(0, 6.28))))
+        all_slots.append(sl)
+    ring_after = c.slots[-1] if c.slots else ""
+    # flashes
+    fl = [float(x) for x in P["flashes"]]
+    b_fl = c.bone("flash", grp)
+    s_fl = c.slot(b_fl, "fx/glow", 640)
+    s_fc = c.slot(b_fl, "fx/glow", 300)
+    all_slots += [s_fl, s_fc]
+    c.show(all_slots, 0, None)
+    # --- keys
+    c.color_keys(s_glow, ts, lambda u: hexa(color, c.a(0.5 + 0.12 * br(u, 1, 0.7))))
+    c.bone_keys(b_glow, "scale", ts, lambda u: (0.95 + 0.06 * br(u, 1, 0.7),) * 2)
+    c.bone_keys(b_sw1, "rotate", ts, lambda u: -360.0 * u / D * float(P["spin"]))
+    c.bone_keys(b_sw2, "rotate", ts, lambda u: 720.0 * u / D * float(P["spin"]))
+    c.color_keys(s_sw1, ts, lambda u: hexa("FFFFFF", c.a(0.78 + 0.12 * br(u, 2))))
+    c.color_keys(s_sw2, ts, lambda u: hexa("FFFFFF", c.a(0.5 + 0.15 * br(u, 3, 1.3))))
+    for sp in specks:
+        tsd = set(times_dense(0, D, 10))
+        for k in range(1, sp["m"] + 1):
+            wrap = (k - sp["ph"]) * D / sp["m"]
+            if 0 < wrap < D:
+                tsd.update([wrap - 0.002, wrap])
+        tsd = sorted(t for t in tsd if 0 <= t <= D)
+        q = lambda u, sp=sp: (u * sp["m"] / D + sp["ph"]) % 1.0  # noqa: E731
+        c.bone_keys(sp["piv"], "rotate", tsd, lambda u, sp=sp: sp["a0"] + sp["rev"] * 360.0 * u / D)
+        c.bone_keys(sp["mb"], "translate", tsd, lambda u, sp=sp, q=q: (sp["r0"] * (1 - 0.55 * q(u)) - 100, 0.0))
+        c.color_keys(sp["s"], tsd, lambda u, sp=sp, q=q: hexa(sp["col"], c.a(min(1.0, math.sin(math.pi * q(u)) ** 0.8 * (0.6 + 0.4 * math.sin(2 * math.pi * sp["tw"] * u / D + sp["twph"])) * sp["amp"]))))
+    for cm in comets:
+        c.bone_keys(cm["b"], "rotate", ts, lambda u, cm=cm: cm["ph"] + cm["rev"] * 360.0 * u / D)
+        c.color_keys(cm["s"], ts, lambda u, cm=cm: hexa("FFFFFF", c.a(0.35 + 0.65 * br(u, cm["n"], cm["pph"]) ** 1.5)))
+    g = lambda u, t0, w: math.exp(-((((u - t0 + D / 2) % D) - D / 2) / w) ** 2)  # noqa: E731
+    fa = lambda u: min(1.0, sum(g(u, t0, 0.22) for t0 in fl))  # noqa: E731
+    c.color_keys(s_fl, ts_fine := times_dense(0, D, 24), lambda u: hexa(flash_c, c.a(0.95 * fa(u))))
+    c.bone_keys(b_fl, "scale", ts_fine, lambda u: (0.75 + 0.5 * fa(u),) * 2)
+    c.color_keys(s_fc, ts_fine, lambda u: hexa("F4E6FF", c.a(0.8 * fa(u) ** 1.4)))
+    return c.result(duration=D * c.k, loop=D, ring_after=ring_after,
+                    ring_hint=dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
+                                   note="AE ring: ae_template portal_ring -> save -> ae_fx_to_spine with these args; scale ~ 1.8 for a 384px comp"))
+
+
+def electric_frame(c: Ctx, P: dict) -> dict:
+    D = float(P["duration"])
+    col = _hexn(P["color"], "9A30FF")
+    spark_c = _hexn(P["color2"], "F0D8FF")
+    ns = int(P["sparks"])
+    Wd, Hd = float(P["width"]), float(P["height"])
+    rng = np.random.default_rng(c.seed + 41)
+    grp = c.bone("frame", c.group, 0, 0)
+    ts = times_dense(0, D, 16)
+    br = lambda u, n, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * n * u / D + ph)  # noqa: E731
+    b_g = c.bone("under", grp, sx=Wd / max(Wd, Hd), sy=Hd / max(Wd, Hd))     # the glow texture is square: stretch it to the frame
+    side = max(Wd, Hd) / 0.74 * 0.94
+    s_under = c.slot(b_g, "fx/rrglow", side, make=lambda: tex_rrglow())
+    slots = [s_under]
+    sparks = []
+    for i in range(ns):
+        # a random point on the frame outline
+        t = rng.uniform(0, 4)
+        if t < 1:
+            px, py = -Wd / 2 + t * Wd, Hd / 2
+        elif t < 2:
+            px, py = Wd / 2, Hd / 2 - (t - 1) * Hd
+        elif t < 3:
+            px, py = Wd / 2 - (t - 2) * Wd, -Hd / 2
+        else:
+            px, py = -Wd / 2, -Hd / 2 + (t - 3) * Hd
+        bn = c.bone(f"sp{i}", grp, px, py)
+        sl = c.slot(bn, "fx/spark", float(rng.uniform(34, 78)), color=hexa(spark_c, c.a(1.0)))
+        sparks.append(dict(b=bn, s=sl, t=float(rng.uniform(0, D)), life=float(rng.uniform(0.14, 0.34)), rep=int(rng.integers(2, 5)),
+                           rot=float(rng.uniform(-70, 70))))
+        slots.append(sl)
+    ring_after = c.slots[0]
+    c.show(slots, 0, None)
+    c.color_keys(s_under, ts, lambda u: hexa(col, c.a(0.55 + 0.25 * br(u, 3, 0.6) + 0.12 * br(u, 7))))
+    c.bone_keys(b_g, "scale", ts, lambda u: (1.0 + 0.025 * br(u, 3, 0.6),) * 2)   # keys multiply the setup scale
+    for sp in sparks:
+        sc, ro, att = [], [], [(0.0, None)]
+        for q in range(sp["rep"]):
+            s0 = (sp["t"] + q * D / sp["rep"]) % D
+            e0 = s0 + sp["life"]
+            if e0 > D:
+                continue
+            att += [(c.T(s0), "fx"), (c.T(e0), None)]
+            sc += [(c.T(s0), 0, 0), (c.T(s0 + sp["life"] * 0.4), 1, 1), (c.T(e0), 0, 0)]
+            ro += [(c.T(s0), 0), (c.T(e0), sp["rot"])]
+        if not sc:
+            continue
+        att.sort(key=lambda a: a[0])
+        c.ab.bone(sp["b"], "scale", _uniq(sorted(sc, key=lambda a: a[0])), "quad_in_out")
+        c.ab.bone(sp["b"], "rotate", _uniq(sorted(ro, key=lambda a: a[0])), "linear")
+        c.ab.slot_attachment(sp["s"], att)
+    return c.result(duration=D * c.k, loop=D, ring_after=ring_after,
+                    ring_hint=dict(parent=c.group, front_of=ring_after, mode="additive", seq_mode="loop", until=D,
+                                   note="AE line: ae_template electric_frame -> save -> ae_fx_to_spine with these args; scale ~ 0.95 for the default 512 comp and a 400 frame"))
+
+
 # ------------------------------------------------------------------ registry
 # defaults: every recipe also takes the shared args (x, y, scale, start, duration, color, intensity, seed, into,
 # parent, front_of, behind, count, name). "duration" is the life window for window recipes and a time-scale
@@ -622,6 +1032,36 @@ RECIPES: dict[str, dict[str, Any]] = {
         options=dict(palette=(["FFE890"] * 6 + ["CFFF8E"] * 2 + ["FFFFFF"] * 2, "colours drawn at random (repeat one to weight it)"),
                      spread_x=(330.0, "cloud half-width"), spread_y=(250.0, "cloud half-height"),
                      rise=(1.0, "upward drift multiplier"), size=(1.0, "mote size multiplier"))),
+    "light_beam": dict(
+        fn=light_beam, duration=4.0, kind="loop", color="",
+        summary="Tall vertical beam: column glow + hot filaments (optionally weaving ribbons) + drifting dust + glints. "
+                "style gold = straight shimmering lines, ribbon = big weaving strands with curly glints, blue = thin core with a dense sparkle cloud.",
+        anchor="Beam centre (height/2 up and down). Loops every `duration` seconds (use a multiple of 4 to merge into longer clips).",
+        options=dict(style=("gold", "gold | ribbon | blue (sets the defaults marked 'style' below)"),
+                     height=(640.0, "beam height"), strands=(None, "filament count (style)"), wave=(None, "weave amplitude multiplier (style)"),
+                     dust=(None, "dust motes (style); count= overrides"), dust_width=(None, "dust cloud width (style)"),
+                     sparks=(None, "popping glints (style)"), core_width=(None, "core thickness (style)"),
+                     column_color=(None, "tint of the wide glow (style)"), column_alpha=(None, "wide glow strength (style)"),
+                     column_width=(None, "wide glow width (style)"), strand_width=(None, "filament width multiplier (style)"),
+                     dust_size=(None, "dust size multiplier (style)"), dust_tint=(None, "hex of the white-ish dust (style)"),
+                     cap=("", "hex: add a flat glow at both ends (e.g. FF7A00)"))),
+    "portal": dict(
+        fn=portal, duration=6.0, kind="loop", color="4A78FF",
+        summary="Swirling magic portal: dark indigo disc, two counter-rotating spiral-arm layers, specks orbiting inward, "
+                "whipping comet streaks, purple flashes. The churning plasma ring around it is After Effects (template portal_ring): "
+                "add it with ae_fx_to_spine using the ring_hint in the result.",
+        anchor="Portal centre; design diameter ~420.",
+        options=dict(color2=("B050FF", "flash colour"), arms=(3, "spiral arms on the main layer"), specks=(50, "orbiting specks"),
+                     comets=(2, "comet streaks"), flashes=([1.5, 4.2], "seconds of the colour flashes inside the loop"),
+                     spin=(1.0, "revolutions of the main swirl per loop (integer keeps the loop closed)"),
+                     disc_alpha=(0.88, "how much the disc hides what is behind it"))),
+    "electric_frame": dict(
+        fn=electric_frame, duration=1.0, kind="loop", color="9A30FF",
+        summary="Crackling electric border: soft violet underglow that pulses plus white sparks flashing along the outline. "
+                "The jagged lightning line itself is After Effects (template electric_frame): add it with ae_fx_to_spine using the ring_hint in the result.",
+        anchor="Frame centre.",
+        options=dict(width=(400.0, "frame width"), height=(400.0, "frame height"), color2=("F0D8FF", "spark colour"),
+                     sparks=(10, "spark flashes along the outline"))),
     "twinkles": dict(
         fn=twinkles, duration=5.8, kind="window", count=9,
         summary="Four-point stars that pop, spin and vanish, two or three times each, around the subject.",
