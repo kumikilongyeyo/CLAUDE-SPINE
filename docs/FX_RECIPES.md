@@ -29,6 +29,10 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | light_beam | tall beam: column glow + filaments (weaving ribbons) + dust + glints; style gold / ribbon / blue | loop 4 s |
 | portal | swirling disc, spiral arms, orbiting specks, comet streaks, flashes (+ AE plasma ring) | loop 6 s, hybrid |
 | electric_frame | violet underglow + sparks around a frame (+ AE lightning line) | loop 1 s, hybrid |
+| crosshair | targeting reticle: drops in spinning, locks on with a flash, recoils and fades when it fires | one-shot 1.25 s |
+| hit_burst | starburst + core + two shock rings + sparks (fires fx_hit) | one-shot 0.95 s |
+| lock_on | crosshairs lock onto any number of targets in turn, fire, hit bursts land | bundle |
+| cell_glow | glowing cell frame(s) with a twinkling starfield, pop = flash + burst + sparkles; resizable 9-slice | window 3.2 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
 ## Hybrids: Spine recipe + After Effects part
@@ -46,6 +50,18 @@ comps cycle their turbulence (Cycle Evolution), so the flipbook loops with no se
 a frame resize at runtime, bend an AE strip along a path with `ae_fx_along_path` (when that tool is available).
 Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 24 frames at 512 px. Use `max_size` /
 `max_frames` in ae_fx_to_spine to shrink them.
+
+## Resizing and recolouring a glowing frame
+
+- Spine-built frames (`cell_glow`): any `width`/`height` at build time, `color`/`color2` for the line and the pop. The frame and
+  its fill are ONE 9-slice mesh pair weighted to four shared corner bones (the result lists them): corners keep their
+  art, edges stretch (the edge cross-section is constant, so stretching never shows). In the game, move the corner bones
+  to resize at runtime; slot colours can be changed live to recolour.
+- AE-rendered frames (`electric_frame`): the underglow and sparks resize (`width`/`height`) and recolour (`color`/`color2`)
+  freely. The jagged line is a baked 512 px flipbook: uniform scale works up to ~1.5x; recolour by re-rendering with
+  another `glow_color`/`color` (about 10 s) or by rendering it neutral (white) and tinting the slot. For different
+  width/height at runtime, run the flipbook through the same 9-slice mesh (corners crisp, edges stretch the crackle),
+  or bend an AE strip along a path with `ae_fx_along_path`.
 
 ## What needs After Effects, what does not (from the references seen so far)
 

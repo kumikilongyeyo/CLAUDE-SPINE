@@ -299,11 +299,92 @@ def tex_rrglow(w: float = 400, h: float = 400, corner: float = 0.14, spread: flo
     return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
 
 
+
+def _rr_sdf(n: int, hx: float, hy: float, cr: float):
+    x, y = _grid(n)
+    qx, qy = np.abs(x) - (hx - cr), np.abs(y) - (hy - cr)
+    return np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - cr
+
+
+def tex_frame9(color: str = "20E8C8", n: int = 192) -> Image.Image:
+    """Source for a 9-slice glowing frame: a thin hot line on a rounded rectangle with a soft halo on both sides.
+    Slice at 48 px: the corners (arc included) live inside the slices, the edge cross-section is constant along the
+    middle, so stretching the middle never shows."""
+    d = _rr_sdf(n, 0.78, 0.78, 0.14)
+    core = np.exp(-(d / 0.016) ** 2)
+    halo = np.where(d > 0, 0.6 * np.exp(-(d / 0.075) ** 2), 0.45 * np.exp(-(-d / 0.055) ** 2))
+    x, y = _grid(n)
+    a = np.clip(core + halo, 0, 1) * np.clip((1 - np.maximum(np.abs(x), np.abs(y))) / 0.04, 0, 1)
+    return _colorize(a, *_palette(color))
+
+
+def tex_cellfill(n: int = 192) -> Image.Image:
+    """Soft rounded-rectangle fill, brighter toward the rim (white; tint with the slot colour)."""
+    d = _rr_sdf(n, 0.78, 0.78, 0.14)
+    inside = np.where(d < 0, 0.30 + 0.5 * np.exp(-(-d / 0.20) ** 2), np.exp(-(d / 0.05) ** 2) * 0.8)
+    x, y = _grid(n)
+    a = inside * np.clip((1 - np.maximum(np.abs(x), np.abs(y))) / 0.05, 0, 1)
+    return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
+
+
+def tex_reticle(color: str = "FFB02E", n: int = 512) -> Image.Image:
+    """Targeting reticle: double ring with four notches, a gapped cross, tick marks, soft glow."""
+    S = 2
+    N = n * S
+    img = Image.new("L", (N, N), 0)
+    d = ImageDraw.Draw(img)
+    c = N / 2
+    R = N / 2
+
+    def arc(rad, w, a0, a1):
+        d.arc([c - rad, c - rad, c + rad, c + rad], a0, a1, fill=255, width=max(1, int(w * S)))
+    for q in range(4):                                  # outer ring in four arcs (notches at the axes)
+        arc(R * 0.86, 7, q * 90 + 12, q * 90 + 78)
+    d.ellipse([c - R * 0.72, c - R * 0.72, c + R * 0.72, c + R * 0.72], outline=255, width=int(2.4 * S))
+    for q in range(4):                                  # cross: long line outside the ring, short inside, gap at the centre
+        ang = q * math.pi / 2
+        ux, uy = math.cos(ang), math.sin(ang)
+        d.line([(c + ux * R * 0.22, c + uy * R * 0.22), (c + ux * R * 0.60, c + uy * R * 0.60)], fill=255, width=int(3.2 * S))
+        d.line([(c + ux * R * 0.80, c + uy * R * 0.80), (c + ux * R * 0.97, c + uy * R * 0.97)], fill=255, width=int(5 * S))
+    for q in range(4):                                  # diagonal ticks
+        ang = math.pi / 4 + q * math.pi / 2
+        ux, uy = math.cos(ang), math.sin(ang)
+        d.line([(c + ux * R * 0.66, c + uy * R * 0.66), (c + ux * R * 0.77, c + uy * R * 0.77)], fill=255, width=int(3 * S))
+    r0 = R * 0.035
+    d.ellipse([c - r0, c - r0, c + r0, c + r0], fill=255)
+    base = np.asarray(img, np.float32) / 255
+    a = np.clip(_blur(base, 1.2 * S) * 1.15 + _blur(base, 7 * S) * 0.9, 0, 1)
+    a = np.asarray(Image.fromarray((a * 255).astype(np.uint8), "L").resize((n, n), Image.LANCZOS), np.float32) / 255
+    x, y = _grid(n)
+    a *= np.clip((1 - np.hypot(x, y)) / 0.04, 0, 1)
+    return _colorize(a, *_palette(color))
+
+
+def tex_starburst(color: str = "FFB347", n: int = 512, rays: int = 13, seed: int = 9) -> Image.Image:
+    """Irregular spiky star with a hot core, for an impact flash."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(n)
+    r = np.hypot(x, y)
+    th = np.arctan2(y, x)
+    ang = rng.uniform(0, 2 * math.pi, rays)
+    ln = rng.uniform(0.45, 0.98, rays)
+    wd = rng.uniform(0.05, 0.11, rays)
+    a = np.zeros((n, n))
+    for k in range(rays):
+        dth = np.abs(((th - ang[k] + math.pi) % (2 * math.pi)) - math.pi)
+        spike = np.exp(-(dth / (wd[k] * (1.3 - np.clip(r / ln[k], 0, 1)))) ** 2) * np.clip(1 - r / ln[k], 0, 1) ** 1.2
+        a = np.maximum(a, spike)
+    a = np.maximum(a, np.exp(-(r / 0.16) ** 2))
+    a += 0.35 * np.exp(-(r / 0.38) ** 2)
+    a *= np.clip((1 - r) / 0.05, 0, 1)
+    return _colorize(np.clip(a, 0, 1), *_palette(color))
+
+
 # texture name -> factory (white textures are tinted per slot; coloured ones are named with their colour)
 WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
     "fx/wisp": tex_wisp, "fx/beam": tex_beam, "fx/mote": tex_mote, "fx/reflect": tex_reflect,
     "fx/glow": tex_glow, "fx/ring": tex_ring, "fx/spark": tex_spark, "fx/column": tex_column,
-    "fx/rrglow": lambda: tex_rrglow(),
+    "fx/rrglow": lambda: tex_rrglow(), "fx/cellfill": lambda: tex_cellfill(),
 }
 
 
@@ -423,6 +504,60 @@ class Ctx:
                                                     width=round(width, 2), height=round(height, 2)))
         self.slots.append(nm)
         return nm, nodes
+
+    def slice9(self, parent: str, tex: str, w: float, h: float, slice_px: float = 64.0, color: str = "FFFFFFFF",
+               make: Callable[[], Image.Image] | None = None, tag: str = "s9", blend: str = "additive",
+               share: tuple | None = None):
+        """A 9-slice frame as a weighted mesh on four corner bones (TL, TR, BL, BR): the corners keep their art,
+        the edges and the middle stretch. Move the corner bones in the game and the frame resizes. Returns
+        (slot, {"tl": bone, ...}). share=(base, corners) from an earlier call makes this mesh ride the same corner bones."""
+        sk = self.sk
+        tw, th = self.tex(tex, make)
+        s_ = min(slice_px, w / 2, h / 2)
+        pos = {"tl": (-w / 2, h / 2), "tr": (w / 2, h / 2), "bl": (-w / 2, -h / 2), "br": (w / 2, -h / 2)}
+        if share:                                     # reuse another 9-slice's corner bones: one set resizes both meshes
+            base, cb = share
+        else:
+            base = self.bone(tag, parent, 0, 0)
+            cb = {k: self.bone(f"{tag}_{k}", base, *pos[k]) for k in pos}
+        xs = [-w / 2, -w / 2 + s_, w / 2 - s_, w / 2]
+        ys = [h / 2, h / 2 - s_, -h / 2 + s_, -h / 2]
+        us = [0.0, slice_px / tw, 1 - slice_px / tw, 1.0]
+        vs = [0.0, slice_px / th, 1 - slice_px / th, 1.0]
+        order = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (2, 3), (3, 3), (3, 2), (3, 1), (3, 0), (2, 0), (1, 0),
+                 (1, 1), (1, 2), (2, 1), (2, 2)]
+        idx = {ij: k for k, ij in enumerate(order)}
+        verts: list[float] = []
+        uvs: list[float] = []
+        for (i, j) in order:
+            key = ("t" if i < 2 else "b") + ("l" if j < 2 else "r")
+            cx, cy = pos[key]
+            verts += [1, sk.bone_index(cb[key]), round(xs[j] - cx, 3), round(ys[i] - cy, 3), 1]
+            uvs += [round(us[j], 5), round(vs[i], 5)]
+        tris: list[int] = []
+        for i in range(3):
+            for j in range(3):
+                a_, b_, c_, d_ = idx[(i, j)], idx[(i, j + 1)], idx[(i + 1, j + 1)], idx[(i + 1, j)]
+                tris += [a_, b_, c_, a_, c_, d_]
+        edges: list[int] = []
+        for k in range(12):
+            edges += [k * 2, ((k + 1) % 12) * 2]
+        nm = sk.unique_name(base, "slot")
+        sl = Slot(name=nm, bone=base, color=color, blend=blend)
+        if self.last_slot is not None:
+            sk.add_slot(sl, after=self.last_slot)
+        elif self.behind:
+            sk.add_slot(sl, before=self.behind)
+        elif self.front_of:
+            sk.add_slot(sl, after=self.front_of)
+        else:
+            sk.add_slot(sl)
+        self.last_slot = nm
+        sk.set_attachment(nm, "fx", MeshAttachment(path=tex, uvs=uvs, triangles=tris, vertices=verts, hull=12, edges=edges,
+                                                    width=tw, height=th))
+        self.slots.append(nm)
+        self._last_s9 = (base, cb)
+        return nm, cb
 
     # -- keys (local time u at design speed -> animation time)
     def T(self, u: float) -> float:
@@ -558,7 +693,7 @@ def burst_flare(c: Ctx, P: dict) -> dict:
             return (math.cos(a) * dist * e, math.sin(a) * dist * e * 0.7 - 70 * q * q + 20 * q)
         c.bone_keys(bn, "translate", tts, pos)
         c.bone_keys(bn, "scale", tts, lambda u, d=delay, L=life: (1.0 - 0.7 * ((u - d) / L),) * 2)
-        c.color_keys(sl, tts, lambda u, d=delay, L=life: hexa("FFF2A8", c.a(0.95 * (1 - ((u - d) / L)) ** 1.3)))
+        c.color_keys(sl, tts, lambda u, d=delay, L=life: hexa("FFF2A8", c.a(0.95 * max(0.0, 1 - (u - d) / L) ** 1.3)))
         c.ab.slot_attachment(sl, [(0.0, None), (c.T(delay), "fx"), (c.T(delay + life), None)])
     return c.result(duration=D * c.k, sparks=ns)
 
@@ -991,6 +1126,171 @@ def electric_frame(c: Ctx, P: dict) -> dict:
                                    note="AE line: ae_template electric_frame -> save -> ae_fx_to_spine with these args; scale ~ 0.95 for the default 512 comp and a 400 frame"))
 
 
+def crosshair(c: Ctx, P: dict) -> dict:
+    D = 1.25
+    col = _hexn(P["color"], "FFB02E")
+    size = float(P["size"])
+    lock, hit = float(P["lock"]), float(P["hit"])
+    tname = f"fx/reticle_{col}"
+    mk = lambda: tex_reticle(col)  # noqa: E731
+    grp = c.bone("lock", c.group, 0, 0)
+    b_glow, b_ret, b_flash, b_ring = c.bone("glow", grp), c.bone("ret", grp), c.bone("flash", grp), c.bone("ring", grp)
+    s_glow = c.slot(b_glow, "fx/glow", size * 1.9)
+    s_ring = c.slot(b_ring, "fx/ring", size * 1.5)
+    s_ret = c.slot(b_ret, tname, size, make=mk)
+    s_flash = c.slot(b_flash, "fx/glow", size * 0.9)
+    ts = times_dense(0, D, 30)
+    c.show([s_glow, s_ring, s_ret, s_flash], 0, D)
+    appear = lambda u: ease_out(u / lock, 3.0)  # noqa: E731
+    kick = lambda u: math.exp(-((u - lock) / 0.07) ** 2)  # noqa: E731
+    leave = lambda u: smooth(u, hit, hit + 0.3)  # noqa: E731
+
+    def scl(u):
+        if u < lock:
+            return 2.5 - 1.5 * appear(u)
+        hold = 1.0 + 0.035 * math.sin(2 * math.pi * 3.2 * (u - lock)) * (1 - leave(u))
+        return (hold + 0.14 * kick(u)) * (1 - 0.2 * smooth(u, hit, hit + 0.12)) * (1 + 0.25 * leave(u))
+    rot = lambda u: -120.0 * (1 - appear(u)) + 5.0 * math.sin(2 * math.pi * 1.3 * u) * smooth(u, lock, lock + 0.2) + 40.0 * leave(u)  # noqa: E731
+    alpha = lambda u: smooth(u, 0, 0.14) * (1 - leave(u))  # noqa: E731
+    c.bone_keys(b_ret, "scale", ts, lambda u: (scl(u),) * 2)
+    c.bone_keys(b_ret, "rotate", ts, rot)
+    c.color_keys(s_ret, ts, lambda u: hexa("FFFFFF", c.a(alpha(u) * (0.9 + 0.1 * math.sin(2 * math.pi * 6 * u)))))
+    c.color_keys(s_glow, ts, lambda u: hexa(col, c.a(alpha(u) * smooth(u, lock * 0.6, lock) * (0.42 + 0.14 * math.sin(2 * math.pi * 3.2 * u)))))
+    c.bone_keys(b_glow, "scale", ts, lambda u: (0.8 + 0.2 * smooth(u, 0, lock) + 0.1 * kick(u),) * 2)
+    c.color_keys(s_flash, ts, lambda u: hexa("FFF4C8", c.a(0.95 * kick(u))))
+    c.bone_keys(b_flash, "scale", ts, lambda u: (0.6 + 0.9 * smooth(u, lock - 0.05, lock + 0.25),) * 2)
+    c.bone_keys(b_ring, "scale", ts, lambda u: (0.55 + 1.15 * ease_out((u - lock) / 0.45, 2.4) if u >= lock else 0.0,) * 2)
+    c.color_keys(s_ring, ts, lambda u: hexa(col, c.a(0.85 * (1 - smooth(u, lock, lock + 0.45)) if u >= lock else 0.0)))
+    c.ab.event(c.T(lock), "fx_crosshair_lock")
+    c.ab.event(c.T(hit), "fx_crosshair_hit")
+    return c.result(duration=D * c.k, lock_at=c.T(lock), hit_at=c.T(hit))
+
+
+def hit_burst(c: Ctx, P: dict) -> dict:
+    D = 0.95
+    col = _hexn(P["color"], "FFB347")
+    size = float(P["size"])
+    ns = int(P["count"])
+    tname = f"fx/starburst_{col}"
+    mk = lambda: tex_starburst(col)  # noqa: E731
+    grp = c.bone("hit", c.group, 0, 0)
+    b_glow, b_star, b_core, b_r1, b_r2 = (c.bone("glow", grp), c.bone("star", grp), c.bone("core", grp),
+                                          c.bone("ring1", grp), c.bone("ring2", grp))
+    s_glow = c.slot(b_glow, "fx/glow", size * 1.8)
+    s_r1 = c.slot(b_r1, "fx/ring", size * 1.4)
+    s_r2 = c.slot(b_r2, "fx/ring", size * 1.4)
+    s_star = c.slot(b_star, tname, size, make=mk)
+    s_core = c.slot(b_core, "fx/glow", size * 0.55)
+    rng = np.random.default_rng(c.seed + 51)
+    sp = []
+    for i in range(ns):
+        a = rng.uniform(0, 2 * math.pi)
+        bn = c.bone(f"sp{i}", grp)
+        sl = c.slot(bn, "fx/mote", float(rng.uniform(10, 24)))
+        sp.append((bn, sl, a, float(rng.uniform(0.45, 1.0)) * size * 0.9, float(rng.uniform(0.35, 0.7)), float(rng.uniform(0, 0.06))))
+    ts = times_dense(0, D, 30)
+    c.show([s_glow, s_r1, s_r2, s_star, s_core], 0, D)
+    att = lambda u: ease_out(u / 0.09, 2.0) if u < 0.09 else max(0.0, 1 - (u - 0.09) / 0.62) ** 1.6  # noqa: E731
+    c.bone_keys(b_star, "scale", ts, lambda u: (0.15 + 1.0 * ease_out(u / 0.16, 3.0) - 0.15 * smooth(u, 0.2, 0.7),) * 2)
+    c.bone_keys(b_star, "rotate", ts, lambda u: 24.0 * u)
+    c.color_keys(s_star, ts, lambda u: hexa("FFFFFF", c.a(att(u))))
+    c.bone_keys(b_core, "scale", ts, lambda u: (0.4 + 0.9 * ease_out(u / 0.12, 2.5),) * 2)
+    c.color_keys(s_core, ts, lambda u: hexa("FFF6D8", c.a(min(1.0, 1.2 * att(u)))))
+    c.color_keys(s_glow, ts, lambda u: hexa(col, c.a(0.8 * att(u))))
+    c.bone_keys(b_glow, "scale", ts, lambda u: (0.5 + 0.7 * ease_out(u / 0.3, 2.5),) * 2)
+    for bn, d0, colr, w in ((b_r1, 0.0, col, 0.62), (b_r2, 0.1, "FFFFFF", 0.5)):
+        sl = s_r1 if bn == b_r1 else s_r2
+        c.bone_keys(bn, "scale", ts, lambda u, d0=d0: (0.2 + 1.2 * ease_out((u - d0) / 0.5, 2.6) if u >= d0 else 0.0,) * 2)
+        c.color_keys(sl, ts, lambda u, d0=d0, colr=colr, w=w: hexa(colr, c.a(0.9 * (1 - smooth(u, d0, d0 + w)) * smooth(u, d0, d0 + 0.03))))
+    for bn, sl, a, dist, life, delay in sp:
+        tts = times_dense(delay, delay + life, 24)
+
+        def pos(u, a=a, dist=dist, delay=delay, life=life):
+            q = (u - delay) / life
+            e = ease_out(q, 2.2)
+            return (math.cos(a) * dist * e, math.sin(a) * dist * e - 40 * q * q)
+        c.bone_keys(bn, "translate", tts, pos)
+        c.color_keys(sl, tts, lambda u, d=delay, L=life: hexa("FFD070", c.a(0.95 * max(0.0, 1 - (u - d) / L) ** 1.3)))
+        c.ab.slot_attachment(sl, [(0.0, None), (c.T(delay), "fx"), (c.T(delay + life), None)])
+    c.ab.event(c.T(0.0), "fx_hit")
+    return c.result(duration=D * c.k, sparks=ns)
+
+
+def cell_glow(c: Ctx, P: dict) -> dict:
+    """Glowing cell frames with a twinkling starfield inside; each pops (flash, burst, vanish) at `pop`."""
+    dur = float(P["duration"])
+    col = _hexn(P["color"], "20E8C8")
+    col2 = _hexn(P["color2"], "3CFF8A")
+    pop = float(P["pop"])
+    stagger = float(P["stagger"])
+    cells = P["cells"] or [[0.0, 0.0, float(P["width"]), float(P["height"])]]
+    tname = f"fx/frame9_{col}"
+    mk = lambda: tex_frame9(col)  # noqa: E731
+    fill_hex = "%02X%02X%02X" % tuple(int(v) for v in _mix(_rgb(col), (0, 0, 0), 0.8))   # dark tint: the cell darkens what is behind it
+    rng = np.random.default_rng(c.seed + 61)
+    out_cells = []
+    for ci, (cx, cy, w, h) in enumerate(cells):
+        t0 = ci * stagger
+        grp = c.bone(f"cell{ci}", c.group, cx, cy)
+        s_fill, _ = c.slice9(grp, "fx/cellfill", w, h, 48.0, tag=f"cell{ci}", blend="normal")
+        s_frame, corners = c.slice9(grp, tname, w, h, 48.0, make=mk, tag=f"cell{ci}", share=c._last_s9)
+        area = w * h
+        nspk = int(P["specks"]) if P["specks"] else int(np.clip(area / 2000, 8, 70))
+        specks = []
+        for k in range(nspk):
+            bn = c.bone(f"c{ci}_s{k}", grp, float(rng.uniform(-w * 0.42, w * 0.42)), float(rng.uniform(-h * 0.42, h * 0.42)))
+            sl = c.slot(bn, "fx/mote", float(rng.uniform(9, 20)))
+            specks.append(dict(b=bn, s=sl, f=float(rng.uniform(1.2, 3.2)), ph=float(rng.uniform(0, 6.28)), amp=float(rng.uniform(0.5, 1.0)),
+                               dx=float(rng.uniform(2, 7)), dy=float(rng.uniform(2, 7)), col=str(rng.choice(["FFFFFF", col, "C8FFF4"]))))
+        # pop debris: sparkles + motes flying outward from the middle
+        nsp = 8
+        deb = []
+        for k in range(nsp):
+            bn = c.bone(f"c{ci}_d{k}", grp)
+            sl = c.slot(bn, "fx/spark", float(rng.uniform(26, 52)))
+            deb.append((bn, sl, float(rng.uniform(0, 2 * math.pi)), float(rng.uniform(0.45, 0.95)) * max(w, h), float(rng.uniform(0, 0.08))))
+        b_ring, b_glow = c.bone(f"c{ci}_ring", grp), c.bone(f"c{ci}_pg", grp)
+        s_ring = c.slot(b_ring, "fx/ring", max(w, h) * 0.9)
+        s_pg = c.slot(b_glow, "fx/glow", max(w, h) * 1.1)
+        slots_all = [s_fill, s_frame] + [x["s"] for x in specks] + [s_ring, s_pg] + [x[1] for x in deb]
+        end = t0 + pop + 0.8 if pop > 0 else dur
+        c.show(slots_all, t0, end)
+        ts = times_dense(t0, min(end, t0 + dur + (0.8 if pop > 0 else 0)), 20)
+        appear = lambda u: smooth(u, t0, t0 + 0.35)  # noqa: E731
+        pu = t0 + pop
+        popk = lambda u: smooth(u, pu, pu + 0.25) if pop > 0 else 0.0  # noqa: E731
+        gone = lambda u: smooth(u, pu + 0.06, pu + 0.4) if pop > 0 else 0.0  # noqa: E731
+        flashk = lambda u: math.exp(-((u - pu - 0.05) / 0.08) ** 2) if pop > 0 else 0.0  # noqa: E731
+        pulse = lambda u: 0.85 + 0.15 * math.sin(2 * math.pi * 0.9 * u + ci)  # noqa: E731
+        c.color_keys(s_frame, ts, lambda u: hexa("FFFFFF" if flashk(u) > 0.5 else col, c.a(appear(u) * (1 - gone(u)) * pulse(u))))
+        c.color_keys(s_fill, ts, lambda u: hexa(fill_hex, c.a(0.78 * appear(u) * (1 - gone(u)) * (0.9 + 0.1 * pulse(u)))))
+        c.bone_keys(grp, "scale", ts, lambda u: ((0.92 + 0.08 * appear(u)) * (1 + 0.28 * popk(u)),) * 2)
+        for sp in specks:
+            c.bone_keys(sp["b"], "translate", ts, lambda u, sp=sp: (sp["dx"] * math.sin(0.6 * u + sp["ph"]), sp["dy"] * math.cos(0.5 * u + sp["ph"] * 1.7)))
+            c.color_keys(sp["s"], ts, lambda u, sp=sp: hexa(sp["col"], c.a(appear(u) * (1 - gone(u)) * sp["amp"] * (0.55 + 0.45 * math.sin(2 * math.pi * sp["f"] * u + sp["ph"])))))
+        if pop > 0:
+            c.bone_keys(b_ring, "scale", ts, lambda u: (0.3 + 1.3 * ease_out((u - pu) / 0.5, 2.4) if u >= pu else 0.0,) * 2)
+            c.color_keys(s_ring, ts, lambda u: hexa(col2, c.a(0.9 * (1 - smooth(u, pu, pu + 0.5)) * smooth(u, pu, pu + 0.03))))
+            c.bone_keys(b_glow, "scale", ts, lambda u: (0.4 + 0.8 * ease_out((u - pu) / 0.4, 2.0) if u >= pu else 0.0,) * 2)
+            c.color_keys(s_pg, ts, lambda u: hexa(col2, c.a(0.85 * math.exp(-((u - pu - 0.1) / 0.18) ** 2))))
+            for bn, sl, a, dist, delay in deb:
+                tts = times_dense(pu + delay, pu + delay + 0.6, 24)
+                c.bone_keys(bn, "translate", tts, lambda u, a=a, dist=dist, d=delay: (
+                    math.cos(a) * dist * ease_out((u - pu - d) / 0.6, 2.2), math.sin(a) * dist * ease_out((u - pu - d) / 0.6, 2.2)))
+                c.bone_keys(bn, "scale", tts, lambda u, d=delay: (max(0.0, 1 - (u - pu - d) / 0.6),) * 2)
+                c.color_keys(sl, tts, lambda u, d=delay: hexa("D8FFE8", c.a(0.95 * max(0.0, 1 - (u - pu - d) / 0.6))))
+                c.ab.slot_attachment(sl, [(0.0, None), (c.T(pu + delay), "fx"), (c.T(pu + delay + 0.6), None)])
+            c.ab.event(c.T(pu), "fx_cell_pop")
+        else:
+            c.ab.slot_attachment(s_ring, [(0.0, None)])
+            c.ab.slot_attachment(s_pg, [(0.0, None)])
+            for bn, sl, *_ in deb:
+                c.ab.slot_attachment(sl, [(0.0, None)])
+        out_cells.append(dict(frame=s_frame, corners=corners, pop_at=c.T(pu) if pop > 0 else None))
+    return c.result(duration=dur * c.k, cells=len(cells), corner_bones=[v for o in out_cells for v in o["corners"].values()],
+                    pops=[o["pop_at"] for o in out_cells])
+
+
 # ------------------------------------------------------------------ registry
 # defaults: every recipe also takes the shared args (x, y, scale, start, duration, color, intensity, seed, into,
 # parent, front_of, behind, count, name). "duration" is the life window for window recipes and a time-scale
@@ -1062,6 +1362,26 @@ RECIPES: dict[str, dict[str, Any]] = {
         anchor="Frame centre.",
         options=dict(width=(400.0, "frame width"), height=(400.0, "frame height"), color2=("F0D8FF", "spark colour"),
                      sparks=(10, "spark flashes along the outline"))),
+    "crosshair": dict(
+        fn=crosshair, duration=1.25, kind="one-shot", color="FFB02E",
+        summary="Targeting reticle: drops in large and spinning, snaps onto the target with a flash and shock ring, hovers, "
+                "then recoils and fades when it fires. Events fx_crosshair_lock and fx_crosshair_hit.",
+        anchor="Target centre.",
+        options=dict(size=(170.0, "reticle diameter"), lock=(0.35, "seconds until it locks on"),
+                     hit=(0.85, "seconds when it fires (reticle recoils and fades)"))),
+    "hit_burst": dict(
+        fn=hit_burst, duration=0.95, kind="one-shot", color="FFB347", count=14,
+        summary="Impact: spiky starburst + hot core + two shock rings + flung sparks. Fires fx_hit. Put it on the target when the reticle fires.",
+        anchor="Impact point.", options=dict(size=(260.0, "starburst diameter"))),
+    "cell_glow": dict(
+        fn=cell_glow, duration=3.2, kind="window", color="20E8C8",
+        summary="Glowing cell frame(s) with a twinkling starfield inside; pop = flash, burst ring, debris, frame vanishes. "
+                "The frame is a 9-slice mesh on four corner bones, so any width/height keeps sharp corners and the "
+                "game can resize it by moving the corner bones (result lists them).",
+        anchor="Cell centre (each entry of cells is [dx, dy, width, height] from it).",
+        options=dict(width=(130.0, "cell width"), height=(130.0, "cell height"), cells=(None, "list of [dx, dy, w, h] to build several cells at once"),
+                     color2=("3CFF8A", "pop burst colour"), pop=(2.4, "seconds when it pops (<= 0: never pops, just glows)"),
+                     stagger=(0.0, "seconds between cells (appear and pop)"), specks=(None, "starfield count per cell (default from area)"))),
     "twinkles": dict(
         fn=twinkles, duration=5.8, kind="window", count=9,
         summary="Four-point stars that pop, spin and vanish, two or three times each, around the subject.",
@@ -1086,6 +1406,15 @@ def list_recipes() -> dict:
             "default_color": d.get("color", ""), "default_count": d.get("count", 0),
             "options": {k: {"default": v[0], "what": v[1]} for k, v in d["options"].items()},
         }
+    out["lock_on"] = {
+        "summary": "Crosshairs lock onto each target in turn, fire, and a hit burst lands on every one. Add the symbol pop / coins "
+                   "with the game or fx_generate coin_burst at the fx_hit events.",
+        "kind": "bundle", "anchor": "Origin of the target offsets", "default_duration": 2.0,
+        "options": {"targets": {"default": [[0, 0]], "what": "[[dx, dy], ...] target centres relative to x, y"},
+                    "stagger": {"default": 0.18, "what": "seconds between targets"},
+                    "crosshair": {"default": {}, "what": "options for crosshair (size, lock, hit, ...)"},
+                    "hit": {"default": {}, "what": "options for hit_burst"}},
+    }
     out["magic_reveal"] = {
         "summary": "All seven recipes in one animation, timed like the reference clip (ring 2.0s, flare 3.55s, bloom + wisps + "
                    "twinkles from ~3.8s, fireflies from 3.4s, floor glow 0.9-12s). Hook each fx_<recipe> event to a sound.",
@@ -1115,6 +1444,8 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
           parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
           options: dict | None = None) -> dict:
     """Add one recipe (or the ``magic_reveal`` bundle) to the project. Does not save."""
+    if recipe == "lock_on":
+        return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {})
     if recipe == "magic_reveal":
         return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {})
     if recipe not in RECIPES:
@@ -1127,6 +1458,30 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
     k = (P["duration"] / d["duration"]) if d["kind"] == "one-shot" else 1.0
     c = Ctx(project, recipe, x, y, scale, start, k, intensity, seed, into, parent, front_of, behind, name)
     return d["fn"](c, P)
+
+
+def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options) -> dict:
+    """Crosshairs lock onto each target in turn, fire, and a hit burst lands on every one."""
+    targets = options.get("targets") or [[0.0, 0.0]]
+    stagger = float(options.get("stagger", 0.18))
+    ch_opts = dict(options.get("crosshair", {}))
+    hit_opts = dict(options.get("hit", {}))
+    anim = into or (name or "lock_on")
+    last, parts = front_of, []
+    hit_at = float(ch_opts.get("hit", 0.85))
+    for i, (tx, ty) in enumerate(targets):
+        base = dict(x=x, y=y, scale=scale, intensity=intensity, seed=seed + i, into=anim, parent=parent)
+        r1 = apply(project, "crosshair", start=start + i * stagger, front_of=last, behind=behind if not parts else "", options=ch_opts or None, **base)
+        # the target offset is applied on the group bone (x, y are the parent-space centre of the whole set)
+        g1 = project.data.bone(r1["group_bone"]); g1.x, g1.y = x + tx * scale, y + ty * scale
+        last = r1["slots"][-1]
+        r2 = apply(project, "hit_burst", start=start + i * stagger + hit_at, front_of=last, options=hit_opts or None, **base)
+        g2 = project.data.bone(r2["group_bone"]); g2.x, g2.y = x + tx * scale, y + ty * scale
+        last = r2["slots"][-1]
+        parts += [r1, r2]
+    return {"recipe": "lock_on", "animation": anim, "targets": len(targets), "bones": sum(p["bones"] for p in parts),
+            "slots": [s for p in parts for s in p["slots"]], "events": sorted({p["event"] for p in parts}),
+            "length": start + (len(targets) - 1) * stagger + hit_at + 0.95}
 
 
 def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options) -> dict:

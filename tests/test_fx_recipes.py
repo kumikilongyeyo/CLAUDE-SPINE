@@ -34,7 +34,8 @@ def _dur(p, anim):
 def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
-    assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) for s in proj.data.slots)
+    assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) or (name == "cell_glow" and s.blend == "normal")
+               for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)
     assert v["ok"], v["errors"]
@@ -248,3 +249,57 @@ def test_the_portal_and_frame_ae_templates_exist_and_build():
         r = ae_templates.build_script(n, {"comp": f"x_{n}"})
         src = open(r["script"]).read()
         assert "Turbulent Displace" in src and "Cycle Evolution" in src, "must loop seamlessly"
+
+
+# ---------------------------------------------------------------- crosshair, hit burst, cell glow, lock-on
+def test_crosshair_events_and_timing(proj):
+    res = R.apply(proj, "crosshair", start=0.5, options={"lock": 0.4, "hit": 1.0})
+    ev = {e.name: e.time for e in proj.data.animations[res["animation"]].events}
+    assert ev["fx_crosshair_lock"] == pytest.approx(0.9) and ev["fx_crosshair_hit"] == pytest.approx(1.5)
+    assert res["lock_at"] == pytest.approx(0.9) and res["hit_at"] == pytest.approx(1.5)
+
+
+def test_hit_burst_fires_fx_hit_and_sparks(proj):
+    res = R.apply(proj, "hit_burst", count=6, start=1.0)
+    assert res["sparks"] == 6
+    assert any(e.name == "fx_hit" and e.time == 1.0 for e in proj.data.animations[res["animation"]].events)
+
+
+def test_cell_glow_is_a_resizable_9_slice_on_corner_bones(proj):
+    res = R.apply(proj, "cell_glow", options={"width": 200.0, "height": 120.0})
+    assert len(res["corner_bones"]) == 4                      # fill and frame ride the same four corner bones
+    meshes = [a for sl in proj.data.skin("default").attachments.values() for a in sl.values() if a.type == "mesh"]
+    assert len(meshes) == 2
+    for m in meshes:
+        assert m.hull == 12 and len(m.uvs) == 32 and len(m.triangles) == 54
+        assert all(v == 1 for v in m.vertices[0::5])          # every vertex has exactly one influence
+        xs = sorted({round(m.vertices[i + 2], 1) for i in range(0, len(m.vertices), 5)})
+        assert max(xs) <= 48.0 and min(xs) >= -48.0           # local to its corner bone: never spans the cell
+    corners = {proj.data.bone(b).name.rsplit("_", 1)[-1]: proj.data.bone(b) for b in res["corner_bones"]}
+    assert (corners["tl"].x, corners["tl"].y, corners["br"].x, corners["br"].y) == (-100, 60, 100, -60)
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_cell_glow_cells_stagger_and_pop(proj):
+    res = R.apply(proj, "cell_glow", options={"cells": [[0, 0, 100, 100], [0, -110, 100, 200]], "stagger": 0.2, "pop": 1.5})
+    assert res["cells"] == 2 and res["pops"] == [pytest.approx(1.5), pytest.approx(1.7)]
+    ev = [e.time for e in proj.data.animations[res["animation"]].events if e.name == "fx_cell_pop"]
+    assert ev == [pytest.approx(1.5), pytest.approx(1.7)]
+    disc = next(s for s in proj.data.slots if s.blend == "normal")
+    assert disc.blend == "normal"                              # the fill darkens what is behind the cell
+    nopop = R.apply(proj, "cell_glow", name="calm", options={"pop": 0})
+    assert nopop["pops"] == [None]
+    assert not any(e.name == "fx_cell_pop" for e in proj.data.animations[nopop["animation"]].events)
+
+
+def test_lock_on_places_every_target(proj):
+    res = R.apply(proj, "lock_on", scale=0.5, x=10, y=20, options={"targets": [[0, 0], [100, -40]], "stagger": 0.3,
+                                                                  "crosshair": {"hit": 0.7}})
+    assert res["targets"] == 2 and "fx_hit" in res["events"] or "fx_hit_burst" in res["events"]
+    groups = [b for b in proj.data.bones if b.name in ("fx_crosshair", "fx_crosshair2", "fx_hit_burst", "fx_hit_burst2")]
+    pos = sorted((round(b.x, 1), round(b.y, 1)) for b in groups)
+    assert pos == [(10.0, 20.0), (10.0, 20.0), (60.0, 0.0), (60.0, 0.0)]
+    a = proj.data.animations["lock_on"]
+    hits = sorted(e.time for e in a.events if e.name == "fx_hit")
+    assert hits == [pytest.approx(0.7), pytest.approx(1.0)]
+    assert qa.validate(proj.data)["ok"]
