@@ -303,3 +303,104 @@ def test_lock_on_places_every_target(proj):
     hits = sorted(e.time for e in a.events if e.name == "fx_hit")
     assert hits == [pytest.approx(0.7), pytest.approx(1.0)]
     assert qa.validate(proj.data)["ok"]
+
+
+# ---------------------------------------------------------------- custom art
+def _png(path, size=(160, 80), color=(255, 0, 0, 255)):
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse([4, 4, size[0] - 5, size[1] - 5], fill=color)
+    im.save(path)
+    return str(path)
+
+
+def test_art_replaces_the_generated_picture_and_keeps_the_motion(proj, tmp_path):
+    base = R.apply(proj, "crosshair", name="gen")
+    res = R.apply(proj, "crosshair", name="mine", art={"reticle": _png(tmp_path / "r.png")})
+    assert res["art"] == {"reticle": "fx/art_crosshair_reticle"}
+    att = proj.data.skin("default").attachments[res["slots"][2]]["fx"]
+    assert att.path == "fx/art_crosshair_reticle" and att.width == 170 and att.height == 85    # recipe width, art aspect
+    assert proj.image("fx/art_crosshair_reticle").size == (160, 80)
+    a, b = proj.data.animations[base["animation"]], proj.data.animations[res["animation"]]
+    ka = {bn: [(k.time) for k in tl["rotate"]] for bn, tl in a.bones.items() if "rotate" in tl}
+    kb = {bn: [(k.time) for k in tl["rotate"]] for bn, tl in b.bones.items() if "rotate" in tl}
+    assert sorted(ka.values()) == sorted(kb.values()), "the motion must not change"
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_art_options_blend_scale_and_unknown_role(proj, tmp_path):
+    f = _png(tmp_path / "r.png")
+    res = R.apply(proj, "crosshair", art={"reticle": {"path": f, "blend": "normal", "scale": 0.5}})
+    slot = next(s for s in proj.data.slots if s.name == res["slots"][2])
+    att = proj.data.skin("default").attachments[slot.name]["fx"]
+    assert slot.blend == "normal" and att.width == 85
+    with pytest.raises(ValueError, match="unknown art role"):
+        R.apply(proj, "crosshair", art={"retical": f})
+    with pytest.raises(ValueError, match="not found"):
+        R.apply(proj, "crosshair", name="x", art={"reticle": str(tmp_path / "missing.png")})
+
+
+def test_art_from_a_psd_layer(proj, tmp_path):
+    from PIL import Image
+    from psd_tools import PSDImage
+    from psd_tools.api.layers import Group, PixelLayer
+    psd = PSDImage.new("RGBA", (400, 300))
+    psd.append(PixelLayer.frompil(Image.new("RGBA", (120, 60), (0, 255, 0, 255)), psd, name="Reticle", top=50, left=60))
+    g = Group.new(name="fx", parent=psd)
+    psd.append(g)
+    g.append(PixelLayer.frompil(Image.new("RGBA", (30, 30), (255, 0, 0, 255)), psd, name="Burst", top=0, left=0))
+    f = tmp_path / "a.psd"
+    psd.save(f)
+    res = R.apply(proj, "crosshair", art={"reticle": f"{f}#reticle"})
+    assert proj.image(res["art"]["reticle"]).size == (120, 60)          # cut at the layer's own bounding box
+    res2 = R.apply(proj, "hit_burst", art={"starburst": f"{f}#fx/burst"})
+    assert proj.image(res2["art"]["starburst"]).size == (30, 30)
+    with pytest.raises(ValueError, match="not found"):
+        R.apply(proj, "crosshair", name="z", art={"reticle": f"{f}#nope"})
+
+
+def test_art_anchors_for_wisps_beams_and_stretched_columns(proj, tmp_path):
+    f = _png(tmp_path / "t.png", size=(100, 400))
+    w = R.apply(proj, "rim_wisps", count=3, art={"wisp": f})
+    att = proj.data.skin("default").attachments[w["slots"][1]]["fx"]
+    assert att.x == pytest.approx(att.width / 2, abs=0.01)                         # base on the bone, art extends outward
+    b = R.apply(proj, "bloom_aura", art={"beam": f})
+    att = proj.data.skin("default").attachments[b["slots"][1]]["fx"]
+    assert att.y == pytest.approx(att.height / 2, abs=0.01)                        # base at the bottom
+    lb = R.apply(proj, "light_beam", art={"column": f, "strand": f})
+    col = proj.data.skin("default").attachments[lb["slots"][0]]["fx"]
+    assert col.height == pytest.approx(640 * 1.02)                       # a column spans the beam whatever the art's aspect
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_art_for_a_9_slice_frame_and_for_bundles(proj, tmp_path):
+    f = _png(tmp_path / "frame.png", size=(96, 96))
+    res = R.apply(proj, "cell_glow", options={"width": 100.0, "height": 100.0},
+                  art={"frame": {"path": f, "slice": 30, "px": 0.5}})
+    mesh = next(a for sl in proj.data.skin("default").attachments.values() for a in sl.values()
+                if a.type == "mesh" and a.path == "fx/art_cell_glow_frame")
+    assert mesh.uvs[2] == pytest.approx(30 / 96)                         # slice in art pixels -> UV
+    xs = sorted({round(mesh.vertices[i + 2], 1) for i in range(0, len(mesh.vertices), 5)})
+    assert max(xs) == pytest.approx(15.0)                                # ... and 15 units (px = 0.5) from its corner
+    lk = R.apply(proj, "lock_on", options={"targets": [[0, 0]]}, art={"crosshair": {"reticle": f}, "hit_burst": {"starburst": f}})
+    assert lk["animation"] == "lock_on"
+    with pytest.raises(ValueError, match="keyed by member"):
+        R.apply(proj, "lock_on", art={"reticle": f})
+    with pytest.raises(ValueError, match="keyed by member"):
+        R.apply(proj, "magic_reveal", art={"ring": f})
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_listing_shows_the_art_roles(proj):
+    ls = R.list_recipes()
+    assert {"reticle", "glow", "ring", "flash"} <= set(ls["crosshair"]["art_roles"])
+    assert {"frame", "fill"} <= set(ls["cell_glow"]["art_roles"])
+    assert all(ls[n]["art_roles"] for n in R.RECIPES)
+
+
+def test_art_for_rings_and_glows_too(proj, tmp_path):
+    f = _png(tmp_path / "g.png", size=(128, 128))
+    res = R.apply(proj, "crosshair", art={"ring": f, "glow": f, "flash": f})
+    assert set(res["art"]) == {"ring", "glow", "flash"}
+    paths = {proj.data.skin("default").attachments[s]["fx"].path for s in res["slots"]}
+    assert {"fx/art_crosshair_ring", "fx/art_crosshair_glow", "fx/art_crosshair_flash", "fx/reticle_FFB02E"} <= paths

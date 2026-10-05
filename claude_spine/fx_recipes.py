@@ -388,6 +388,49 @@ WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
 }
 
 
+# ------------------------------------------------------------------ custom art
+def load_art(spec: Any) -> tuple[Image.Image, dict]:
+    """spec: "path.png", "path.psd#Layer name" (or "path.psd#Group/Layer"), or {"path": ..., blend, scale, slice, px, anchor}.
+    Returns (RGBA image, options). A PSD layer is cut at its own bounding box, so its centre is the target point."""
+    import os
+    opts: dict = {}
+    if isinstance(spec, dict):
+        opts = {k: v for k, v in spec.items() if k != "path"}
+        spec = spec.get("path")
+    if not spec:
+        raise ValueError("art entry needs a path")
+    path = os.path.expanduser(str(spec))
+    if "#" in path and path.split("#", 1)[0].lower().endswith(".psd"):
+        file, layer_name = path.split("#", 1)
+        from psd_tools import PSDImage
+        psd = PSDImage.open(file)
+        want = layer_name.strip().lower().split("/")
+        found = None
+
+        def walk(group, trail):
+            nonlocal found
+            for lay in group:
+                here = trail + [lay.name.strip().lower()]
+                if here[-len(want):] == want and not lay.is_group():
+                    found = lay
+                    return
+                if lay.is_group():
+                    walk(lay, here)
+                    if found is not None:
+                        return
+        walk(psd, [])
+        if found is None:
+            raise ValueError(f"layer {layer_name!r} not found in {file}")
+        im = found.composite() or found.topil()
+        if im is None:
+            raise ValueError(f"layer {layer_name!r} in {file} has no pixels")
+    else:
+        if not os.path.exists(path):
+            raise ValueError(f"art file not found: {path}")
+        im = Image.open(path)
+    return im.convert("RGBA"), opts
+
+
 # ------------------------------------------------------------------ math helpers
 def smooth(t, a, b):
     u = np.clip((t - a) / max(b - a, 1e-9), 0, 1)
@@ -412,8 +455,12 @@ class Ctx:
     """One recipe application: a group bone at the subject centre, slots in one run, keys into one animation."""
 
     def __init__(self, p: Project, recipe: str, x: float, y: float, scale: float, start: float, k: float,
-                 intensity: float, seed: int, into: str, parent: str, front_of: str, behind: str, name: str):
+                 intensity: float, seed: int, into: str, parent: str, front_of: str, behind: str, name: str,
+                 art: dict | None = None):
         self.p, self.sk = p, p.data
+        self.art = art or {}
+        self._art_cache: dict[str, dict] = {}
+        self.art_used: dict[str, str] = {}
         self.recipe = recipe
         self.t0, self.k, self.I, self.seed, self.S = start, k, intensity, seed, scale
         self.anim = into or f"fx_{name or recipe}"
@@ -442,8 +489,29 @@ class Ctx:
             self.p.write_image(name, im)
         return im.size
 
+    def _art(self, role: str | None) -> dict | None:
+        """The user's picture for `role` (written into the project once), or None to use the generated one."""
+        if not role or role not in self.art:
+            return None
+        if role not in self._art_cache:
+            im, opts = load_art(self.art[role])
+            name = f"fx/art_{self.recipe}_{role}"
+            self.p.write_image(name, im)
+            self._art_cache[role] = dict(tex=name, size=im.size, **opts)
+            self.art_used[role] = name
+        return self._art_cache[role]
+
     def slot(self, bone: str, tex: str, width: float, color: str = "FFFFFFFF", ox: float = 0.0, oy: float = 0.0,
-             height: float | None = None, make: Callable[[], Image.Image] | None = None, blend: str = "additive") -> str:
+             height: float | None = None, make: Callable[[], Image.Image] | None = None, blend: str = "additive",
+             role: str | None = None, anchor: str = "center", stretch: bool = False) -> str:
+        art = self._art(role)
+        if art:                                   # the user's picture keeps its own aspect; the recipe keeps its width
+            tex, make, blend = art["tex"], None, art.get("blend", blend)
+            width = width * float(art.get("scale", 1.0))
+            if not stretch:                       # stretch: the recipe's height wins (a column must span the beam)
+                height = width * art["size"][1] / art["size"][0]
+            ox = {"left": width / 2, "right": -width / 2}.get(art.get("anchor", anchor), 0.0)
+            oy = {"bottom": height / 2, "top": -height / 2}.get(art.get("anchor", anchor), 0.0)
         nm = self.sk.unique_name(bone, "slot")
         s = Slot(name=nm, bone=bone, color=color, blend=blend)
         if self.last_slot is not None:
@@ -457,20 +525,26 @@ class Ctx:
         self.last_slot = nm
         tw, th = self.tex(tex, make)
         h = height if height is not None else width * th / tw
-        self.sk.set_attachment(nm, "fx", RegionAttachment(path=tex, x=ox, y=oy, width=round(width, 2), height=round(h, 2)))
+        self.sk.set_attachment(nm, "fx", RegionAttachment(path=tex, x=round(ox, 2), y=round(oy, 2), width=round(width, 2), height=round(h, 2)))
         self.slots.append(nm)
         return nm
 
     def strand(self, parent: str, tex: str, width: float, height: float, rows: int, x: float = 0.0,
-               color: str = "FFFFFFFF", make: Callable[[], Image.Image] | None = None, tag: str = "st"):
+               color: str = "FFFFFFFF", make: Callable[[], Image.Image] | None = None, tag: str = "st",
+               role: str | None = None):
         """A tall ribbon mesh whose rows are each pinned to one bone, so animating those bones' translateX bends
         it into any wave (a weighted mesh costs no deform keys). Returns (slot, [row bones bottom->top])."""
         sk = self.sk
+        art = self._art(role)
+        blend = "additive"
+        if art:
+            tex, make, blend = art["tex"], None, art.get("blend", "additive")
+            width = width * float(art.get("scale", 1.0))
         base = self.bone(tag, parent, x, 0)
         ys = [-height / 2 + i * height / (rows - 1) for i in range(rows)]
         nodes = [self.bone(f"{tag}_n{i}", base, 0, y) for i, y in enumerate(ys)]
         nm = sk.unique_name(base, "slot")
-        s = Slot(name=nm, bone=base, color=color, blend="additive")
+        s = Slot(name=nm, bone=base, color=color, blend=blend)
         if self.last_slot is not None:
             sk.add_slot(s, after=self.last_slot)
         elif self.behind:
@@ -507,13 +581,19 @@ class Ctx:
 
     def slice9(self, parent: str, tex: str, w: float, h: float, slice_px: float = 64.0, color: str = "FFFFFFFF",
                make: Callable[[], Image.Image] | None = None, tag: str = "s9", blend: str = "additive",
-               share: tuple | None = None):
+               share: tuple | None = None, role: str | None = None):
         """A 9-slice frame as a weighted mesh on four corner bones (TL, TR, BL, BR): the corners keep their art,
         the edges and the middle stretch. Move the corner bones in the game and the frame resizes. Returns
         (slot, {"tl": bone, ...}). share=(base, corners) from an earlier call makes this mesh ride the same corner bones."""
         sk = self.sk
+        art = self._art(role)
+        px = 1.0
+        if art:                                  # custom 9-slice art: slice = corner size in art pixels, px = units per art pixel
+            tex, make, blend = art["tex"], None, art.get("blend", blend)
+            slice_px = float(art.get("slice", slice_px))
+            px = float(art.get("px", 1.0))
         tw, th = self.tex(tex, make)
-        s_ = min(slice_px, w / 2, h / 2)
+        s_ = min(slice_px * px, w / 2, h / 2)
         pos = {"tl": (-w / 2, h / 2), "tr": (w / 2, h / 2), "bl": (-w / 2, -h / 2), "br": (w / 2, -h / 2)}
         if share:                                     # reuse another 9-slice's corner bones: one set resizes both meshes
             base, cb = share
@@ -611,8 +691,8 @@ def rune_ring(c: Ctx, P: dict) -> dict:
     grp = c.bone("ring", c.group, 8, 24, sx=1, sy=float(P["squash"]))     # iso squash: children rotate in the plane
     b_out, b_in, b_core = c.bone("outer", grp), c.bone("inner", grp), c.bone("core", grp)
     s_glow = c.slot(b_core, "fx/glow", 370)
-    s_out = c.slot(b_out, tname, 400, make=mk)
-    s_in = c.slot(b_in, tname, 238, make=mk)
+    s_out = c.slot(b_out, tname, 400, make=mk, role="ring")
+    s_in = c.slot(b_in, tname, 238, make=mk, role="ring_inner" if "ring_inner" in c.art else "ring")
     s_flash = c.slot(b_core, "fx/glow", 170)
     ts = times_dense(0, D, 24)
     c.show([s_glow, s_out, s_in, s_flash], 0, D)
@@ -656,8 +736,8 @@ def burst_flare(c: Ctx, P: dict) -> dict:
     b_h, b_v = c.bone("h", grp), c.bone("v", grp, rot=90)
     b_core, b_ring = c.bone("core", grp), c.bone("ring", grp, sy=0.42)
     s_ring = c.slot(b_ring, "fx/ring", 420)
-    s_h = c.slot(b_h, tname, 680, make=mk)
-    s_v = c.slot(b_v, tname, 330, make=mk)
+    s_h = c.slot(b_h, tname, 680, make=mk, role="flare")
+    s_v = c.slot(b_v, tname, 330, make=mk, role="flare")
     s_core = c.slot(b_core, "fx/glow", 280)
     rng = np.random.default_rng(c.seed + 14)
     sp = []
@@ -715,7 +795,7 @@ def rim_wisps(c: Ctx, P: dict) -> dict:
         rot = math.degrees(math.atan2(math.sin(ph) / RY, math.cos(ph) / RX))    # outward normal of the ellipse
         bn = c.bone(f"w{i}", grp, x, y, rot)
         length = rng.uniform(105, 165) * wl
-        sl = c.slot(bn, "fx/wisp", length, ox=length / 2, height=length * 0.62)
+        sl = c.slot(bn, "fx/wisp", length, ox=length / 2, height=length * 0.62, role="wisp", anchor="left")
         w.append((bn, sl, rng.uniform(0, 2 * math.pi), rng.uniform(0.8, 1.15), rng.uniform(1.6, 2.6), rng.uniform(0, 0.5)))
     ts = times_dense(0, dur, 14)
     c.show([s_ring] + [x[1] for x in w], 0, dur)
@@ -741,7 +821,7 @@ def bloom_aura(c: Ctx, P: dict) -> dict:
     b_big, b_beam = c.bone("big", grp, 0, -15), c.bone("beam", grp, 0, 10)
     b_core, b_hot = c.bone("core", grp, 0, 6), c.bone("hot", grp, 0, 10)
     s_big = c.slot(b_big, "fx/glow", 720)
-    s_beam = c.slot(b_beam, "fx/beam", 190, oy=170, height=340) if P["beam"] else None
+    s_beam = c.slot(b_beam, "fx/beam", 190, oy=170, height=340, role="beam", anchor="bottom") if P["beam"] else None
     s_core = c.slot(b_core, "fx/glow", 270)
     s_hot = c.slot(b_hot, "fx/glow", 90)
     ts = times_dense(0, dur, 16)
@@ -766,7 +846,7 @@ def floor_glow(c: Ctx, P: dict) -> dict:
     grp = c.bone("floor", c.group, 0, -92)
     b_glow, b_refl, b_pool = c.bone("glow", grp, sy=0.3), c.bone("refl", grp, 0, -20), c.bone("pool", grp, 0, 10, sy=0.2)
     s_glow = c.slot(b_glow, "fx/glow", 640)
-    s_refl = c.slot(b_refl, "fx/reflect", 330, oy=-130, height=260) if P["reflection"] else None
+    s_refl = c.slot(b_refl, "fx/reflect", 330, oy=-130, height=260, role="reflect", anchor="top") if P["reflection"] else None
     s_pool = c.slot(b_pool, "fx/glow", 420)
     ts = times_dense(0, dur, 10)
     c.show([s for s in (s_glow, s_refl, s_pool) if s], 0, dur)
@@ -796,7 +876,7 @@ def fireflies(c: Ctx, P: dict) -> dict:
     for i in range(n):
         bn = c.bone(f"m{i}", grp)
         size = float(rng.choice([rng.uniform(22, 36), rng.uniform(50, 84)], p=[0.7, 0.3])) * size_k
-        sl = c.slot(bn, "fx/mote", size)
+        sl = c.slot(bn, "fx/mote", size, role="mote")
         rho, a = math.sqrt(rng.uniform(0.04, 1)), rng.uniform(0, 2 * math.pi)
         motes.append(dict(b=bn, s=sl, hx=math.cos(a) * rho * sxr, hy=math.sin(a) * rho * syr + 30, T=rng.uniform(4.2, 7.5),
                           ph=rng.uniform(0, 1), rise=rng.uniform(40, 120) * rise_k, swx=rng.uniform(18, 46), swy=rng.uniform(8, 24),
@@ -839,7 +919,7 @@ def twinkles(c: Ctx, P: dict) -> dict:
         a, rad = rng.uniform(0, 2 * math.pi), rng.uniform(130, 300)
         bn = c.bone(f"s{i}", grp, math.cos(a) * rad * 1.15, math.sin(a) * rad * 0.8)
         col = str(rng.choice(palette))
-        sl = c.slot(bn, "fx/spark", rng.uniform(70, 140) * size_k, color=hexa(col, c.a(1.0)))
+        sl = c.slot(bn, "fx/spark", rng.uniform(70, 140) * size_k, color=hexa(col, c.a(1.0)), role="spark")
         t_start, life = rng.uniform(0.1, 3.6), rng.uniform(0.55, 0.95)
         rot, rep, gap = rng.uniform(40, 90) * rng.choice([-1, 1]), int(rng.integers(2, 4)), rng.uniform(1.1, 1.9)
         sc, ro, att = [], [], [(0.0, None)]
@@ -898,7 +978,7 @@ def light_beam(c: Ctx, P: dict) -> dict:
     all_slots: list[str] = []
     # ---- column glow behind everything
     b_col = c.bone("column", grp)
-    s_col = c.slot(b_col, "fx/column", float(g("column_width")), oy=0, height=H * 1.02)
+    s_col = c.slot(b_col, "fx/column", float(g("column_width")), oy=0, height=H * 1.02, role="column", stretch=True)
     all_slots.append(s_col)
     cap = _hexn(P["cap"], "") if P["cap"] else ""
     caps = []
@@ -920,7 +1000,7 @@ def light_beam(c: Ctx, P: dict) -> dict:
             A = (6 + 4 * i) * wave
             lam = rng.uniform(240, 460)
             m = int(rng.choice([1, 2]))
-        sl, nodes = c.strand(grp, tname, w_ * 2.4, H, rows, x=xo, make=mk, tag=f"st{i}")
+        sl, nodes = c.strand(grp, tname, w_ * 2.4, H, rows, x=xo, make=mk, tag=f"st{i}", role="strand")
         strands.append(dict(s=sl, nodes=nodes, a=al, A=A, lam=lam, m=m * (1 if i % 2 else -1), ph=rng.uniform(0, 2 * math.pi),
                             fl=int(rng.integers(2, 6)), flph=rng.uniform(0, 6.28)))
         all_slots.append(sl)
@@ -934,7 +1014,7 @@ def light_beam(c: Ctx, P: dict) -> dict:
     for i in range(nd):
         bn = c.bone(f"d{i}", grp)
         size = float(rng.choice([rng.uniform(7, 13), rng.uniform(16, 28)], p=[0.8, 0.2])) * dsz
-        sl = c.slot(bn, "fx/mote", size)
+        sl = c.slot(bn, "fx/mote", size, role="mote")
         yy = (rng.beta(2.2, 2.2) - 0.5) * H * 0.95
         xx = float(np.clip(rng.normal(0, dw / 2.0), -dw * 1.2, dw * 1.2)) * (0.5 + 0.7 * (1 - abs(yy) / (H / 2)))
         dust.append(dict(b=bn, s=sl, x=xx, y=yy, m=int(rng.choice([1, 1, 2])), ph=rng.uniform(0, 1), vy=rng.uniform(-60, 90),
@@ -945,7 +1025,7 @@ def light_beam(c: Ctx, P: dict) -> dict:
     spk = []
     for i in range(int(g("sparks"))):
         bn = c.bone(f"sp{i}", grp, rng.uniform(-40, 40), rng.uniform(-H * 0.42, H * 0.42))
-        sl = c.slot(bn, "fx/spark", rng.uniform(26, 56))
+        sl = c.slot(bn, "fx/spark", rng.uniform(26, 56), role="spark")
         spk.append(dict(b=bn, s=sl, t=rng.uniform(0, D), life=rng.uniform(0.25, 0.55), rot=rng.uniform(40, 120) * rng.choice([-1, 1])))
         all_slots.append(sl)
     c.show(all_slots, 0, None)
@@ -1007,17 +1087,17 @@ def portal(c: Ctx, P: dict) -> dict:
     s_glow = c.slot(b_glow, "fx/glow", 800)
     # the disc occludes the scene (normal blend); everything else is light
     b_disc = c.bone("disc", grp)
-    s_disc = c.slot(b_disc, f"fx/disc_{color}", 400, color=hexa("FFFFFF", c.a(float(P["disc_alpha"]))), make=lambda: tex_disc(color), blend="normal")
+    s_disc = c.slot(b_disc, f"fx/disc_{color}", 400, color=hexa("FFFFFF", c.a(float(P["disc_alpha"]))), make=lambda: tex_disc(color), blend="normal", role="disc")
     b_sw1, b_sw2 = c.bone("swirl_a", grp), c.bone("swirl_b", grp)
-    s_sw1 = c.slot(b_sw1, f"fx/swirl{arms}_{color}", 410, make=lambda: tex_swirl(arms, color))
-    s_sw2 = c.slot(b_sw2, f"fx/swirl{arms + 2}_{color}", 330, make=lambda: tex_swirl(arms + 2, color, seed=5, twist=3.1))
+    s_sw1 = c.slot(b_sw1, f"fx/swirl{arms}_{color}", 410, make=lambda: tex_swirl(arms, color), role="swirl_a")
+    s_sw2 = c.slot(b_sw2, f"fx/swirl{arms + 2}_{color}", 330, make=lambda: tex_swirl(arms + 2, color, seed=5, twist=3.1), role="swirl_b")
     all_slots += [s_glow, s_disc, s_sw1, s_sw2]
     # specks orbiting inward
     specks = []
     for i in range(nsp):
         piv = c.bone(f"sp{i}", grp)
         mb = c.bone(f"sp{i}m", piv, 100, 0)
-        sl = c.slot(mb, "fx/mote", float(rng.uniform(5, 11)))
+        sl = c.slot(mb, "fx/mote", float(rng.uniform(5, 11)), role="mote")
         specks.append(dict(piv=piv, mb=mb, s=sl, r0=float(rng.uniform(70, 185)), a0=float(rng.uniform(0, 360)),
                            rev=int(rng.choice([1, 1, 2])) * int(rng.choice([1, -1])), m=int(rng.choice([1, 1, 2])), ph=float(rng.uniform(0, 1)),
                            tw=int(rng.integers(3, 9)), twph=float(rng.uniform(0, 6.28)), amp=float(rng.uniform(0.5, 0.95)),
@@ -1027,7 +1107,7 @@ def portal(c: Ctx, P: dict) -> dict:
     comets = []
     for i in range(ncm):
         bn = c.bone(f"cm{i}", grp)
-        sl = c.slot(bn, "fx/comet", 400 - i * 40, make=lambda: tex_comet())
+        sl = c.slot(bn, "fx/comet", 400 - i * 40, make=lambda: tex_comet(), role="comet")
         comets.append(dict(b=bn, s=sl, rev=3 * (1 if i % 2 == 0 else -1), ph=i * 180.0 + float(rng.uniform(0, 40)), n=int(2 + i),
                            pph=float(rng.uniform(0, 6.28))))
         all_slots.append(sl)
@@ -1082,7 +1162,7 @@ def electric_frame(c: Ctx, P: dict) -> dict:
     br = lambda u, n, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * n * u / D + ph)  # noqa: E731
     b_g = c.bone("under", grp, sx=Wd / max(Wd, Hd), sy=Hd / max(Wd, Hd))     # the glow texture is square: stretch it to the frame
     side = max(Wd, Hd) / 0.74 * 0.94
-    s_under = c.slot(b_g, "fx/rrglow", side, make=lambda: tex_rrglow())
+    s_under = c.slot(b_g, "fx/rrglow", side, make=lambda: tex_rrglow(), role="under")
     slots = [s_under]
     sparks = []
     for i in range(ns):
@@ -1097,7 +1177,7 @@ def electric_frame(c: Ctx, P: dict) -> dict:
         else:
             px, py = -Wd / 2, -Hd / 2 + (t - 3) * Hd
         bn = c.bone(f"sp{i}", grp, px, py)
-        sl = c.slot(bn, "fx/spark", float(rng.uniform(34, 78)), color=hexa(spark_c, c.a(1.0)))
+        sl = c.slot(bn, "fx/spark", float(rng.uniform(34, 78)), color=hexa(spark_c, c.a(1.0)), role="spark")
         sparks.append(dict(b=bn, s=sl, t=float(rng.uniform(0, D)), life=float(rng.uniform(0.14, 0.34)), rep=int(rng.integers(2, 5)),
                            rot=float(rng.uniform(-70, 70))))
         slots.append(sl)
@@ -1135,10 +1215,10 @@ def crosshair(c: Ctx, P: dict) -> dict:
     mk = lambda: tex_reticle(col)  # noqa: E731
     grp = c.bone("lock", c.group, 0, 0)
     b_glow, b_ret, b_flash, b_ring = c.bone("glow", grp), c.bone("ret", grp), c.bone("flash", grp), c.bone("ring", grp)
-    s_glow = c.slot(b_glow, "fx/glow", size * 1.9)
-    s_ring = c.slot(b_ring, "fx/ring", size * 1.5)
-    s_ret = c.slot(b_ret, tname, size, make=mk)
-    s_flash = c.slot(b_flash, "fx/glow", size * 0.9)
+    s_glow = c.slot(b_glow, "fx/glow", size * 1.9, role="glow")
+    s_ring = c.slot(b_ring, "fx/ring", size * 1.5, role="ring")
+    s_ret = c.slot(b_ret, tname, size, make=mk, role="reticle")
+    s_flash = c.slot(b_flash, "fx/glow", size * 0.9, role="flash")
     ts = times_dense(0, D, 30)
     c.show([s_glow, s_ring, s_ret, s_flash], 0, D)
     appear = lambda u: ease_out(u / lock, 3.0)  # noqa: E731
@@ -1176,17 +1256,17 @@ def hit_burst(c: Ctx, P: dict) -> dict:
     grp = c.bone("hit", c.group, 0, 0)
     b_glow, b_star, b_core, b_r1, b_r2 = (c.bone("glow", grp), c.bone("star", grp), c.bone("core", grp),
                                           c.bone("ring1", grp), c.bone("ring2", grp))
-    s_glow = c.slot(b_glow, "fx/glow", size * 1.8)
-    s_r1 = c.slot(b_r1, "fx/ring", size * 1.4)
-    s_r2 = c.slot(b_r2, "fx/ring", size * 1.4)
-    s_star = c.slot(b_star, tname, size, make=mk)
-    s_core = c.slot(b_core, "fx/glow", size * 0.55)
+    s_glow = c.slot(b_glow, "fx/glow", size * 1.8, role="glow")
+    s_r1 = c.slot(b_r1, "fx/ring", size * 1.4, role="ring")
+    s_r2 = c.slot(b_r2, "fx/ring", size * 1.4, role="ring")
+    s_star = c.slot(b_star, tname, size, make=mk, role="starburst")
+    s_core = c.slot(b_core, "fx/glow", size * 0.55, role="core")
     rng = np.random.default_rng(c.seed + 51)
     sp = []
     for i in range(ns):
         a = rng.uniform(0, 2 * math.pi)
         bn = c.bone(f"sp{i}", grp)
-        sl = c.slot(bn, "fx/mote", float(rng.uniform(10, 24)))
+        sl = c.slot(bn, "fx/mote", float(rng.uniform(10, 24)), role="mote")
         sp.append((bn, sl, a, float(rng.uniform(0.45, 1.0)) * size * 0.9, float(rng.uniform(0.35, 0.7)), float(rng.uniform(0, 0.06))))
     ts = times_dense(0, D, 30)
     c.show([s_glow, s_r1, s_r2, s_star, s_core], 0, D)
@@ -1232,14 +1312,14 @@ def cell_glow(c: Ctx, P: dict) -> dict:
     for ci, (cx, cy, w, h) in enumerate(cells):
         t0 = ci * stagger
         grp = c.bone(f"cell{ci}", c.group, cx, cy)
-        s_fill, _ = c.slice9(grp, "fx/cellfill", w, h, 48.0, tag=f"cell{ci}", blend="normal")
-        s_frame, corners = c.slice9(grp, tname, w, h, 48.0, make=mk, tag=f"cell{ci}", share=c._last_s9)
+        s_fill, _ = c.slice9(grp, "fx/cellfill", w, h, 48.0, tag=f"cell{ci}", blend="normal", role="fill")
+        s_frame, corners = c.slice9(grp, tname, w, h, 48.0, make=mk, tag=f"cell{ci}", share=c._last_s9, role="frame")
         area = w * h
         nspk = int(P["specks"]) if P["specks"] else int(np.clip(area / 2000, 8, 70))
         specks = []
         for k in range(nspk):
             bn = c.bone(f"c{ci}_s{k}", grp, float(rng.uniform(-w * 0.42, w * 0.42)), float(rng.uniform(-h * 0.42, h * 0.42)))
-            sl = c.slot(bn, "fx/mote", float(rng.uniform(9, 20)))
+            sl = c.slot(bn, "fx/mote", float(rng.uniform(9, 20)), role="mote")
             specks.append(dict(b=bn, s=sl, f=float(rng.uniform(1.2, 3.2)), ph=float(rng.uniform(0, 6.28)), amp=float(rng.uniform(0.5, 1.0)),
                                dx=float(rng.uniform(2, 7)), dy=float(rng.uniform(2, 7)), col=str(rng.choice(["FFFFFF", col, "C8FFF4"]))))
         # pop debris: sparkles + motes flying outward from the middle
@@ -1247,11 +1327,11 @@ def cell_glow(c: Ctx, P: dict) -> dict:
         deb = []
         for k in range(nsp):
             bn = c.bone(f"c{ci}_d{k}", grp)
-            sl = c.slot(bn, "fx/spark", float(rng.uniform(26, 52)))
+            sl = c.slot(bn, "fx/spark", float(rng.uniform(26, 52)), role="spark")
             deb.append((bn, sl, float(rng.uniform(0, 2 * math.pi)), float(rng.uniform(0.45, 0.95)) * max(w, h), float(rng.uniform(0, 0.08))))
         b_ring, b_glow = c.bone(f"c{ci}_ring", grp), c.bone(f"c{ci}_pg", grp)
-        s_ring = c.slot(b_ring, "fx/ring", max(w, h) * 0.9)
-        s_pg = c.slot(b_glow, "fx/glow", max(w, h) * 1.1)
+        s_ring = c.slot(b_ring, "fx/ring", max(w, h) * 0.9, role="ring")
+        s_pg = c.slot(b_glow, "fx/glow", max(w, h) * 1.1, role="glow")
         slots_all = [s_fill, s_frame] + [x["s"] for x in specks] + [s_ring, s_pg] + [x[1] for x in deb]
         end = t0 + pop + 0.8 if pop > 0 else dur
         c.show(slots_all, t0, end)
@@ -1394,8 +1474,32 @@ REVEAL = [("floor_glow", 0.9, 11.2), ("rim_wisps", 3.75, 5.9), ("bloom_aura", 3.
           ("burst_flare", 3.55, None), ("fireflies", 3.4, 9.2), ("twinkles", 3.9, 5.4)]
 REVEAL_LENGTH = 13.2
 
+# art roles: which picture of each recipe the user can replace with their own (art={role: "file.png" | "file.psd#Layer" | {...}})
+ROLES: dict[str, dict[str, str]] = {
+    "rune_ring": {"ring": "the ring (outer; also the inner ring unless ring_inner is given); centred, square", "ring_inner": "the inner counter-rotating ring"},
+    "burst_flare": {"flare": "the streak (horizontal; the vertical one is the same picture turned); centred, wide"},
+    "rim_wisps": {"wisp": "one tuft; its BASE on the left edge, fraying to the right"},
+    "bloom_aura": {"beam": "the light column; BASE at the bottom, tall"},
+    "floor_glow": {"reflect": "the reflection; TOP edge at the subject, fading downward"},
+    "fireflies": {"mote": "one soft dot, centred"},
+    "twinkles": {"spark": "one star, centred"},
+    "light_beam": {"strand": "one filament, tall strip, centred (bent as a mesh)", "column": "the wide glow, tall (stretched to the beam height)",
+                   "mote": "one dust dot", "spark": "one glint"},
+    "portal": {"disc": "the dark disc (normal blend by default)", "swirl_a": "main spiral layer, square, centred", "swirl_b": "second spiral layer",
+               "comet": "the whip streak, square, centred", "mote": "one orbiting speck"},
+    "electric_frame": {"under": "the glow hugging the frame, square (stretched to width/height)", "spark": "one spark"},
+    "crosshair": {"reticle": "the reticle, square, target point at its centre", "glow": "the soft light behind it", "ring": "the shock ring at lock-on",
+                  "flash": "the lock-on flash"},
+    "hit_burst": {"starburst": "the impact star, square, centred", "mote": "one flying spark", "glow": "the soft light behind",
+                  "ring": "the two shock rings", "core": "the hot centre"},
+    "cell_glow": {"frame": "9-slice frame art: give slice (corner size in art px) and px (units per art px)", "fill": "9-slice fill art",
+                  "mote": "one starfield dot", "spark": "one pop sparkle", "ring": "the pop shock ring", "glow": "the pop glow"},
+}
+for _n, _d in ROLES.items():
+    RECIPES[_n]["roles"] = _d
+
 SHARED = ("x", "y", "scale", "start", "duration", "color", "intensity", "seed", "into", "parent", "front_of", "behind",
-          "count", "name")
+          "count", "name", "art")
 
 
 def list_recipes() -> dict:
@@ -1405,6 +1509,7 @@ def list_recipes() -> dict:
             "summary": d["summary"], "kind": d["kind"], "anchor": d["anchor"], "default_duration": d["duration"],
             "default_color": d.get("color", ""), "default_count": d.get("count", 0),
             "options": {k: {"default": v[0], "what": v[1]} for k, v in d["options"].items()},
+            "art_roles": d.get("roles", {}),
         }
     out["lock_on"] = {
         "summary": "Crosshairs lock onto each target in turn, fire, and a hit burst lands on every one. Add the symbol pop / coins "
@@ -1414,6 +1519,8 @@ def list_recipes() -> dict:
                     "stagger": {"default": 0.18, "what": "seconds between targets"},
                     "crosshair": {"default": {}, "what": "options for crosshair (size, lock, hit, ...)"},
                     "hit": {"default": {}, "what": "options for hit_burst"}},
+        "art_roles": {"crosshair": ROLES["crosshair"], "hit_burst": ROLES["hit_burst"]},
+        "art_note": "art={'crosshair': {role: spec}, 'hit_burst': {role: spec}}",
     }
     out["magic_reveal"] = {
         "summary": "All seven recipes in one animation, timed like the reference clip (ring 2.0s, flare 3.55s, bloom + wisps + "
@@ -1421,6 +1528,7 @@ def list_recipes() -> dict:
         "kind": "bundle", "anchor": "Subject centre", "default_duration": REVEAL_LENGTH,
         "options": {"skip": {"default": [], "what": "recipe names to leave out"},
                     "overrides": {"default": {}, "what": "{recipe: {param: value}} to retune any member"}},
+        "art_note": "art={'<recipe>': {role: spec}} for any member; roles are listed under that recipe",
     }
     return out
 
@@ -1442,25 +1550,39 @@ def _params(recipe: str, color: str, count: int, duration: float, options: dict 
 def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
           duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
           parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-          options: dict | None = None) -> dict:
-    """Add one recipe (or the ``magic_reveal`` bundle) to the project. Does not save."""
+          options: dict | None = None, art: dict | None = None) -> dict:
+    """Add one recipe (or a bundle) to the project. Does not save. ``art`` swaps the recipe's pictures for the
+    user's own (see ``ROLES``); for the bundles it is keyed by member recipe."""
     if recipe == "lock_on":
-        return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {})
+        return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
     if recipe == "magic_reveal":
-        return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {})
+        return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
     if recipe not in RECIPES:
         raise ValueError(f"unknown recipe {recipe!r}; one of {sorted([*RECIPES, 'magic_reveal'])}")
     if scale <= 0:
         raise ValueError("scale must be > 0")
     d = RECIPES[recipe]
     P = _params(recipe, color, count, duration, options)
+    bad = [r for r in (art or {}) if r not in d.get("roles", {})]
+    if bad:
+        raise ValueError(f"unknown art role(s) {bad} for {recipe!r}; valid: {sorted(d.get('roles', {}))}")
     # one-shots retime through k; window recipes take the window length directly
     k = (P["duration"] / d["duration"]) if d["kind"] == "one-shot" else 1.0
-    c = Ctx(project, recipe, x, y, scale, start, k, intensity, seed, into, parent, front_of, behind, name)
-    return d["fn"](c, P)
+    c = Ctx(project, recipe, x, y, scale, start, k, intensity, seed, into, parent, front_of, behind, name, art=art)
+    res = d["fn"](c, P)
+    if c.art_used:
+        res["art"] = dict(c.art_used)
+    return res
 
 
-def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options) -> dict:
+def _split_art(art: dict, members: list[str]) -> dict[str, dict]:
+    bad = [k for k in art if k not in members]
+    if bad:
+        raise ValueError(f"art for a bundle is keyed by member recipe; unknown {bad}; members: {members}")
+    return {k: dict(v) for k, v in art.items()}
+
+
+def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None) -> dict:
     """Crosshairs lock onto each target in turn, fire, and a hit burst lands on every one."""
     targets = options.get("targets") or [[0.0, 0.0]]
     stagger = float(options.get("stagger", 0.18))
@@ -1469,13 +1591,15 @@ def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behin
     anim = into or (name or "lock_on")
     last, parts = front_of, []
     hit_at = float(ch_opts.get("hit", 0.85))
+    arts = _split_art(art or {}, ["crosshair", "hit_burst"])
     for i, (tx, ty) in enumerate(targets):
         base = dict(x=x, y=y, scale=scale, intensity=intensity, seed=seed + i, into=anim, parent=parent)
-        r1 = apply(project, "crosshair", start=start + i * stagger, front_of=last, behind=behind if not parts else "", options=ch_opts or None, **base)
+        r1 = apply(project, "crosshair", start=start + i * stagger, front_of=last, behind=behind if not parts else "", options=ch_opts or None, art=arts.get("crosshair"), **base)
         # the target offset is applied on the group bone (x, y are the parent-space centre of the whole set)
         g1 = project.data.bone(r1["group_bone"]); g1.x, g1.y = x + tx * scale, y + ty * scale
         last = r1["slots"][-1]
-        r2 = apply(project, "hit_burst", start=start + i * stagger + hit_at, front_of=last, options=hit_opts or None, **base)
+        r2 = apply(project, "hit_burst", start=start + i * stagger + hit_at, front_of=last, options=hit_opts or None,
+                   art=arts.get("hit_burst"), **base)
         g2 = project.data.bone(r2["group_bone"]); g2.x, g2.y = x + tx * scale, y + ty * scale
         last = r2["slots"][-1]
         parts += [r1, r2]
@@ -1484,7 +1608,8 @@ def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behin
             "length": start + (len(targets) - 1) * stagger + hit_at + 0.95}
 
 
-def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options) -> dict:
+def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None) -> dict:
+    arts = _split_art(art or {}, [r for r, *_ in REVEAL])
     skip = set(options.get("skip", []))
     over = options.get("overrides", {})
     unknown = (skip | set(over)) - set(RECIPES)
@@ -1499,7 +1624,7 @@ def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind
         o = dict(over.get(rec, {}))
         o_opts = o.pop("options", None)
         kw = dict(x=x, y=y, scale=scale, start=start + t0, intensity=intensity, seed=seed, into=anim, parent=parent,
-                  front_of=last, behind=first_behind if not parts else "", name="", options=o_opts)
+                  front_of=last, behind=first_behind if not parts else "", name="", options=o_opts, art=arts.get(rec))
         if dur is not None:
             kw["duration"] = dur
         kw.update(o)

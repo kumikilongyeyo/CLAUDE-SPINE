@@ -298,7 +298,7 @@ def fx_generate(project: str, preset: str, x: float = 0, y: float = 0, size: flo
 def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
               duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
               parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-              options: dict | None = None) -> dict:
+              options: dict | None = None, art: dict | None = None) -> dict:
     """Authored FX layers lifted from real reference clips: lotus set (rune_ring, burst_flare, rim_wisps, bloom_aura,
     floor_glow, fireflies, twinkles, plus magic_reveal = all seven timed like the clip, 13.2 s), light_beam (style
     gold | ribbon | blue), crosshair / hit_burst / lock_on (reticle locks on, fires, impact), cell_glow (resizable
@@ -311,7 +311,11 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     scale 1 = a ~720-unit canvas with a ~420-wide subject; start = seconds into the animation; duration = life
     window (window recipes) or a time scale (one-shots); color = main tint; intensity = alpha gain; count = tufts /
     motes / stars / sparks; options = recipe-specific values (see the listing). magic_reveal takes
-    options={skip: [recipe, ...], overrides: {recipe: {param: value}}}. Each recipe fires an fx_<recipe> event."""
+    options={skip: [recipe, ...], overrides: {recipe: {param: value}}}. Each recipe fires an fx_<recipe> event.
+
+    art = your own pictures instead of the generated ones, keeping all the motion: {role: "file.png" |
+    "file.psd#Layer" | {path, blend, scale, slice, px, anchor}}; the roles of each recipe are in the listing
+    (e.g. crosshair: reticle). For lock_on / magic_reveal key it by member: {"crosshair": {"reticle": ...}}."""
     if recipe == "guide":
         from .fx_recipes_guide import GUIDE
         return {"guide": GUIDE}
@@ -321,7 +325,7 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
         raise ValueError("project is required to add a recipe")
     p = _open(project)
     res = fx_recipes.apply(p, recipe, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of,
-                           behind, count, name, options)
+                           behind, count, name, options, art)
     return _saved(p, res)
 
 

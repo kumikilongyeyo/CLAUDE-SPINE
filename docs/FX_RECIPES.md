@@ -35,6 +35,29 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | cell_glow | glowing cell frame(s) with a twinkling starfield, pop = flash + burst + sparkles; resizable 9-slice | window 3.2 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
+## Your own art (`art=`)
+
+Every recipe can use your pictures instead of the generated ones and keep ALL the motion (timing, easing, flashes, events).
+`art={role: spec}`; the roles of each recipe are in the listing (`fx_recipe` with no recipe, field `art_roles`), e.g.
+crosshair: reticle (the picture) plus glow / ring / flash; hit_burst: starburst, glow, ring, core, mote; cell_glow: frame, fill, ...
+A spec is a PNG path, a PSD layer `"file.psd#Layer name"` (or `"file.psd#Group/Layer"`; the layer is cut at its own
+bounding box, so its centre is the target point), or a dict `{path, blend, scale, slice, px, anchor}`:
+
+    fx_recipe recipe=crosshair project=p.json art={"reticle": "ui.psd#reticle"}
+    fx_recipe recipe=lock_on  project=p.json art={"crosshair": {"reticle": "ui.psd#reticle"}, "hit_burst": {"starburst": "ui.psd#hit star"}}
+    fx_recipe recipe=cell_glow project=p.json art={"frame": {"path": "cell.png", "slice": 40, "px": 0.5}}
+
+- The recipe keeps its own WIDTH for the slot and your art keeps its aspect; `scale` multiplies that width.
+- Blend defaults to the recipe's (additive for light). Give `"blend": "normal"` for art with solid colours.
+- Slots whose colour is white show your colours as drawn; glows keep the recipe `color` as a tint, so give art for them too (or
+  leave the generated glow) when the colours must match.
+- Art conventions: centred and roughly square for reticles / stars / rings; wisps have their BASE on the left edge; the light
+  column has its base at the bottom; the reflection hangs down from its top edge; a column is stretched to the beam height.
+- 9-slice frames (`cell_glow` frame / fill): `slice` = corner size in art pixels, `px` = units per art pixel. The corners stay as drawn,
+  the middle stretches, so draw the edge cross-section constant along its length.
+- Bundles take art per member: `lock_on` -> `{"crosshair": {...}, "hit_burst": {...}}`, `magic_reveal` -> `{"<recipe>": {...}}`.
+- Art is copied into the project as `images/fx/art_<recipe>_<role>.png`; edit that file (or the source) and rebuild to update.
+
 ## Hybrids: Spine recipe + After Effects part
 
 `portal` and `electric_frame` return a `ring_hint` (parent bone, the slot to draw in front of, additive, loop, until).
