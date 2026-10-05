@@ -4,7 +4,7 @@ Small, sharp tools that each do one rigging job on a project on disk
 (``<name>.json`` + ``images/``). Typical session:
 
     import_psd → rig_mesh / rig_strand / rig_ik / rig_turn → juice_apply →
-    fx_generate → validate → qa_budget → preview → make_editable / pack_atlas
+    fx_generate / ae_fx_to_spine → validate → qa_budget → preview → make_editable / pack_atlas
 
 Every tool returns a JSON summary; nothing is printed. Tools that change the
 skeleton save it before returning, so tools can be chained freely.
@@ -17,6 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from . import ae_bridge
 from . import atlas as atlas_mod
 from . import fx as fx_mod
 from . import juice as juice_mod
@@ -289,6 +290,40 @@ def fx_generate(project: str, preset: str, x: float = 0, y: float = 0, size: flo
         extra["count"] = count
     res = fx_mod.generate(p, preset, x, y, size or None, intensity, duration or None, color or None, parent,
                           into or None, start, None, front_of or None, behind or None, **extra)
+    return _saved(p, res)
+
+
+@mcp.tool()
+def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frames_dir: str = "", fps: float = 0,
+                   mode: str = "alpha", seq_mode: str = "once", animation: str = "", start: float = 0.0,
+                   hit_ae: float = -1.0, hit_at: float = -1.0, fit_duration: float = 0.0, until: float = 0.0,
+                   x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
+                   blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
+                   behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
+                   keep_frames: str = "") -> dict:
+    """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
+
+    Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
+    touching the project open in the AE window), or frames_dir + fps (frames already rendered: .tif
+    premultiplied, or .png).
+    mode: "alpha" (the comp's own transparency; normal blend) or "additive" (light on black: alpha from
+    brightness; additive blend). blend overrides the slot blend.
+    Timing: playback speed equals the comp's (delay = 1/comp fps). Place it with start= (seconds into the
+    Spine animation) or, to land an AE moment on a Spine one, hit_ae= (seconds in the comp, e.g. the
+    impact) + hit_at= (Spine time it should coincide with). fit_duration= stretches the sequence to span that
+    many seconds (loops that must divide the symbol's loop). seq_mode: once | loop | pingpong; a loop runs to
+    until= (default: the end of the animation it is merged into). max_frames/max_size shrink it (every Nth
+    frame; longest side in px), scale = game units per comp pixel, fade = fade-out seconds.
+    animation= merges into an existing animation, otherwise ae_<name> is created. Leading and trailing empty
+    frames are trimmed. Frames land in images/ae/<name>_NN.png; an event ae_<name> fires at the start."""
+    p = _open(project)
+    res = ae_bridge.fx_to_spine(
+        p, name, aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
+        animation=animation, start=start, hit_ae=None if hit_ae < 0 else hit_ae,
+        hit_at=None if hit_at < 0 else hit_at, fit_duration=fit_duration, until=until, x=x, y=y, scale=scale,
+        max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
+        behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
+        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
     return _saved(p, res)
 
 
