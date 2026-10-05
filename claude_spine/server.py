@@ -20,6 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from . import ae_bridge, ae_templates
 from . import atlas as atlas_mod
 from . import fx as fx_mod
+from . import fx_recipes
 from . import juice as juice_mod
 from . import psd as psd_mod
 from . import qa, render, rig, runtime, samples, spine_cli
@@ -290,6 +291,35 @@ def fx_generate(project: str, preset: str, x: float = 0, y: float = 0, size: flo
         extra["count"] = count
     res = fx_mod.generate(p, preset, x, y, size or None, intensity, duration or None, color or None, parent,
                           into or None, start, None, front_of or None, behind or None, **extra)
+    return _saved(p, res)
+
+
+@mcp.tool()
+def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
+              duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
+              parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
+              options: dict | None = None) -> dict:
+    """Authored FX layers lifted from a real reference clip (a lotus blooming from a magic book): rune_ring,
+    burst_flare, rim_wisps, bloom_aura, floor_glow, fireflies, twinkles, plus magic_reveal (all seven timed like
+    the clip, 13.2 s). Procedural textures, additive only (one draw call), one group bone per recipe so it
+    recolours, resizes and retimes as one piece, and it merges into any animation with into=.
+
+    recipe="" lists every recipe with its options and defaults; recipe="guide" returns the guide (how to use, fork
+    and mix them, how they were made, and the traps). x, y = the subject centre in the parent bone's space;
+    scale 1 = a ~720-unit canvas with a ~420-wide subject; start = seconds into the animation; duration = life
+    window (window recipes) or a time scale (one-shots); color = main tint; intensity = alpha gain; count = tufts /
+    motes / stars / sparks; options = recipe-specific values (see the listing). magic_reveal takes
+    options={skip: [recipe, ...], overrides: {recipe: {param: value}}}. Each recipe fires an fx_<recipe> event."""
+    if recipe == "guide":
+        from .fx_recipes_guide import GUIDE
+        return {"guide": GUIDE}
+    if not recipe:
+        return {"recipes": fx_recipes.list_recipes(), "next": 'fx_recipe recipe="guide" for the full guide'}
+    if not project:
+        raise ValueError("project is required to add a recipe")
+    p = _open(project)
+    res = fx_recipes.apply(p, recipe, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of,
+                           behind, count, name, options)
     return _saved(p, res)
 
 

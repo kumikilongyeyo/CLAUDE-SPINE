@@ -61,6 +61,11 @@ fx_generate  preset=coin_burst  into=win
 validate     → qa_budget profile=mobile_symbol → preview → make_editable / pack_atlas
 ```
 
+FX recipes (rune ring, flare, wisps, aura, floor glow, fireflies, twinkles, or all seven as `magic_reveal`) are one tool:
+`fx_recipe` lists them, `fx_recipe recipe=guide` explains how to use, fork and mix them (also in [docs/FX_RECIPES.md](docs/FX_RECIPES.md)).
+
+![magic_reveal](docs/magic_reveal.gif)
+
 ## How it works
 
 ### One typed model: `ir.py`

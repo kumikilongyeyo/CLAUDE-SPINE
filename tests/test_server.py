@@ -14,7 +14,7 @@ def test_tools_are_registered_with_docs():
     tools = asyncio.run(mcp.list_tools())
     names = {t.name for t in tools}
     for n in ["rig_mesh", "rig_ik", "rig_physics", "rig_strand", "rig_turn", "juice_apply", "fx_generate",
-              "qa_budget", "validate", "preview", "pack_atlas", "make_editable", "import_psd"]:
+              "fx_recipe", "qa_budget", "validate", "preview", "pack_atlas", "make_editable", "import_psd"]:
         assert n in names
     assert all(t.description for t in tools)
 
