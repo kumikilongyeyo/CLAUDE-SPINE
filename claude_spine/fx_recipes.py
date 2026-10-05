@@ -436,6 +436,26 @@ def tex_trail(color: str = "FFD25A", w: int = 64, h: int = 512) -> Image.Image:
     return _colorize(np.clip(a, 0, 1), *_palette(color))
 
 
+
+def tex_rays(color: str = "FFF2B0", n: int = 512, rays: int = 14, seed: int = 2) -> Image.Image:
+    """A lens-flare star: many thin rays of uneven length from a hot core, soft, for a shine burst."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(n)
+    r = np.hypot(x, y)
+    th = np.arctan2(y, x)
+    a = np.zeros((n, n))
+    base = rng.uniform(0, 2 * math.pi)
+    for k in range(rays):
+        ang = base + k * 2 * math.pi / rays + rng.uniform(-0.08, 0.08)
+        ln = rng.uniform(0.35, 1.0) if k % 2 else rng.uniform(0.7, 1.0)
+        wd = rng.uniform(0.012, 0.03)
+        dth = np.abs(((th - ang + math.pi) % (2 * math.pi)) - math.pi)
+        ray = np.exp(-(dth * r / (wd + 0.02 * r)) ** 2) * np.clip(1 - r / ln, 0, 1) ** 1.6
+        a = np.maximum(a, ray)
+    a = np.clip(a + np.exp(-(r / 0.12) ** 2) + 0.25 * np.exp(-(r / 0.3) ** 2), 0, 1)
+    a *= np.clip((1 - r) / 0.04, 0, 1)
+    return _colorize(a, *_palette(color))
+
 # texture name -> factory (white textures are tinted per slot; coloured ones are named with their colour)
 WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
     "fx/wisp": tex_wisp, "fx/beam": tex_beam, "fx/mote": tex_mote, "fx/reflect": tex_reflect,
@@ -1214,8 +1234,16 @@ def portal(c: Ctx, P: dict) -> dict:
     # --- keys
     c.color_keys(s_glow, ts, lambda u: hexa(color, c.a(0.5 + 0.12 * br(u, 1, 0.7))))
     c.bone_keys(b_glow, "scale", ts, lambda u: (0.95 + 0.06 * br(u, 1, 0.7),) * 2)
-    c.bone_keys(b_sw1, "rotate", ts, lambda u: -360.0 * u / D * float(P["spin"]))
-    c.bone_keys(b_sw2, "rotate", ts, lambda u: 720.0 * u / D * float(P["spin"]))
+    # a vortex: inner layers spin FASTER than outer ones (differential rotation), same direction
+    spin = float(P["spin"])
+    c.bone_keys(b_sw1, "rotate", ts, lambda u: -360.0 * spin * u / D)
+    c.bone_keys(b_sw2, "rotate", ts, lambda u: -1080.0 * spin * u / D)
+    # the flashes pump the vortex: every flash pushes the swirl out and it falls back
+    g_ = lambda u, t0, w: math.exp(-((((u - t0 + D / 2) % D) - D / 2) / w) ** 2)  # noqa: E731
+    fa_ = lambda u: min(1.0, sum(g_(u, t0, 0.22) for t0 in [float(x) for x in P["flashes"]]))  # noqa: E731
+    c.bone_keys(b_sw1, "scale", ts, lambda u: (1.0 + 0.09 * fa_(u),) * 2)
+    c.bone_keys(b_sw2, "scale", ts, lambda u: (1.0 + 0.14 * fa_(u),) * 2)
+    c.bone_keys(b_disc, "scale", ts, lambda u: (1.0 + 0.05 * fa_(u),) * 2)
     c.color_keys(s_sw1, ts, lambda u: hexa("FFFFFF", c.a(0.78 + 0.12 * br(u, 2))))
     c.color_keys(s_sw2, ts, lambda u: hexa("FFFFFF", c.a(0.5 + 0.15 * br(u, 3, 1.3))))
     for sp in specks:
@@ -1226,12 +1254,14 @@ def portal(c: Ctx, P: dict) -> dict:
                 tsd.update([wrap - 0.002, wrap])
         tsd = sorted(t for t in tsd if 0 <= t <= D)
         q = lambda u, sp=sp: (u * sp["m"] / D + sp["ph"]) % 1.0  # noqa: E731
-        c.bone_keys(sp["piv"], "rotate", tsd, lambda u, sp=sp: sp["a0"] + sp["rev"] * 360.0 * u / D)
-        c.bone_keys(sp["mb"], "translate", tsd, lambda u, sp=sp, q=q: (sp["r0"] * (1 - 0.55 * q(u)) - 100, 0.0))
+        # Keplerian infall: angular speed grows as r^-1.5 while the speck spirals in, so it whips round near the centre
+        kep = lambda qq: ((1 - 0.6 * qq) ** -0.5 - 1) / ((0.4) ** -0.5 - 1)  # noqa: E731  (0 -> 1 over a life)
+        c.bone_keys(sp["piv"], "rotate", tsd, lambda u, sp=sp, q=q, kep=kep: sp["a0"] + sp["rev"] * 300.0 * kep(q(u)))
+        c.bone_keys(sp["mb"], "translate", tsd, lambda u, sp=sp, q=q: (sp["r0"] * (1 - 0.6 * q(u)) - 100, 0.0))
         c.color_keys(sp["s"], tsd, lambda u, sp=sp, q=q: hexa(sp["col"], c.a(min(1.0, math.sin(math.pi * q(u)) ** 0.8 * (0.6 + 0.4 * math.sin(2 * math.pi * sp["tw"] * u / D + sp["twph"])) * sp["amp"]))))
     for cm in comets:
         c.bone_keys(cm["b"], "rotate", ts, lambda u, cm=cm: cm["ph"] + cm["rev"] * 360.0 * u / D)
-        c.color_keys(cm["s"], ts, lambda u, cm=cm: hexa("FFFFFF", c.a(0.35 + 0.65 * br(u, cm["n"], cm["pph"]) ** 1.5)))
+        c.color_keys(cm["s"], ts, lambda u, cm=cm: hexa("FFFFFF", c.a(min(1.0, 0.35 + 0.65 * br(u, cm["n"], cm["pph"]) ** 1.5 + 0.4 * fa_(u)))))
     g = lambda u, t0, w: math.exp(-((((u - t0 + D / 2) % D) - D / 2) / w) ** 2)  # noqa: E731
     fa = lambda u: min(1.0, sum(g(u, t0, 0.22) for t0 in fl))  # noqa: E731
     c.color_keys(s_fl, ts_fine := times_dense(0, D, 24), lambda u: hexa(flash_c, c.a(0.95 * fa(u))))
@@ -1693,6 +1723,172 @@ def projectile(c: Ctx, P: dict) -> dict:
     return c.result(duration=D * c.k, hit_at=c.T(T), target=[tx, ty])
 
 
+def explosion(c: Ctx, P: dict) -> dict:
+    """An explosion with exaggerated blast physics: an instant flash that decays like 1/t, a shockwave whose radius grows as
+    t^0.4 (Sedov-Taylor) and thins as it spreads, a fireball of blobs that balloon with the same law while cooling from
+    white through orange to dark smoke that rises on its own heat, debris on parabolas with air drag (velocity decays,
+    stretched along their speed), embers that linger, and a dust ring kicked up along the ground."""
+    D = 1.9
+    col = _hexn(P["color"], "FF9A2A")
+    size = float(P["size"])
+    nd = int(P["count"])
+    sq = float(P["squash"])
+    rng = np.random.default_rng(c.seed + 161)
+    grp = c.bone("boom", c.group, 0, 0)
+    b_fl = c.bone("flash", grp)
+    s_fl = c.slot(b_fl, "fx/glow", size * 2.8, role="flash")
+    b_dust = c.bone("dust", grp, 0, -size * 0.28, sy=0.22)
+    s_dust = c.slot(b_dust, "fx/ring", size * 2.6, blend="normal", role="dust")
+    b_r1, b_r2 = c.bone("shock", grp, sy=sq), c.bone("shock2", grp, sy=sq)
+    s_r1 = c.slot(b_r1, "fx/ring", size * 3.4, role="ring")
+    s_r2 = c.slot(b_r2, "fx/ring", size * 3.4, role="ring")
+    blobs = []
+    for i in range(7):
+        a = 2 * math.pi * i / 7 + float(rng.uniform(-0.4, 0.4))
+        bn = c.bone(f"fb{i}", grp)
+        gk = float(rng.uniform(0.8, 1.3)) if i else 1.6
+        s_fire = c.slot(bn, "fx/smoke", size * 1.35 * gk, role="fire")
+        s_smoke = c.slot(bn, "fx/smoke", size * 1.35 * gk, blend="normal", role="smoke")
+        blobs.append(dict(b=bn, f=s_fire, s=s_smoke, a=a, d=(0.0 if not i else size * float(rng.uniform(0.25, 0.5))),
+                          rot=float(rng.uniform(-60, 60)), dl=float(rng.uniform(0, 0.05)) if i else 0.0))
+    debris = []
+    for i in range(nd):
+        a = math.radians(90 + float(rng.uniform(-80, 80)))
+        v0 = size * float(rng.uniform(5.0, 9.0))
+        bn = c.bone(f"db{i}", grp)
+        sl = c.slot(bn, "fx/mote", float(rng.uniform(16, 30)) * size / 200, role="mote")
+        debris.append(dict(b=bn, s=sl, vx=math.cos(a) * v0, vy=math.sin(a) * v0, k=float(rng.uniform(1.4, 2.4)),
+                           life=float(rng.uniform(0.7, 1.3)), t0=float(rng.uniform(0, 0.04))))
+    embers = []
+    for i in range(int(P["embers"])):
+        bn = c.bone(f"em{i}", grp, float(rng.uniform(-1, 1)) * size * 0.9, float(rng.uniform(-0.2, 1.0)) * size * 0.8)
+        sl = c.slot(bn, "fx/spark", float(rng.uniform(16, 34)) * size / 200, color=hexa("FFD08A", 1.0), role="spark")
+        embers.append(dict(b=bn, s=sl, t=float(rng.uniform(0.25, D - 0.5)), life=float(rng.uniform(0.3, 0.5)), rot=float(rng.uniform(-90, 90))))
+    c.show([s_fl, s_dust, s_r1, s_r2] + [x for b_ in blobs for x in (b_["f"], b_["s"])], 0, D)
+    ts = times_dense(0, D, 30)
+    G = size * 7.0                                                   # gravity in units/s^2, scaled with the blast
+    sedov = lambda u: (max(0.0, u) / D) ** 0.4  # noqa: E731
+    fl = lambda u: smooth(u, 0, 0.025) / (1 + 45 * max(0.0, u - 0.025))  # noqa: E731
+    c.color_keys(s_fl, ts, lambda u: hexa("FFF6DC", c.a(min(1.0, 1.2 * fl(u)))))
+    c.bone_keys(b_fl, "scale", ts, lambda u: (0.6 + 1.1 * ease_out(u / 0.12, 2.5),) * 2)
+    for bn, sl, d0, k_ in ((b_r1, s_r1, 0.0, 1.0), (b_r2, s_r2, 0.07, 0.72)):
+        c.bone_keys(bn, "scale", ts, lambda u, d0=d0, k_=k_: (0.08 + 1.35 * k_ * sedov(u - d0),) * 2 if u >= d0 else (0.0, 0.0))
+        c.color_keys(sl, ts, lambda u, d0=d0, k_=k_: hexa("FFE9B0" if k_ == 1.0 else col, c.a(0.95 * k_ * (1 - sedov(u - d0)) ** 1.6 * smooth(u, d0, d0 + 0.02))))
+    c.bone_keys(b_dust, "scale", ts, lambda u: (0.15 + 1.1 * sedov(u),) * 2)
+    c.color_keys(s_dust, ts, lambda u: hexa("7A6450", c.a(0.3 * smooth(u, 0.02, 0.1) * (1 - smooth(u, 0.3, 1.2)))))
+    # the fireball: balloon as t^0.4, cool white -> yellow -> orange -> dark, rise on its heat
+    stops = [(0.0, "FFF8E0", 1.0), (0.08, "FFE070", 1.0), (0.22, "FF9A2A", 0.9), (0.45, "FF4A10", 0.55), (0.75, "A02808", 0.2), (1.1, "600000", 0.0)]
+
+    def fire_col(u):
+        for (t0, c0, a0), (t1, c1, a1) in zip(stops, stops[1:]):
+            if u <= t1:
+                f = max(0.0, (u - t0) / (t1 - t0))
+                rgb = _mix(_rgb(c0), _rgb(c1), f)
+                return "%02X%02X%02X" % tuple(int(v) for v in rgb), a0 + (a1 - a0) * f
+        return "600000", 0.0
+    for b_ in blobs:
+        dl = b_["dl"]
+        grow = lambda u, b_=b_, dl=dl: 0.12 + 1.15 * sedov(u - dl) * (1.0 if b_["d"] else 1.1)  # noqa: E731
+        c.bone_keys(b_["b"], "scale", ts, lambda u, grow=grow: (grow(u),) * 2)
+        c.bone_keys(b_["b"], "translate", ts, lambda u, b_=b_, dl=dl: (math.cos(b_["a"]) * b_["d"] * ease_out((u - dl) / 0.45, 2.6),
+                                                                        math.sin(b_["a"]) * b_["d"] * 0.7 * ease_out((u - dl) / 0.45, 2.6) + size * 0.9 * max(0.0, u - dl) ** 2 * 0.55))
+        c.bone_keys(b_["b"], "rotate", ts, lambda u, b_=b_: b_["rot"] * u)
+        c.color_keys(b_["f"], ts, lambda u, dl=dl: (lambda cc: hexa(cc[0], c.a(cc[1] * smooth(u, dl, dl + 0.03))))(fire_col(u - dl)))
+        c.color_keys(b_["s"], ts, lambda u, dl=dl: hexa("6E6260", c.a(0.7 * smooth(u - dl, 0.12, 0.5) * (1 - smooth(u - dl, 0.9, D)))))
+    # debris: parabolas with air drag (v decays as e^-kt), stretched along the velocity
+    for d in debris:
+        t0, k_, L = d["t0"], d["k"], d["life"]
+        tdd = times_dense(t0, min(D, t0 + L), 24)
+
+        def st(u, d=d, t0=t0, k_=k_):
+            t = max(0.0, u - t0)
+            e = (1 - math.exp(-k_ * t)) / k_
+            x, y = d["vx"] * e, d["vy"] * e - 0.5 * G * t * t
+            vx, vy = d["vx"] * math.exp(-k_ * t), d["vy"] * math.exp(-k_ * t) - G * t
+            sp = math.hypot(vx, vy)
+            return x, y, math.degrees(math.atan2(vy, vx)) - 90.0, 1 + 1.4 * min(1.0, sp / (size * 7.0))
+        vals = [st(u) for u in tdd]
+        ang = np.degrees(np.unwrap(np.radians([v[2] for v in vals])))
+        c.ab.bone(d["b"], "translate", _uniq([(c.T(u), v[0], v[1]) for u, v in zip(tdd, vals)]), "linear")
+        c.ab.bone(d["b"], "rotate", _uniq([(c.T(u), float(a_)) for u, a_ in zip(tdd, ang)]), "linear")
+        c.ab.bone(d["b"], "scale", _uniq([(c.T(u), 1 / math.sqrt(v[3]), v[3]) for u, v in zip(tdd, vals)]), "linear")
+        c.color_keys(d["s"], tdd, lambda u, t0=t0, L=L: hexa("FFD070" if (u - t0) < L * 0.4 else "FF6A20", c.a(0.95 * max(0.0, 1 - (u - t0) / L) ** 1.2)))
+        c.ab.slot_attachment(d["s"], [(0.0, None), (c.T(t0), "fx"), (c.T(min(D, t0 + L)), None)])
+    for e in embers:
+        c.ab.slot_attachment(e["s"], [(0.0, None), (c.T(e["t"]), "fx"), (c.T(e["t"] + e["life"]), None)])
+        c.ab.bone(e["b"], "scale", _uniq([(c.T(e["t"]), 0, 0), (c.T(e["t"] + e["life"] * 0.4), 1, 1), (c.T(e["t"] + e["life"]), 0, 0)]), "quad_in_out")
+        c.ab.bone(e["b"], "rotate", _uniq([(c.T(e["t"]), 0), (c.T(e["t"] + e["life"]), e["rot"])]), "linear")
+    c.ab.event(c.T(0.0), "fx_explosion")
+    c.ab.event(c.T(0.02), "fx_explosion_shock")
+    hint = dict(parent=c.group, front_of=s_r2, mode="alpha", seq_mode="once", start=c.T(0.0),
+                note="volumetric fireball: ae_template smoke_puff params={light: FFF3A0, mid: FF7A1C, shadow: 3A2018, rise: 0.3} -> ae_fx_to_spine with these args (scale ~ size*2.4/384)")
+    return c.result(duration=D * c.k, debris=nd, ae_hint=hint)
+
+
+def shine(c: Ctx, P: dict) -> dict:
+    """A burst of light with exaggerated optics: instant bloom that decays like 1/t with a long tail, two ray stars turning
+    against each other, an anamorphic streak, a halo ring that expands and a second chromatic one just behind, twinkles.
+    pulse > 0 makes it a breathing loop instead of a burst."""
+    pulse = float(P["pulse"])
+    D = pulse if pulse > 0 else 1.4
+    col = _hexn(P["color"], "FFF2B0")
+    size = float(P["size"])
+    rng = np.random.default_rng(c.seed + 171)
+    grp = c.bone("shine", c.group, 0, 0)
+    b_core, b_r1, b_r2, b_fl, b_h1, b_h2 = (c.bone("core", grp), c.bone("rays1", grp), c.bone("rays2", grp), c.bone("flare", grp),
+                                             c.bone("halo", grp), c.bone("halo2", grp))
+    s_h2 = c.slot(b_h2, "fx/ring", size * 2.2, role="ring")
+    s_h1 = c.slot(b_h1, "fx/ring", size * 1.9, role="ring")
+    s_r1 = c.slot(b_r1, f"fx/rays_{col}", size * 2.6, make=lambda: tex_rays(col), role="rays")
+    s_r2 = c.slot(b_r2, f"fx/rays_{col}_b", size * 2.0, make=lambda: tex_rays(col, rays=10, seed=7), role="rays")
+    s_fl = c.slot(b_fl, f"fx/flare_{col}", size * 3.2, make=lambda: tex_flare(col), role="flare")
+    s_core = c.slot(b_core, "fx/glow", size * 1.3, role="glow")
+    tw = []
+    for i in range(int(P["count"])):
+        a, rad = rng.uniform(0, 2 * math.pi), size * rng.uniform(0.5, 1.3)
+        bn = c.bone(f"tw{i}", grp, math.cos(a) * rad, math.sin(a) * rad * 0.8)
+        sl = c.slot(bn, "fx/spark", float(rng.uniform(0.18, 0.34)) * size, color=hexa("FFFFFF", 1.0), role="spark")
+        tw.append(dict(b=bn, s=sl, t=float(rng.uniform(0.05, max(0.1, D - 0.45))), life=float(rng.uniform(0.3, 0.5)), rot=float(rng.uniform(-80, 80))))
+    slots = [s_h2, s_h1, s_r1, s_r2, s_fl, s_core]
+    ts = times_dense(0, D, 30)
+    if pulse > 0:
+        c.show(slots, 0, None)
+        br2 = lambda u: 0.5 + 0.5 * math.sin(2 * math.pi * u / D)  # noqa: E731
+        I = lambda u: 0.55 + 0.45 * br2(u)  # noqa: E731
+        rot = lambda u: 360.0 * u / D  # noqa: E731
+        c.bone_keys(b_h1, "scale", ts, lambda u: (0.95 + 0.1 * br2(u),) * 2)
+        c.color_keys(s_h1, ts, lambda u: hexa(col, c.a(0.35 * I(u))))
+        c.bone_keys(b_h2, "scale", ts, lambda u: (1.0 + 0.12 * br2(u),) * 2)
+        c.color_keys(s_h2, ts, lambda u: hexa("FFB070", c.a(0.2 * I(u))))
+        c.bone_keys(b_fl, "scale", ts, lambda u: (0.8 + 0.25 * br2(u), 0.8 + 0.1 * br2(u)))
+        c.color_keys(s_fl, ts, lambda u: hexa("FFFFFF", c.a(0.75 * I(u))))
+    else:
+        c.show(slots, 0, D)
+        att = lambda u: smooth(u, 0, 0.05)  # noqa: E731
+        I = lambda u: att(u) * (0.22 + 0.78 / (1 + 14 * max(0.0, u - 0.05))) * (1 - smooth(u, D - 0.45, D))  # noqa: E731
+        rot = lambda u: 30.0 * ease_out(u / D, 1.5)  # noqa: E731
+        c.bone_keys(b_h1, "scale", ts, lambda u: (0.45 + 0.85 * ease_out(u / 0.6, 2.2),) * 2)
+        c.color_keys(s_h1, ts, lambda u: hexa(col, c.a(0.75 * (1 - smooth(u, 0.08, 0.9)) * att(u))))
+        c.bone_keys(b_h2, "scale", ts, lambda u: (0.4 + 0.95 * ease_out((u - 0.05) / 0.7, 2.2) if u > 0.05 else 0.0,) * 2)
+        c.color_keys(s_h2, ts, lambda u: hexa("FFB070", c.a(0.45 * (1 - smooth(u, 0.15, 1.0)) * smooth(u, 0.05, 0.1))))
+        c.bone_keys(b_fl, "scale", ts, lambda u: (0.25 + 0.95 * ease_out(u / 0.3, 3.0), 0.5 + 0.5 * I(u)))
+        c.color_keys(s_fl, ts, lambda u: hexa("FFFFFF", c.a(min(1.0, 1.1 * I(u)))))
+    c.bone_keys(b_r1, "rotate", ts, lambda u: rot(u))
+    c.bone_keys(b_r2, "rotate", ts, lambda u: -rot(u) * (1.0 if pulse > 0 else 1.4))
+    c.bone_keys(b_r1, "scale", ts, lambda u: (0.55 + 0.45 * (ease_out(u / 0.25, 3.0) if pulse <= 0 else 1.0) * (0.9 + 0.1 * I(u)),) * 2)
+    c.bone_keys(b_r2, "scale", ts, lambda u: (0.5 + 0.5 * (ease_out(u / 0.3, 3.0) if pulse <= 0 else 1.0) * (0.85 + 0.15 * I(u)),) * 2)
+    c.color_keys(s_r1, ts, lambda u: hexa("FFFFFF", c.a(I(u))))
+    c.color_keys(s_r2, ts, lambda u: hexa("FFFFFF", c.a(0.8 * I(u))))
+    c.bone_keys(b_core, "scale", ts, lambda u: (0.7 + 0.5 * I(u),) * 2)
+    c.color_keys(s_core, ts, lambda u: hexa("FFFFFF", c.a(min(1.0, 1.2 * I(u)))))
+    for t_ in tw:
+        c.ab.slot_attachment(t_["s"], [(0.0, None), (c.T(t_["t"]), "fx"), (c.T(min(D, t_["t"] + t_["life"])), None)])
+        c.ab.bone(t_["b"], "scale", _uniq([(c.T(t_["t"]), 0, 0), (c.T(t_["t"] + t_["life"] * 0.4), 1, 1), (c.T(min(D, t_["t"] + t_["life"])), 0, 0)]), "quad_in_out")
+        c.ab.bone(t_["b"], "rotate", _uniq([(c.T(t_["t"]), 0), (c.T(min(D, t_["t"] + t_["life"])), t_["rot"])]), "linear")
+    c.ab.event(c.T(0.0), "fx_shine")
+    return c.result(duration=D * c.k, loop=(D if pulse > 0 else None))
+
+
 # ------------------------------------------------------------------ registry
 # defaults: every recipe also takes the shared args (x, y, scale, start, duration, color, intensity, seed, into,
 # parent, front_of, behind, count, name). "duration" is the life window for window recipes and a time-scale
@@ -1818,6 +2014,21 @@ RECIPES: dict[str, dict[str, Any]] = {
         options=dict(tx=(320.0, "target x relative to the launch point"), ty=(-60.0, "target y"), arc=(90.0, "how high the arc bows"),
                      flight=(0.6, "flight time in seconds"), tail=(0.45, "tail length as a fraction of the flight time"),
                      size=(40.0, "head size"), sparks=(10, "sparks shed during the flight"))),
+    "explosion": dict(
+        fn=explosion, duration=1.9, kind="one-shot", color="FF9A2A", count=22,
+        summary="Blast with exaggerated real physics: 1/t flash, Sedov-Taylor shockwave (radius ~ t^0.4, thinning as it spreads), "
+                "a fireball that balloons the same way while cooling white -> orange -> dark smoke and rising on its heat, debris with air drag "
+                "stretched along its speed, lingering embers, a dust ring on the ground. Events fx_explosion, fx_explosion_shock. "
+                "ae_hint: smoke_puff in fire colours for a volumetric fireball.",
+        anchor="Blast centre (ground is ~0.28*size below).",
+        options=dict(size=(200.0, "blast size"), squash=(0.45, "shockwave squash (1 = seen from the side, 0.3 = from above)"),
+                     embers=(8, "lingering embers"))),
+    "shine": dict(
+        fn=shine, duration=1.4, kind="one-shot", color="FFF2B0", count=7,
+        summary="Burst of light: instant bloom decaying like 1/t with a long tail, two ray stars turning against each other, an anamorphic "
+                "streak, an expanding halo with a chromatic second ring, twinkles. options={pulse: seconds} turns it into a breathing loop. Event fx_shine.",
+        anchor="Light source.",
+        options=dict(size=(160.0, "core size"), pulse=(0.0, "> 0: loop that breathes with this period instead of a one-shot burst"))),
     "twinkles": dict(
         fn=twinkles, duration=5.8, kind="window", count=9,
         summary="Four-point stars that pop, spin and vanish, two or three times each, around the subject.",
@@ -1854,6 +2065,9 @@ ROLES: dict[str, dict[str, str]] = {
                      "glow": "light around the head", "spark": "the head star", "mote": "one shed spark", "under": "the frame underglow"},
     "projectile": {"tail": "the comet tail strip, head at the TOP", "glow": "light around the head", "spark": "the head star",
                    "mote": "one shed spark", "impact_glow": "impact light", "impact_ring": "impact ring", "impact_star": "impact starburst"},
+    "explosion": {"flash": "the flash", "ring": "the shockwaves", "fire": "a fireball blob while hot (additive)", "smoke": "the same blob as smoke (normal)",
+                  "mote": "one piece of debris", "spark": "one ember", "dust": "the ground dust ring"},
+    "shine": {"glow": "the core bloom", "rays": "the ray star (both layers)", "flare": "the anamorphic streak", "ring": "the halo rings", "spark": "one twinkle"},
     "puff": {"cloud": "one cloud lobe (also the core), roughly round, centred", "glow": "the flash", "ring": "the soft ring"},
     "smoke_glow": {"smoke": "one smoke blob, soft, centred", "glow": "the glow at the base"},
 }

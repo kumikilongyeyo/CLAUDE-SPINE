@@ -26,24 +26,39 @@ ICE = (150, 205, 245)
 # ------------------------------------------------------------------ textures
 def frost_frames(w: int = 320, h: int = 320, frames: int = 18, seed: int = 3, mode: str = "edges",
                  color: str = "9FD8FF") -> list[Image.Image]:
-    """Frost ferns growing: branches every few steps at +-60 degrees (ice is hexagonal), thinner and shorter each
-    generation. Every stamped point keeps the time it froze; frame k shows everything frozen by k/frames."""
+    """Frost ferns growing, with exaggerated real dendrite physics: tips advance fast and SLOW as the branch lengthens
+    (diffusion-limited), side branches sprout at +-60 degrees (ice is hexagonal) slightly behind the tip, a branch STOPS
+    when it touches another (the vapour between them is spent), and once the skeleton is in place a second wave of tiny
+    needles fills in along every arm (the frosting-over). Every point keeps the time it froze: frame k shows what has
+    frozen by k/frames, with a glowing growth front where it is freezing right now."""
     rng = np.random.default_rng(seed)
     segs: list[tuple] = []
-    S = 2                                                          # supersample
+    S = 2
     W, H = w * S, h * S
+    cell = 3 * S
+    occ: dict[tuple[int, int], int] = {}
+    bid = [0]
 
-    def grow(x, y, ang, length, t, depth, wd, speed):
+    def grow(x, y, ang, length, t, depth, wd, speed, my_id=None):
+        if my_id is None:
+            bid[0] += 1
+            my_id = bid[0]
         step = 3.0 * S
         n = max(1, int(length / step))
-        side = 1
+        side = 1 if rng.random() < 0.5 else -1
         for i in range(n):
-            ang += float(rng.normal(0, 0.06))
+            ang += float(rng.normal(0, 0.05))
             nx, ny = x + math.cos(ang) * step, y + math.sin(ang) * step
             if not (0 <= nx < W and 0 <= ny < H):
                 return
-            segs.append((x, y, nx, ny, t, wd * (1 - 0.6 * i / n)))
-            t += step / speed
+            key = (int(nx // cell), int(ny // cell))
+            other = occ.get(key)
+            if other is not None and other != my_id:
+                segs.append((x, y, nx, ny, t, wd * 0.8))          # touch and stop: the vapour between them is spent
+                return
+            occ[key] = my_id
+            segs.append((x, y, nx, ny, t, wd * (1 - 0.55 * i / n)))
+            t += step / (speed * (1 - 0.65 * i / n))             # the tip slows as the branch lengthens
             if depth < 4 and i % int(rng.integers(3, 6)) == 2 and i < n - 2:
                 frac = 1 - i / n
                 grow(nx, ny, ang + side * math.pi / 3 * float(rng.uniform(0.85, 1.1)),
@@ -53,9 +68,9 @@ def frost_frames(w: int = 320, h: int = 320, frames: int = 18, seed: int = 3, mo
 
     if mode == "center":
         a0 = float(rng.uniform(0, math.pi / 3))
-        for k in range(6):                                       # a six-armed star, like a snowflake
+        for k in range(6):
             grow(W / 2, H / 2, a0 + k * math.pi / 3, min(W, H) * 0.47, 0.0, 0, 2.6 * S, 1.0)
-    else:                                                          # creep in from the borders
+    else:
         for k in range(24):
             edge = k % 4
             u = float(rng.uniform(0.08, 0.92))
@@ -64,23 +79,35 @@ def frost_frames(w: int = 320, h: int = 320, frames: int = 18, seed: int = 3, mo
             grow(x, y, a, min(W, H) * float(rng.uniform(0.3, 0.62)), float(rng.uniform(0, 0.3)) * min(W, H), 0, 1.7 * S, 1.0)
     if not segs:
         segs.append((W / 2, H / 2, W / 2 + 1, H / 2, 0.0, 1.0))
+    t_skel = max(sg[4] for sg in segs) or 1.0
+    for x0, y0, x1, y1, t, wd in list(segs)[::2]:                   # frosting-over: late needles along the skeleton
+        if rng.random() < 0.55:
+            ang = math.atan2(y1 - y0, x1 - x0) + (1 if rng.random() < 0.5 else -1) * math.pi / 3
+            grow(x1, y1, ang, min(W, H) * 0.06, t_skel * 0.55 + t * 0.6, 4, 0.9 * S, 1.6)
     tmax = max(sg[4] for sg in segs) or 1.0
     rng2 = np.random.default_rng(seed + 1)
     speck = np.asarray(Image.fromarray((rng2.random((h // 2, w // 2)) * 255).astype(np.uint8)).resize((w, h), Image.BICUBIC), np.float32) / 255
     hot, mid, edge = (255, 255, 255), _mix(_rgb(color), (255, 255, 255), 0.55), _rgb(color)
     out = []
+    front_w = 0.07 * tmax
     for f in range(1, frames + 1):
         tf = f / frames * tmax
         img = Image.new("L", (W, H), 0)
+        fr = Image.new("L", (W, H), 0)
         d = ImageDraw.Draw(img)
+        df = ImageDraw.Draw(fr)
         for x0, y0, x1, y1, t, wd in segs:
             if t <= tf:
                 d.line([(x0, y0), (x1, y1)], fill=255, width=max(1, int(round(wd))))
+                if t > tf - front_w:                               # freezing right now: the growth front glows
+                    df.line([(x0, y0), (x1, y1)], fill=255, width=max(1, int(round(wd * 2.2))))
         img = img.resize((w, h), Image.LANCZOS)
+        fr = fr.resize((w, h), Image.LANCZOS)
         core = np.asarray(img, np.float32) / 255
+        front = _blur(np.asarray(fr, np.float32) / 255, 3.0)
         glow = _blur(core, 2.2)
-        frosted = _blur(core, 7.0) * (0.45 + 0.55 * speck)       # a frosted film builds up around the ferns
-        a = np.clip(core * 0.95 + glow * 0.5 + frosted * 1.3, 0, 1)
+        frosted = _blur(core, 7.0) * (0.45 + 0.55 * speck)
+        a = np.clip(core * 0.95 + glow * 0.5 + frosted * 1.3 + front * 0.9, 0, 1)
         out.append(_colorize(a, hot, mid, edge))
     return out
 
@@ -393,61 +420,99 @@ def bubbles(c: Ctx, P: dict) -> dict:
 
 
 def water_splash(c: Ctx, P: dict) -> dict:
-    """A splash: droplets thrown up on parabolas (stretched along their speed), two ripple rings on the surface, mist."""
-    D = 1.3
+    """A splash with exaggerated real physics: a CROWN of droplets jumps up around the impact, a central JET shoots up and
+    pinches off a big drop at its top (the Worthington jet), droplets fly on parabolas turned and stretched along their
+    speed, capillary RINGS spread as sqrt(t) and fade as they thin, and every drop that lands makes its own small ring."""
+    D = 1.5
     col = _hexn(P["color"], "8FD8FF")
     n = int(P["count"])
     sp0 = float(P["speed"])
     g = float(P["gravity"])
+    size = float(P["size"])
     rng = np.random.default_rng(c.seed + 151)
     grp = c.bone("splash", c.group, 0, 0)
     rings = []
     for i in range(2):
         rb = c.bone(f"ring{i}", grp, sy=0.28)
-        rs = c.slot(rb, "fx/ring", float(P["size"]) * 1.6, role="ring")
-        rings.append((rb, rs, i * 0.18))
+        rs = c.slot(rb, "fx/ring", size * 1.6, role="ring")
+        rings.append((rb, rs, i * 0.16))
     b_m = c.bone("mist", grp, 0, 20)
-    s_m = c.slot(b_m, "fx/smoke", float(P["size"]) * 1.4, blend="additive", role="mist")
+    s_m = c.slot(b_m, "fx/smoke", size * 1.4, blend="additive", role="mist")
+    b_j = c.bone("jet", grp, 0, 0)
+    s_j = c.slot(b_j, "fx/drop", size * 0.34, make=lambda: tex_drop(), role="drop", anchor="bottom")
     drops = []
-    for i in range(n):
-        a = math.radians(90 + float(rng.uniform(-62, 62)))
-        sp = sp0 * float(rng.uniform(0.55, 1.05))
-        bn = c.bone(f"d{i}", grp)
-        sl = c.slot(bn, "fx/drop", float(rng.uniform(15, 32)) * float(P["size"]) / 100, make=lambda: tex_drop(), role="drop")
-        drops.append(dict(b=bn, s=sl, vx=math.cos(a) * sp, vy=math.sin(a) * sp, t0=float(rng.uniform(0, 0.07))))
-    c.show([r[1] for r in rings] + [s_m] + [d["s"] for d in drops], 0, D)
+
+    def add_drop(a_deg, sp, t0, sz, kind):
+        a = math.radians(a_deg)
+        bn = c.bone(f"d{len(drops)}", grp)
+        sl = c.slot(bn, "fx/drop", sz, make=lambda: tex_drop(), role="drop")
+        drops.append(dict(b=bn, s=sl, vx=math.cos(a) * sp, vy=math.sin(a) * sp, t0=t0, kind=kind, y0=0.0))
+        return drops[-1]
+    for i in range(n):                                               # the main spray
+        add_drop(90 + float(rng.uniform(-62, 62)), sp0 * float(rng.uniform(0.55, 1.05)), float(rng.uniform(0, 0.07)),
+                 float(rng.uniform(15, 32)) * size / 100, "spray")
+    for i in range(int(P["crown"])):                                 # the crown: steep, slower, a ring of small drops
+        add_drop(90 + float(rng.uniform(-18, 18)) + (28 if i % 2 else -28), sp0 * float(rng.uniform(0.38, 0.55)), 0.0,
+                 float(rng.uniform(10, 18)) * size / 100, "crown")
+    jet_t = 0.32
+    big = add_drop(90 + float(rng.uniform(-6, 6)), sp0 * 0.85, jet_t, 34 * size / 100, "pinch")   # pinches off the jet's top
+    big["y0"] = size * 1.15
+    land = []
+    for d in drops:
+        if d["kind"] == "crown" or d["vy"] <= 0:
+            continue
+        tl = d["t0"] + (d["vy"] + math.sqrt(d["vy"] ** 2 + 2 * g * d["y0"])) / g      # back to y = 0
+        if tl < D - 0.25 and len(land) < int(P["landings"]):
+            xl = d["vx"] * (tl - d["t0"])
+            rb = c.bone(f"land{len(land)}", grp, xl, 0, sy=0.28)
+            rs = c.slot(rb, "fx/ring", float(rng.uniform(0.35, 0.6)) * size, role="ring")
+            land.append((rb, rs, tl))
+    c.show([r[1] for r in rings] + [s_m, s_j], 0, D)
     ts = times_dense(0, D, 30)
-    for rb, rs, d0 in rings:
-        c.bone_keys(rb, "scale", ts, lambda u, d0=d0: (0.15 + 1.25 * ease_out((u - d0) / 0.9, 2.2) if u >= d0 else 0.0,) * 2)
-        c.color_keys(rs, ts, lambda u, d0=d0: hexa(col, c.a(0.8 * (1 - smooth(u, d0, d0 + 0.9)) * smooth(u, d0, d0 + 0.04))))
+    for rb, rs, d0 in rings:                                         # capillary rings: radius ~ sqrt(t), fading as they thin
+        c.bone_keys(rb, "scale", ts, lambda u, d0=d0: (0.12 + 1.3 * math.sqrt(max(0.0, u - d0)),) * 2 if u >= d0 else (0.0, 0.0))
+        c.color_keys(rs, ts, lambda u, d0=d0: hexa(col, c.a(0.85 * (1 - smooth(u, d0, d0 + 1.0)) ** 1.3 * smooth(u, d0, d0 + 0.03))))
+    for rb, rs, tl in land:
+        tts = times_dense(tl, min(D, tl + 0.55), 20)
+        c.bone_keys(rb, "scale", tts, lambda u, tl=tl: (0.1 + 0.9 * math.sqrt(max(0.0, u - tl) / 0.55),) * 2)
+        c.color_keys(rs, tts, lambda u, tl=tl: hexa(col, c.a(0.6 * max(0.0, 1 - (u - tl) / 0.55))))
+        c.ab.slot_attachment(rs, [(0.0, None), (c.T(tl), "fx"), (c.T(min(D, tl + 0.55)), None)])
     c.bone_keys(b_m, "scale", ts, lambda u: (0.3 + 0.9 * ease_out(u / 0.6, 2.2),) * 2)
     c.color_keys(s_m, ts, lambda u: hexa("E8F8FF", c.a(0.45 * smooth(u, 0, 0.06) * (1 - smooth(u, 0.15, 0.9)))))
+    # the jet: rises fast, thins, then collapses once the drop pinches off
+    jet_h = lambda u: (3.4 * ease_out(u / jet_t, 2.6)) if u < jet_t else 3.4 * (1 - smooth(u, jet_t, jet_t + 0.45))  # noqa: E731
+    c.bone_keys(b_j, "scale", ts, lambda u: (max(0.05, 1.0 - 0.45 * smooth(u, 0.1, jet_t + 0.3)), max(0.01, jet_h(u))))
+    c.color_keys(s_j, ts, lambda u: hexa("FFFFFF", c.a(smooth(u, 0, 0.04) * (1 - smooth(u, jet_t + 0.2, jet_t + 0.5)))))
     for d in drops:
         t0 = d["t0"]
+        tdd = [u for u in ts if u >= t0 - 1e-9] or [t0]
 
         def st(u, d=d, t0=t0):
             t = max(0.0, u - t0)
             vx, vy = d["vx"], d["vy"] - g * t
-            x, y = d["vx"] * t, d["vy"] * t - 0.5 * g * t * t
-            ang = math.degrees(math.atan2(vy, vx)) - 90.0          # the drop's pointed end trails its motion
-            stretch = 1 + 0.7 * min(1.0, math.hypot(vx, vy) / max(sp0, 1))
+            x, y = d["vx"] * t, d["y0"] + d["vy"] * t - 0.5 * g * t * t
+            ang = math.degrees(math.atan2(vy, vx)) - 90.0            # the pointed end trails the motion
+            stretch = 1 + 0.75 * min(1.0, math.hypot(vx, vy) / max(sp0, 1))
             return x, y, ang, stretch
-        vals = [st(u) for u in ts]
+        vals = [st(u) for u in tdd]
         ang = np.degrees(np.unwrap(np.radians([v[2] for v in vals])))
-        c.ab.bone(d["b"], "translate", _uniq([(c.T(u), v[0], v[1]) for u, v in zip(ts, vals)]), "linear")
-        c.ab.bone(d["b"], "rotate", _uniq([(c.T(u), float(a)) for u, a in zip(ts, ang)]), "linear")
-        c.ab.bone(d["b"], "scale", _uniq([(c.T(u), 1 / math.sqrt(v[3]), v[3]) for u, v in zip(ts, vals)]), "linear")
-        c.color_keys(d["s"], ts, lambda u, t0=t0: hexa("FFFFFF", c.a(smooth(u, t0, t0 + 0.04) * (1 - smooth(u, 0.85, D)))))
+        c.ab.bone(d["b"], "translate", _uniq([(c.T(u), v[0], v[1]) for u, v in zip(tdd, vals)]), "linear")
+        c.ab.bone(d["b"], "rotate", _uniq([(c.T(u), float(a_)) for u, a_ in zip(tdd, ang)]), "linear")
+        c.ab.bone(d["b"], "scale", _uniq([(c.T(u), 1 / math.sqrt(v[3]), v[3]) for u, v in zip(tdd, vals)]), "linear")
+        below = lambda u, d=d, t0=t0: (d["y0"] + d["vy"] * (u - t0) - 0.5 * g * (u - t0) ** 2) < -8  # noqa: E731
+        c.color_keys(d["s"], tdd, lambda u, t0=t0, below=below: hexa("FFFFFF", c.a(0.0 if below(u) else smooth(u, t0, t0 + 0.04) * (1 - smooth(u, 0.85, D)))))
+        c.ab.slot_attachment(d["s"], [(0.0, None), (c.T(t0), "fx"), (c.T(D), None)] if t0 > 0 else [(0.0, "fx"), (c.T(D), None)])
     c.ab.event(c.T(0.0), "fx_splash")
-    return c.result(duration=D * c.k, drops=n)
+    return c.result(duration=D * c.k, drops=n, landings=len(land))
 
 
 # ------------------------------------------------------------------ registry
 RECIPES.update({
     "frost": dict(
         fn=frost, duration=2.4, kind="window", color="9FD8FF",
-        summary="Frost ferns grow across a box (from its borders, or from the centre like a snowflake) as a generated "
-                "flipbook: branches at the 60 degrees of ice crystals, a frosted film building up, a cold glow, glints. Event fx_frost_done.",
+        summary="Frost ferns grow across a box (from its borders, or from the centre like a snowflake) as a generated flipbook "
+                "with exaggerated dendrite physics: tips race then slow, branches sprout at 60 degrees and stop when they touch, "
+                "a glowing growth front, then a late wave of needles frosts everything over. Cold glow, glints. Event fx_frost_done.",
         anchor="Box centre.",
         options=dict(width=(200.0, "box width"), height=(200.0, "box height"), mode=("edges", "edges | center"),
                      grow=(1.4, "seconds to fully freeze"), frames=(18, "flipbook frames"), glints=(6, "sparkles after it freezes"),
@@ -473,10 +538,12 @@ RECIPES.update({
         anchor="Box centre.",
         options=dict(width=(160.0, "box width"), height=(300.0, "box height"), size=(1.0, "size multiplier"))),
     "water_splash": dict(
-        fn=water_splash, duration=1.3, kind="one-shot", color="8FD8FF",
-        summary="A splash: droplets thrown up on parabolas, stretched along their speed, two ripple rings on the surface, a mist. Event fx_splash.",
+        fn=water_splash, duration=1.5, kind="one-shot", color="8FD8FF",
+        summary="A splash with exaggerated real physics: a crown of droplets, a central jet that pinches off a big drop, spray on "
+                "parabolas turned and stretched along its speed, capillary rings spreading as sqrt(t), and a small ring wherever a drop lands. Event fx_splash.",
         anchor="Point of impact on the water surface.",
-        options=dict(speed=(520.0, "launch speed"), gravity=(1500.0, "gravity"), size=(100.0, "ring/mist size"))),
+        options=dict(speed=(520.0, "launch speed"), gravity=(1500.0, "gravity"), size=(100.0, "ring/mist size"),
+                     crown=(10, "crown droplets"), landings=(8, "max landing ripples"))),
 })
 # count= (the shared argument) is the number of icicles / shards / bubbles / droplets
 for _n, _k in (("icicles", 7), ("ice_shatter", 14), ("bubbles", 16), ("water_splash", 18)):
@@ -488,7 +555,7 @@ ROLES.update({
     "ice_shatter": {"block": "the ice block (normal blend)", "crack": "the crack lines over it", "glow": "cold glow", "mist": "the mist puff",
                     "ring": "the burst ring"},
     "bubbles": {"bubble": "one bubble, round, centred"},
-    "water_splash": {"drop": "one droplet, pointed end UP (it is turned along its motion)", "ring": "the ripple ring", "mist": "the mist"},
+    "water_splash": {"drop": "one droplet, pointed end UP (it is turned along its motion); also the jet", "ring": "the ripple rings (surface and landings)", "mist": "the mist"},
 })
 for _n, _d in ROLES.items():
     if _n in RECIPES:

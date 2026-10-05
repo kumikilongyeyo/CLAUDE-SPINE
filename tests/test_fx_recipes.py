@@ -36,7 +36,7 @@ def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
     assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) or (name == "cell_glow" and s.blend == "normal")
-               or (name in ("puff", "smoke_glow", "frost", "ice_shatter") and s.blend == "normal")
+               or (name in ("puff", "smoke_glow", "frost", "ice_shatter", "explosion") and s.blend == "normal")
                for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)
@@ -507,7 +507,7 @@ def test_new_ae_templates_build():
     assert {"smoke_puff", "smoke_haze"} <= set(t)
     assert t["fire"]["params"]["edge_fade"] == 0                         # off by default: old fire renders are unchanged
     src = open(ae_templates.build_script("smoke_haze", {})["script"]).read()
-    assert "Cycle Evolution" in src and '"black"' in src
+    assert "AEFX.loopify" in src and '"black"' in src
     src = open(ae_templates.build_script("fire", {"edge_fade": 0.2})["script"]).read()
     assert "ADBE Mask Feather" in src
 
@@ -520,7 +520,7 @@ def test_frost_is_a_growing_flipbook(proj):
                if getattr(proj.data.skin("default").attachments[s]["fx"], "sequence", None))
     assert att.sequence.count == 10 and att.path.startswith("fx/frost_edges_")
     cover = [np.asarray(proj.image(f"{att.path}{i:02d}"))[..., 3].sum() for i in range(10)]
-    assert all(b >= a for a, b in zip(cover, cover[1:])) and cover[-1] > 3 * cover[0]   # it only ever grows
+    assert cover[0] < cover[4] < cover[-1] and cover[-1] > 3 * cover[0]                  # it grows (the glowing front moves, so not strictly monotonic)
     a = proj.data.animations[res["animation"]]
     seq = a.attachments["default"][res["slots"][1]]["fx"]["sequence"][0]
     assert seq.mode == "once" and seq.delay == pytest.approx(0.1, abs=1e-4)
@@ -567,8 +567,9 @@ def test_bubbles_loop_and_splash_drops_never_spin(proj):
         assert ks[0].color == ks[-1].color and ks[-1].time == pytest.approx(4.0)
     sp = R.apply(proj, "water_splash", count=8)
     b = proj.data.animations[sp["animation"]]
-    drops = [proj.data.slot(s).bone for s in sp["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/drop"]
-    assert len(drops) == 8
+    drops = [proj.data.slot(s).bone for s in sp["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/drop"
+             and "translate" in b.bones.get(proj.data.slot(s).bone, {})]        # spray + crown + the pinched-off drop (the jet only scales)
+    assert len(drops) >= 8
     for bn in drops:                                                     # thrown up, then pulled back down by gravity
         ys = [k.y for k in b.bones[bn]["translate"]]
         assert max(ys) > 5 and ys[-1] < max(ys) - 20
@@ -582,3 +583,102 @@ def test_caustics_template():
     assert "caustics" in ae_templates.list_templates()
     src = open(ae_templates.build_script("caustics", {})["script"]).read()
     assert "ADBE Cell Pattern-0003" in src and "Cycle Evolution" in src and "Easy Levels2" in src
+
+
+# ---------------------------------------------------------------- exaggerated-physics redo
+def test_explosion_sedov_shockwave_and_cooling_fireball(proj):
+    res = R.apply(proj, "explosion", start=0.1, count=6, options={"embers": 2})
+    a = proj.data.animations[res["animation"]]
+    ev = {e.name: e.time for e in a.events}
+    assert ev["fx_explosion"] == pytest.approx(0.1) and ev["fx_explosion_shock"] == pytest.approx(0.12)
+    shock = next(b for b in a.bones if b.endswith("_shock"))
+    ks = [(k.time - 0.1, k.x) for k in a.bones[shock]["scale"] if k.time > 0.1]
+    # radius ~ t^0.4: growth slows, the ratio of early to late growth is far above linear
+    early = ks[2][1] - ks[0][1]
+    late = ks[-1][1] - ks[-3][1]
+    assert early > 4 * late
+    fire = next(s for s in res["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/smoke" and proj.data.slot(s).blend == "additive")
+    cols = [k.color for k in a.slots[fire]["rgba"]]
+    assert cols[1][:2] == "FF" and int(cols[-1][6:8], 16) == 0                 # starts hot and bright, ends gone
+    hint = res["ae_hint"]
+    assert hint["parent"] == res["group_bone"] and "smoke_puff" in hint["note"]
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_explosion_debris_has_drag(proj):
+    res = R.apply(proj, "explosion", count=4, options={"embers": 0})
+    a = proj.data.animations[res["animation"]]
+    for s in res["slots"]:
+        if proj.data.skin("default").attachments[s]["fx"].path != "fx/mote":
+            continue
+        ks = a.bones[proj.data.slot(s).bone]["translate"]
+        dx = [abs(k1.x - k0.x) for k0, k1 in zip(ks, ks[1:])]
+        assert dx[0] > dx[-1] * 1.5                                              # horizontal speed decays (air drag)
+
+
+def test_shine_burst_and_pulse(proj):
+    burst = R.apply(proj, "shine", name="b")
+    assert burst["loop"] is None and any(e.name == "fx_shine" for e in proj.data.animations[burst["animation"]].events)
+    core = next(s for s in burst["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/glow")
+    al = [int(k.color[6:8], 16) for k in proj.data.animations[burst["animation"]].slots[core]["rgba"]]
+    assert max(al) == al[2] or max(al) == al[1]                                  # instant bloom ...
+    assert al[-1] == 0 and al[len(al) // 2] > 0.15 * max(al)                     # ... long tail, then gone
+    pulse = R.apply(proj, "shine", name="p", options={"pulse": 3.0})
+    assert pulse["loop"] == 3.0
+    a = proj.data.animations[pulse["animation"]]
+    rays = next(b for b in a.bones if b.endswith("_rays1"))
+    rk = a.bones[rays]["rotate"]
+    assert rk[-1].value - rk[0].value == pytest.approx(360.0, abs=0.01)         # one turn per loop: closes
+
+
+def test_portal_differential_rotation_and_keplerian_specks(proj):
+    res = R.apply(proj, "portal", options={"specks": 4, "comets": 0})
+    a = proj.data.animations[res["animation"]]
+    outer = a.bones[next(b for b in a.bones if b.endswith("swirl_a"))]["rotate"]
+    inner = a.bones[next(b for b in a.bones if b.endswith("swirl_b"))]["rotate"]
+    assert (inner[-1].value - inner[0].value) == pytest.approx(3 * (outer[-1].value - outer[0].value))   # inner spins 3x faster, same way
+    piv = next(b for b in a.bones if b.endswith("_sp0"))
+    rk = [k for k in a.bones[piv]["rotate"]]
+    # within one life the angular speed increases toward the end (infall), ignoring respawn jumps
+    speeds = [abs((k1.value - k0.value) / (k1.time - k0.time)) for k0, k1 in zip(rk, rk[1:]) if k1.time - k0.time > 0.01]
+    speeds = [s_ for s_ in speeds if s_ < 2000]                          # drop the respawn jumps
+    assert len(speeds) > 5 and max(speeds) > 1.8 * min(speeds)           # whips round faster as it falls in
+
+
+def test_splash_jet_crown_and_landing_ripples(proj):
+    res = R.apply(proj, "water_splash", count=6, options={"crown": 4, "landings": 5})
+    assert res["landings"] >= 1
+    a = proj.data.animations[res["animation"]]
+    jet = next(b for b in a.bones if b.endswith("_jet"))
+    sy = [k.y for k in a.bones[jet]["scale"]]
+    assert max(sy) > 3.0 and sy[-1] < 0.1                                        # shoots up, collapses
+    land = [s for s in res["slots"] if "_land" in s]
+    assert land and all(a.slots[s]["attachment"][1].time > 0.2 for s in land)    # ripples start when drops come down
+    rings = [b for b in a.bones if "_ring0" in b]
+    sc = [k.x for k in a.bones[rings[0]]["scale"]]
+    assert sc[3] - sc[1] > sc[-1] - sc[-3]                                       # sqrt(t): fast first, then slow
+
+
+def test_frost_stops_at_contact_and_glows_at_the_front():
+    import numpy as np
+    from claude_spine.fx_elements import frost_frames
+    fr = frost_frames(120, 120, 8, seed=2)
+    cov = [np.asarray(f)[..., 3].astype(float).sum() for f in fr]
+    assert cov[0] < cov[3] < cov[-1]                                     # grows (the glowing front moves, so not strictly monotonic)
+    # the growth front is the brightest thing in a mid frame (white core > tinted film)
+    mid = np.asarray(fr[3]).astype(float)
+    assert mid[..., :3].max() > 180
+
+
+def test_loopify_and_physics_templates():
+    from claude_spine import ae_templates
+    lib = open(ae_templates.HERE / "_lib.jsx").read()
+    assert "AEFX.loopify" in lib and "startTime = -D" in lib
+    fire = open(ae_templates.build_script("fire", {})["script"]).read()
+    assert "AEFX.loopify" in fire and "Offset Turbulence" in fire and "wiggle(11" in fire and "alpha_cut" in fire
+    haze = open(ae_templates.build_script("smoke_haze", {})["script"]).read()
+    assert "ADBE Twirl" in haze and "AEFX.loopify" in haze and "em.inverted = true" in haze
+    puff = open(ae_templates.build_script("smoke_puff", {})["script"]).read()
+    assert "_shade" in puff and "P.burst" in puff
+    bolt = open(ae_templates.build_script("lightning", {"restrikes": 3})["script"]).read()
+    assert "restrikes" in bolt and "duplicate()" in bolt and '"restrikes": 3' in bolt

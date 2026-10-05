@@ -42,6 +42,8 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | ice_shatter | an ice block forms, cracks (Voronoi lines), shatters into shards that fly and fall; mist, ring | one-shot 1.6 s |
 | bubbles | bubbles rise, wobble, squish and pop; clear centres, fresnel rims | loop 4 s |
 | water_splash | droplets on parabolas (stretched along their speed), two ripple rings, mist | one-shot 1.3 s |
+| explosion | 1/t flash, Sedov-Taylor shockwave (r ~ t^0.4), fireball cooling white -> orange -> smoke and rising, debris with drag, embers, dust | one-shot 1.9 s |
+| shine | instant bloom with a 1/t tail, two counter-turning ray stars, anamorphic streak, chromatic halo rings, twinkles; `pulse` loops it | one-shot 1.4 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
 ## Your own art (`art=`)
@@ -85,6 +87,25 @@ licking a frame are an After Effects `fire` flipbook placed with ae_fx_to_spine 
   whole frame: add it once with ae_fx_to_spine, then clone the slot along the edges with different bone scale/rotation and a
   different sequence `index` per clone (loop phase), so the flames never move in step and the atlas holds one flipbook.
 - `electric_frame` re-rendered at any aspect (e.g. width 1024, height 160, green) gives a long energy bar.
+
+## Exaggerated real physics (the house style)
+
+Every FX here follows real physics, then turns it up. The rules, so new recipes match:
+- Impulses: instant attack (<= 50 ms), then decay like 1/t or e^-kt with a long tail (`shine`, explosion flash, lightning).
+- Blasts: shockwave radius ~ t^0.4 (Sedov-Taylor) and it fades as it thins; the fireball balloons the same way, cools
+  white -> yellow -> orange -> dark smoke, and the smoke rises on its own heat (y ~ t^2).
+- Thrown things: parabolas with gravity; air drag makes velocity decay e^-kt; sprites are turned and STRETCHED along their
+  velocity (debris, splash drops). Landings make their own small event (splash landing rings).
+- Water: capillary rings spread as sqrt(t); a splash has a crown AND a central jet that pinches off a drop.
+- Vortices: inner layers spin faster (differential rotation); infalling specks speed up as r^-1.5 (Keplerian).
+- Hot gas (fire, haze): RISES and accelerates; a fast small turbulence rides over a slow big one; flames flicker ~11 Hz; a
+  loop with real drift is rendered twice as long and crossfaded (`AEFX.loopify`), then thresholded AFTER the crossfade.
+- Smoke puffs: burst (expansion with exponent 4), drag brings it to a crawl, it rolls as it slows (turbulence grows with
+  time), is lit from above, and erodes from its thin parts as it dilutes.
+- Lightning: stepped leader grows across, return stroke snaps bright + branches, branches die first, channel narrows and
+  dims, restrikes hit the same channel with new forks; the flash is the channel's own air-glow, never a full-frame solid.
+- Dendrites (frost): tips race then slow (diffusion-limited), branch at 60 degrees, stop on contact, glow at the growth
+  front, then a late wave of needles frosts everything over.
 
 ## Ice and water
 
@@ -205,6 +226,13 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
   Caustics = inverted Cell Pattern (bubbles type) + Easy Levels input black ~0.38 to keep only the bright webs, then Tritone.
 - Frost that reads as frost is DENSE: many short ferns with frequent 60-degree branches plus a blurred frosted film; sparse
   long branches look like twigs.
+- Crossfading two noise fields (loopify) halves their contrast: anything nonlinear (threshold, levels) must come AFTER
+  the crossfade. Alpha and colour want different curves: a hard alpha cut (thin gas vanishes) with a soft colour ramp;
+  a soft alpha turns every mid-grey into a dim brown wash over the background.
+- A Twirl on a layer whose MASK is inside the twirl drags the mask edge into curved black bands: mask after the twirl
+  (a black overlay with an inverted feathered mask).
+- A blurred copy of the bolt at 25% is a flash; at 100% (or a full-frame solid) it is a white blob / lit rectangle.
+- `a or b and c` is `a or (b and c)`; don't write segment tests like that.
 - Flare streaks wider than the view clip hard; keep them ~1.2x the subject, and give streaks real thickness
   (a 1-px hairline reads as a scratch).
 - GIF previews of soft gradients dither to 10+ MB. Judge on the contact sheet; share a quantised/resized GIF.

@@ -140,6 +140,16 @@ AEFX.radialGlow = function (comp, name, color, cx, cy, radius, soften) {
   fill.setTrackMatte(matte, TrackMatteType.LUMA);
   return { fill: fill, matte: matte };
 };
+// Seamless loop of a precomp whose content DRIFTS (fire rising, haze convecting). Build `src` for 2*D seconds; this
+// returns a D-second comp that crossfades src(t+D) into src(t) over [0, D]: both ends equal src(D), so it loops with
+// real motion instead of a static evolution cycle. `src` must be opaque (a black base solid) for the crossfade.
+AEFX.loopify = function (src, name, D) {
+  var out = AEFX.comp(name, src.width, src.height, src.frameRate, D);
+  var late = out.layers.add(src); late.name = "late"; late.startTime = -D;
+  var early = out.layers.add(src); early.name = "early";
+  AEFX.keys(early.opacity, [[0, 0], [D, 100]], false);
+  return out;
+};
 AEFX.done = function (comp, extra) {
   var s = '{"comp":"' + comp.name + '","width":' + comp.width + ',"height":' + comp.height + ',"fps":' + comp.frameRate +
           ',"frames":' + Math.round(comp.duration * comp.frameRate);
