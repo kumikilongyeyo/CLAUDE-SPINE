@@ -40,6 +40,11 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | smoke_glow | rising smoke haze filling a box + flame-colour glow at its base | loop 4 s |
 | meteor_trace | bright head + comet tail racing around a rounded-rect frame, shedding sparks | loop 2 s |
 | projectile | glowing shot on an arc to (tx, ty) with a comet tail, then impact flash/ring/star | one-shot ~1.35 s |
+| frost | frost ferns grow across a box (edges, or centre like a snowflake) as a generated flipbook; cold glow, glints | window 2.4 s |
+| icicles | icicles grow down from the top edge under a frost crust; glints run down, drops swell and fall | window 3 s |
+| ice_shatter | an ice block forms, cracks (Voronoi lines), shatters into shards that fly and fall; mist, ring | one-shot 1.6 s |
+| bubbles | bubbles rise, wobble, squish and pop; clear centres, fresnel rims | loop 4 s |
+| water_splash | droplets on parabolas (stretched along their speed), two ripple rings, mist | one-shot 1.3 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
 ## Your own art (`art=`)
@@ -83,6 +88,19 @@ licking a frame are an After Effects `fire` flipbook placed with ae_fx_to_spine 
   whole frame: add it once with ae_fx_to_spine, then clone the slot along the edges with different bone scale/rotation and a
   different sequence `index` per clone (loop phase), so the flames never move in step and the atlas holds one flipbook.
 - `electric_frame` re-rendered at any aspect (e.g. width 1024, height 160, green) gives a long energy bar.
+
+## Ice and water
+
+Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is
+`cell_glow` (dark fill) + `frost` + `icicles` (y = cell top) + `ice_shatter` at the end. Underwater is `bubbles` over the AE
+`caustics` template (shimmering light webs, additive, loops) added behind the first bubble slot with ae_fx_to_spine.
+
+- `frost` grows by a GENERATED FLIPBOOK: the ferns are grown once in Python (branches at the 60 degrees of ice crystals,
+  each point stamped with its freeze time), and frame k shows what has frozen by k/frames. Exact growth, a sequence at
+  runtime, nothing to key. `grow` = seconds to freeze, `mode` = edges | center, `fade` = seconds to melt away at the end.
+- `ice_shatter` cuts a procedural ice block into Voronoi shards (one image per shard, bright cut edges); each shard is a
+  slot on its own bone, thrown out from the centre and pulled down by gravity.
+- Droplets are turned and stretched along their velocity (unwrapped angles) so they read as water, not confetti.
 
 ## Hybrids: Spine recipe + After Effects part
 
@@ -186,6 +204,10 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
   A mask on a MULTIPLY layer leaves the noise outside the mask; mask the noise itself and keep a black solid at the bottom of
   a luma precomp, or a transparent area turns into a hard white rectangle. Fire's faint noise reaches the comp sides: use edge_fade.
   ae_run_script needs an explicit `return`.
+- AE 2026 Cell Pattern shows its Contrast as "Contextual Slider"; set it by match name ("ADBE Cell Pattern-0003").
+  Caustics = inverted Cell Pattern (bubbles type) + Easy Levels input black ~0.38 to keep only the bright webs, then Tritone.
+- Frost that reads as frost is DENSE: many short ferns with frequent 60-degree branches plus a blurred frosted film; sparse
+  long branches look like twigs.
 - Flare streaks wider than the view clip hard; keep them ~1.2x the subject, and give streaks real thickness
   (a 1-px hairline reads as a scratch).
 - GIF previews of soft gradients dither to 10+ MB. Judge on the contact sheet; share a quantised/resized GIF.

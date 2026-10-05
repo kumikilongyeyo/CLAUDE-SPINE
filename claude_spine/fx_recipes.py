@@ -1998,3 +1998,7 @@ def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind
            "bones": sum(p["bones"] for p in parts), "slots": [s for p in parts for s in p["slots"]],
            "events": [p["event"] for p in parts] + ["fx_reveal_end"]}
     return out
+
+
+# ice and water elements register themselves into RECIPES / ROLES
+from . import fx_elements  # noqa: E402,F401

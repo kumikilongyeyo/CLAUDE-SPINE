@@ -36,7 +36,7 @@ def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
     assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) or (name == "cell_glow" and s.blend == "normal")
-               or (name in ("puff", "smoke_glow") and s.blend == "normal")
+               or (name in ("puff", "smoke_glow", "frost", "ice_shatter") and s.blend == "normal")
                for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)
@@ -510,3 +510,75 @@ def test_new_ae_templates_build():
     assert "Cycle Evolution" in src and '"black"' in src
     src = open(ae_templates.build_script("fire", {"edge_fade": 0.2})["script"]).read()
     assert "ADBE Mask Feather" in src
+
+
+# ---------------------------------------------------------------- ice and water
+def test_frost_is_a_growing_flipbook(proj):
+    import numpy as np
+    res = R.apply(proj, "frost", options={"width": 160.0, "height": 120.0, "frames": 10, "grow": 1.0})
+    att = next(proj.data.skin("default").attachments[s]["fx"] for s in res["slots"]
+               if getattr(proj.data.skin("default").attachments[s]["fx"], "sequence", None))
+    assert att.sequence.count == 10 and att.path.startswith("fx/frost_edges_")
+    cover = [np.asarray(proj.image(f"{att.path}{i:02d}"))[..., 3].sum() for i in range(10)]
+    assert all(b >= a for a, b in zip(cover, cover[1:])) and cover[-1] > 3 * cover[0]   # it only ever grows
+    a = proj.data.animations[res["animation"]]
+    seq = a.attachments["default"][res["slots"][1]]["fx"]["sequence"][0]
+    assert seq.mode == "once" and seq.delay == pytest.approx(0.1, abs=1e-4)
+    assert any(e.name == "fx_frost_done" and e.time == pytest.approx(1.0) for e in a.events)
+    flake = R.apply(proj, "frost", name="flake", options={"mode": "center", "frames": 6})
+    assert flake["frames"] == 6
+
+
+def test_icicles_hang_from_the_top_and_drip(proj):
+    res = R.apply(proj, "icicles", count=5, options={"width": 200.0, "height": 100.0})
+    assert res["icicles"] == 5
+    grp = proj.data.bone("fx_icicles_icicles")                              # the recipe's inner group, on the top edge
+    assert grp.y == pytest.approx(50)                                     # the top edge of the box
+    icis = [s for s in res["slots"] if proj.data.skin("default").attachments[s]["fx"].path.startswith("fx/icicle")]
+    assert len(icis) == 5
+    for s in icis:
+        att = proj.data.skin("default").attachments[s]["fx"]
+        assert att.y == pytest.approx(-att.height / 2, abs=0.02)        # hangs down from its bone
+    a = proj.data.animations[res["animation"]]
+    drops = [s for s in res["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/drop"]
+    assert drops and all("translate" in a.bones[proj.data.slot(s).bone] for s in drops)
+    dry = R.apply(proj, "icicles", name="dry", options={"drips": False})
+    b = proj.data.animations[dry["animation"]]
+    assert not any(proj.data.slot(s).bone in b.bones and "translate" in b.bones[proj.data.slot(s).bone]
+                   for s in dry["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/drop")
+
+
+def test_ice_shatter_cracks_then_breaks(proj):
+    res = R.apply(proj, "ice_shatter", start=0.2, count=10)
+    assert res["shards"] >= 6 and res["shatter_at"] == pytest.approx(0.95)
+    a = proj.data.animations[res["animation"]]
+    ev = {e.name: e.time for e in a.events}
+    assert ev["fx_ice_crack"] == pytest.approx(0.65) and ev["fx_ice_shatter"] == pytest.approx(0.95)
+    shard = next(s for s in res["slots"] if proj.data.skin("default").attachments[s]["fx"].path.startswith("fx/iceshard_"))
+    keys = a.slots[shard]["attachment"]
+    assert keys[0].name is None and keys[1].time == pytest.approx(0.95)    # shards only exist once it breaks
+
+
+def test_bubbles_loop_and_splash_drops_never_spin(proj):
+    res = R.apply(proj, "bubbles", count=6)
+    a = proj.data.animations[res["animation"]]
+    for s in res["slots"]:
+        ks = a.slots[s]["rgba"]
+        assert ks[0].color == ks[-1].color and ks[-1].time == pytest.approx(4.0)
+    sp = R.apply(proj, "water_splash", count=8)
+    b = proj.data.animations[sp["animation"]]
+    drops = [proj.data.slot(s).bone for s in sp["slots"] if proj.data.skin("default").attachments[s]["fx"].path == "fx/drop"]
+    assert len(drops) == 8
+    for bn in drops:                                                     # thrown up, then pulled back down by gravity
+        ys = [k.y for k in b.bones[bn]["translate"]]
+        assert max(ys) > 5 and ys[-1] < max(ys) - 20
+        sc = b.bones[bn]["scale"]                                        # stretched along its speed, never squashed flat
+        assert all(0.5 < k.x <= 1.0 and 1.0 <= k.y < 1.8 for k in sc)
+    assert qa.validate(proj.data)["ok"]
+
+
+def test_caustics_template():
+    from claude_spine import ae_templates
+    assert "caustics" in ae_templates.list_templates()
+    src = open(ae_templates.build_script("caustics", {})["script"]).read()
+    assert "ADBE Cell Pattern-0003" in src and "Cycle Evolution" in src and "Easy Levels2" in src
