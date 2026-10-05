@@ -33,6 +33,8 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | hit_burst | starburst + core + two shock rings + sparks (fires fx_hit) | one-shot 0.95 s |
 | lock_on | crosshairs lock onto any number of targets in turn, fire, hit bursts land | bundle |
 | cell_glow | glowing cell frame(s) with a twinkling starfield, pop = flash + burst + sparkles; resizable 9-slice | window 3.2 s |
+| puff | cartoon puff of smoke: flash, cloud lobes burst out and thin, soft ring (clears a symbol) | one-shot 1.15 s |
+| smoke_glow | rising smoke haze filling a box + flame-colour glow at its base | loop 4 s |
 | magic_reveal | the seven lotus recipes, timed like the reference | bundle 13.2 s |
 
 ## Your own art (`art=`)
@@ -57,6 +59,15 @@ bounding box, so its centre is the target point), or a dict `{path, blend, scale
   the middle stretches, so draw the edge cross-section constant along its length.
 - Bundles take art per member: `lock_on` -> `{"crosshair": {...}, "hit_burst": {...}}`, `magic_reveal` -> `{"<recipe>": {...}}`.
 - Art is copied into the project as `images/fx/art_<recipe>_<role>.png`; edit that file (or the source) and rebuild to update.
+
+## Mixing recipes into one clip (example: a gold cell that fills with haze, then a puff clears it)
+
+    fx_recipe recipe=smoke_glow into=gold_cell options={width: 130, height: 350, alpha: 0.45}
+    fx_recipe recipe=cell_glow  into=gold_cell color=FFC93C options={width: 130, height: 350, color2: FFE9A0, pop: 2.9, fill_color: C98A7A, fill_alpha: 0.35}
+    fx_recipe recipe=puff       into=gold_cell start=2.85 options={radius: 130, size: 170, color2: FFE9A0}
+
+All three land in the same animation; draw order follows call order (later = in front; use front_of / behind to change it). Flames
+licking a frame are an After Effects `fire` flipbook placed with ae_fx_to_spine (not a recipe yet).
 
 ## Hybrids: Spine recipe + After Effects part
 

@@ -321,7 +321,7 @@ def tex_frame9(color: str = "20E8C8", n: int = 192) -> Image.Image:
 def tex_cellfill(n: int = 192) -> Image.Image:
     """Soft rounded-rectangle fill, brighter toward the rim (white; tint with the slot colour)."""
     d = _rr_sdf(n, 0.78, 0.78, 0.14)
-    inside = np.where(d < 0, 0.30 + 0.5 * np.exp(-(-d / 0.20) ** 2), np.exp(-(d / 0.05) ** 2) * 0.8)
+    inside = np.where(d < 0, 0.85 + 0.15 * np.exp(-(-d / 0.20) ** 2), np.exp(-(d / 0.05) ** 2) * 0.8)
     x, y = _grid(n)
     a = inside * np.clip((1 - np.maximum(np.abs(x), np.abs(y))) / 0.05, 0, 1)
     return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
@@ -380,11 +380,54 @@ def tex_starburst(color: str = "FFB347", n: int = 512, rays: int = 13, seed: int
     return _colorize(np.clip(a, 0, 1), *_palette(color))
 
 
+
+def tex_cloud(n: int = 256, seed: int = 4, soft: float = 0.06, shade: float = 0.24) -> Image.Image:
+    """A round cartoon puff: 6-8 overlapping soft discs (metaballs) with a crisp-soft rim and shading from the top-left.
+    (A radius wobbled by sines made spiky crumpled-paper shapes; overlapping discs read as a cloud.) White; tint with the slot."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(n)
+    field = np.zeros((n, n))
+    m = int(rng.integers(6, 9))
+    for k in range(m):
+        ang = rng.uniform(0, 2 * math.pi)
+        dist = rng.uniform(0.0, 0.42) if k else 0.0
+        rad = rng.uniform(0.26, 0.40) if k else 0.46
+        cx, cy = math.cos(ang) * dist, math.sin(ang) * dist
+        field += np.exp(-((np.hypot(x - cx, y - cy)) / rad) ** 2.4)
+    a = np.clip((field - 0.62) / (soft * 4), 0, 1)
+    a = a * a * (3 - 2 * a)
+    light = 1.0 - shade * np.clip((x * 0.45 - y * 0.55 + 1) / 2, 0, 1) * np.clip(np.hypot(x, y) / 0.7, 0, 1)
+    rgb = np.dstack([light, light, light * 0.985])
+    return _rgba(rgb, a * np.clip((1 - np.hypot(x, y)) / 0.05, 0, 1))
+
+
+def tex_smoke(n: int = 256, seed: int = 8) -> Image.Image:
+    """A billowy smoke blob: soft round envelope times fractal noise, no hard rim. White (tint with the slot)."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(n)
+    r = np.hypot(x, y)
+    nz = np.zeros((n, n))
+    amp, tot = 1.0, 0.0
+    for o in range(5):
+        cells = 3 * 2 ** o
+        lo = rng.random((cells, cells))
+        layer = np.asarray(Image.fromarray((lo * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC), np.float32) / 255
+        nz += amp * layer
+        tot += amp
+        amp *= 0.5
+    nz /= tot
+    env = np.exp(-(r / 0.55) ** 2)
+    a = np.clip((nz - 0.28) * 2.2, 0, 1) * env
+    a *= np.clip((1 - r) / 0.15, 0, 1)
+    return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
+
+
 # texture name -> factory (white textures are tinted per slot; coloured ones are named with their colour)
 WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
     "fx/wisp": tex_wisp, "fx/beam": tex_beam, "fx/mote": tex_mote, "fx/reflect": tex_reflect,
     "fx/glow": tex_glow, "fx/ring": tex_ring, "fx/spark": tex_spark, "fx/column": tex_column,
     "fx/rrglow": lambda: tex_rrglow(), "fx/cellfill": lambda: tex_cellfill(),
+    "fx/cloud": tex_cloud, "fx/smoke": tex_smoke,
 }
 
 
@@ -1306,7 +1349,8 @@ def cell_glow(c: Ctx, P: dict) -> dict:
     cells = P["cells"] or [[0.0, 0.0, float(P["width"]), float(P["height"])]]
     tname = f"fx/frame9_{col}"
     mk = lambda: tex_frame9(col)  # noqa: E731
-    fill_hex = "%02X%02X%02X" % tuple(int(v) for v in _mix(_rgb(col), (0, 0, 0), 0.8))   # dark tint: the cell darkens what is behind it
+    fill_hex = _hexn(P["fill_color"], "") if P["fill_color"] else "%02X%02X%02X" % tuple(int(v) for v in _mix(_rgb(col), (0, 0, 0), 0.8))   # default: dark tint, the cell darkens what is behind it
+    fill_a = float(P["fill_alpha"])
     rng = np.random.default_rng(c.seed + 61)
     out_cells = []
     for ci, (cx, cy, w, h) in enumerate(cells):
@@ -1343,7 +1387,7 @@ def cell_glow(c: Ctx, P: dict) -> dict:
         flashk = lambda u: math.exp(-((u - pu - 0.05) / 0.08) ** 2) if pop > 0 else 0.0  # noqa: E731
         pulse = lambda u: 0.85 + 0.15 * math.sin(2 * math.pi * 0.9 * u + ci)  # noqa: E731
         c.color_keys(s_frame, ts, lambda u: hexa("FFFFFF" if flashk(u) > 0.5 else col, c.a(appear(u) * (1 - gone(u)) * pulse(u))))
-        c.color_keys(s_fill, ts, lambda u: hexa(fill_hex, c.a(0.78 * appear(u) * (1 - gone(u)) * (0.9 + 0.1 * pulse(u)))))
+        c.color_keys(s_fill, ts, lambda u: hexa(fill_hex, c.a(fill_a * appear(u) * (1 - gone(u)) * (0.9 + 0.1 * pulse(u)))))
         c.bone_keys(grp, "scale", ts, lambda u: ((0.92 + 0.08 * appear(u)) * (1 + 0.28 * popk(u)),) * 2)
         for sp in specks:
             c.bone_keys(sp["b"], "translate", ts, lambda u, sp=sp: (sp["dx"] * math.sin(0.6 * u + sp["ph"]), sp["dy"] * math.cos(0.5 * u + sp["ph"] * 1.7)))
@@ -1369,6 +1413,92 @@ def cell_glow(c: Ctx, P: dict) -> dict:
         out_cells.append(dict(frame=s_frame, corners=corners, pop_at=c.T(pu) if pop > 0 else None))
     return c.result(duration=dur * c.k, cells=len(cells), corner_bones=[v for o in out_cells for v in o["corners"].values()],
                     pops=[o["pop_at"] for o in out_cells])
+
+
+def puff(c: Ctx, P: dict) -> dict:
+    """A cartoon puff of smoke: cloud lobes burst outward, swell, then thin out; a flash and a soft ring at the start."""
+    D = 1.15
+    col = _hexn(P["color"], "FFF1DC")
+    flash_c = _hexn(P["color2"], "FFD27A")
+    n = int(P["count"])
+    R_ = float(P["radius"])
+    size = float(P["size"])
+    blend = str(P["blend"])
+    rise = float(P["rise"])
+    rng = np.random.default_rng(c.seed + 71)
+    grp = c.bone("puff", c.group, 0, 0)
+    b_fl, b_ring = c.bone("flash", grp), c.bone("ring", grp)
+    s_fl = c.slot(b_fl, "fx/glow", size * 3.2, role="glow")
+    s_ring = c.slot(b_ring, "fx/ring", size * 3.0, role="ring")
+    blobs = []
+    for i in range(n):
+        a = 2 * math.pi * i / n + rng.uniform(-0.35, 0.35)
+        bn = c.bone(f"b{i}", grp)
+        sl = c.slot(bn, "fx/cloud", size * rng.uniform(0.8, 1.25), blend=blend, role="cloud")
+        blobs.append(dict(b=bn, s=sl, a=a, d=R_ * rng.uniform(0.55, 1.0), g=rng.uniform(1.0, 1.55), rot=rng.uniform(-35, 35),
+                          delay=rng.uniform(0, 0.08), tint=("FFFFFF" if rng.random() < 0.5 else col)))
+    # a bigger core puff in the middle
+    bc = c.bone("core", grp)
+    sc = c.slot(bc, "fx/cloud", size * 1.5, blend=blend, role="cloud")
+    ts = times_dense(0, D, 30)
+    c.show([s_fl, s_ring, sc] + [x["s"] for x in blobs], 0, D)
+    fl = lambda u: math.exp(-((u - 0.05) / 0.10) ** 2)  # noqa: E731
+    c.color_keys(s_fl, ts, lambda u: hexa(flash_c, c.a(0.95 * fl(u))))
+    c.bone_keys(b_fl, "scale", ts, lambda u: (0.5 + 1.0 * ease_out(u / 0.25, 2.5),) * 2)
+    c.bone_keys(b_ring, "scale", ts, lambda u: (0.2 + 1.2 * ease_out(u / 0.6, 2.5),) * 2)
+    c.color_keys(s_ring, ts, lambda u: hexa(col, c.a(0.55 * (1 - smooth(u, 0, 0.6)) * smooth(u, 0, 0.03))))
+    env = lambda u, dl: (smooth(u, dl, dl + 0.10)) * (1 - smooth(u, dl + 0.45, dl + 1.0))  # noqa: E731
+    for bl in blobs:
+        dl = bl["delay"]
+        c.bone_keys(bl["b"], "translate", ts, lambda u, bl=bl: (math.cos(bl["a"]) * bl["d"] * ease_out((u - bl["delay"]) / 0.7, 2.4) if u >= bl["delay"] else 0.0,
+                                                                  (math.sin(bl["a"]) * bl["d"] * 0.8 * ease_out((u - bl["delay"]) / 0.7, 2.4) + rise * max(0.0, u - bl["delay"])) if u >= bl["delay"] else 0.0))
+        c.bone_keys(bl["b"], "scale", ts, lambda u, bl=bl: ((0.25 + (bl["g"] - 0.25) * ease_out((u - bl["delay"]) / 0.55, 2.2)) if u >= bl["delay"] else 0.0,) * 2)
+        c.bone_keys(bl["b"], "rotate", ts, lambda u, bl=bl: bl["rot"] * ease_out((u - bl["delay"]) / 0.9, 1.6) if u >= bl["delay"] else 0.0)
+        c.color_keys(bl["s"], ts, lambda u, bl=bl: hexa(bl["tint"], c.a(0.95 * env(u, bl["delay"]))))
+    c.bone_keys(bc, "scale", ts, lambda u: (0.3 + 1.1 * ease_out(u / 0.5, 2.2),) * 2)
+    c.color_keys(sc, ts, lambda u: hexa("FFFFFF", c.a(0.95 * env(u, 0.0))))
+    c.ab.event(c.T(0.0), "fx_puff")
+    return c.result(duration=D * c.k, blobs=n)
+
+
+def smoke_glow(c: Ctx, P: dict) -> dict:
+    """Rising smoke haze inside a box with a glow at its base (flame light). Loops exactly every `duration`."""
+    D = float(P["duration"])
+    col = _hexn(P["color"], "FF9F8A")
+    glow_c = _hexn(P["color2"], "FFC24A")
+    W, H = float(P["width"]), float(P["height"])
+    n = int(P["count"])
+    blend = str(P["blend"])
+    alpha = float(P["alpha"])
+    rng = np.random.default_rng(c.seed + 81)
+    grp = c.bone("smoke", c.group, 0, 0)
+    b_g = c.bone("base", grp, 0, -H / 2, sy=0.45)
+    s_g = c.slot(b_g, "fx/glow", max(W * 2.2, 160), role="glow")
+    blobs = []
+    for i in range(n):
+        bn = c.bone(f"s{i}", grp)
+        sl = c.slot(bn, "fx/smoke", float(rng.uniform(1.4, 2.1)) * max(W, 90), blend=blend, role="smoke")
+        blobs.append(dict(b=bn, s=sl, x=float(-W / 2 + (i + rng.uniform(0.2, 0.8)) / n * W), m=int(rng.choice([1, 1, 2])), ph=float(rng.uniform(0, 1)),
+                          sw=float(rng.uniform(6, 22)), rot=float(rng.uniform(-40, 40)), g=float(rng.uniform(1.0, 1.6)), amp=float(rng.uniform(0.6, 1.0))))
+    c.show([s_g] + [x["s"] for x in blobs], 0, None)
+    ts = times_dense(0, D, 12)
+    br = lambda u, k, ph=0.0: 0.5 + 0.5 * math.sin(2 * math.pi * k * u / D + ph)  # noqa: E731
+    c.color_keys(s_g, ts, lambda u: hexa(glow_c, c.a(0.45 + 0.2 * br(u, 3, 0.4) + 0.1 * br(u, 7))))
+    c.bone_keys(b_g, "scale", ts, lambda u: (0.95 + 0.1 * br(u, 3, 0.4), 0.95 + 0.1 * br(u, 3, 0.4)))
+    for bl in blobs:
+        tsd = set(times_dense(0, D, 8))
+        for k in range(1, bl["m"] + 1):
+            wrap = (k - bl["ph"]) * D / bl["m"]
+            if 0 < wrap < D:
+                tsd.update([wrap - 0.002, wrap])
+        tsd = sorted(t for t in tsd if 0 <= t <= D)
+        q = lambda u, bl=bl: (u * bl["m"] / D + bl["ph"]) % 1.0  # noqa: E731
+        c.bone_keys(bl["b"], "translate", tsd, lambda u, bl=bl, q=q: (bl["x"] + bl["sw"] * math.sin(2 * math.pi * (q(u) + bl["ph"])),
+                                                                       -H / 2 + 0.1 * H + q(u) * H * 0.85))
+        c.bone_keys(bl["b"], "scale", tsd, lambda u, bl=bl, q=q: ((0.55 + (bl["g"] - 0.55) * q(u)),) * 2)
+        c.bone_keys(bl["b"], "rotate", tsd, lambda u, bl=bl, q=q: bl["rot"] * q(u))
+        c.color_keys(bl["s"], tsd, lambda u, bl=bl, q=q: hexa(col, c.a(alpha * bl["amp"] * math.sin(math.pi * q(u)) ** 1.1)))
+    return c.result(duration=D * c.k, loop=D, blobs=n)
 
 
 # ------------------------------------------------------------------ registry
@@ -1461,7 +1591,23 @@ RECIPES: dict[str, dict[str, Any]] = {
         anchor="Cell centre (each entry of cells is [dx, dy, width, height] from it).",
         options=dict(width=(130.0, "cell width"), height=(130.0, "cell height"), cells=(None, "list of [dx, dy, w, h] to build several cells at once"),
                      color2=("3CFF8A", "pop burst colour"), pop=(2.4, "seconds when it pops (<= 0: never pops, just glows)"),
-                     stagger=(0.0, "seconds between cells (appear and pop)"), specks=(None, "starfield count per cell (default from area)"))),
+                     stagger=(0.0, "seconds between cells (appear and pop)"), specks=(None, "starfield count per cell (default from area)"),
+                     fill_color=("", "hex of the fill (default: a dark tint of color, which darkens what is behind)"),
+                     fill_alpha=(0.55, "fill opacity"))),
+    "puff": dict(
+        fn=puff, duration=1.15, kind="one-shot", color="FFF1DC", count=9,
+        summary="Cartoon puff of smoke: cloud lobes burst outward from a flash, swell and thin out; soft ring. Clear a symbol, "
+                "hide a swap, punctuate a pop. Event fx_puff.",
+        anchor="Puff centre.",
+        options=dict(color2=("FFD27A", "flash colour"), radius=(110.0, "how far the lobes travel"), size=(130.0, "lobe size"),
+                     blend=("normal", "normal (opaque cartoon puff) | additive (glowing)"), rise=(24.0, "upward drift in units"))),
+    "smoke_glow": dict(
+        fn=smoke_glow, duration=4.0, kind="loop", color="FF9F8A", count=14,
+        summary="Rising smoke haze filling a box with a glow at its base (flame light); loops exactly. Behind a glowing cell, "
+                "over a fire, above a bar.",
+        anchor="Box centre (width x height).",
+        options=dict(width=(130.0, "box width"), height=(350.0, "box height"), color2=("FFC24A", "glow at the base"),
+                     blend=("normal", "normal | additive"), alpha=(0.5, "smoke opacity"))),
     "twinkles": dict(
         fn=twinkles, duration=5.8, kind="window", count=9,
         summary="Four-point stars that pop, spin and vanish, two or three times each, around the subject.",
@@ -1494,6 +1640,8 @@ ROLES: dict[str, dict[str, str]] = {
                   "ring": "the two shock rings", "core": "the hot centre"},
     "cell_glow": {"frame": "9-slice frame art: give slice (corner size in art px) and px (units per art px)", "fill": "9-slice fill art",
                   "mote": "one starfield dot", "spark": "one pop sparkle", "ring": "the pop shock ring", "glow": "the pop glow"},
+    "puff": {"cloud": "one cloud lobe (also the core), roughly round, centred", "glow": "the flash", "ring": "the soft ring"},
+    "smoke_glow": {"smoke": "one smoke blob, soft, centred", "glow": "the glow at the base"},
 }
 for _n, _d in ROLES.items():
     RECIPES[_n]["roles"] = _d

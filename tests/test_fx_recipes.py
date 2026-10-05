@@ -35,6 +35,7 @@ def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
     assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) or (name == "cell_glow" and s.blend == "normal")
+               or (name in ("puff", "smoke_glow") and s.blend == "normal")
                for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)
@@ -404,3 +405,35 @@ def test_art_for_rings_and_glows_too(proj, tmp_path):
     assert set(res["art"]) == {"ring", "glow", "flash"}
     paths = {proj.data.skin("default").attachments[s]["fx"].path for s in res["slots"]}
     assert {"fx/art_crosshair_ring", "fx/art_crosshair_glow", "fx/art_crosshair_flash", "fx/reticle_FFB02E"} <= paths
+
+
+# ---------------------------------------------------------------- puff, smoke glow, cell fill
+def test_puff_blend_count_and_event(proj):
+    res = R.apply(proj, "puff", count=5, start=1.0, options={"blend": "additive"})
+    assert res["blobs"] == 5 and all(s.blend == "additive" for s in proj.data.slots)
+    assert any(e.name == "fx_puff" and e.time == 1.0 for e in proj.data.animations[res["animation"]].events)
+    n = R.apply(proj, "puff", name="cartoon")
+    cloud = [s for s in proj.data.slots if s.name.startswith("fx_cartoon_b")]
+    assert cloud and all(s.blend == "normal" for s in cloud)           # the cartoon puff is opaque by default
+
+
+def test_smoke_glow_loops_and_fills_the_box(proj):
+    res = R.apply(proj, "smoke_glow", options={"width": 200.0, "height": 300.0}, count=10)
+    assert res["loop"] == 4.0 and res["blobs"] == 10
+    a = proj.data.animations[res["animation"]]
+    for sl in res["slots"][1:]:
+        keys = a.slots[sl]["rgba"]
+        assert keys[0].time == 0 and keys[-1].time == pytest.approx(4.0)
+        assert keys[0].color == keys[-1].color                         # the loop closes exactly
+    xt = []
+    for sl in res["slots"][1:]:
+        ks = a.bones[sl]["translate"]
+        xt.append(sum(k.x for k in ks) / len(ks))
+    assert max(xt) - min(xt) > 120, "blobs are spread across the width, not bunched on one side"
+
+
+def test_cell_glow_fill_options(proj):
+    res = R.apply(proj, "cell_glow", options={"fill_color": "C98A7A", "fill_alpha": 0.3})
+    fill = next(s for s in proj.data.slots if s.blend == "normal")
+    ks = proj.data.animations[res["animation"]].slots[fill.name]["rgba"]
+    assert all(k.color[:6] == "C98A7A" for k in ks) and max(int(k.color[6:8], 16) for k in ks) <= int(0.3 * 255) + 1
