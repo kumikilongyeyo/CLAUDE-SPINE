@@ -15,6 +15,7 @@ Format notes that bite:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,6 +79,35 @@ class _MaxRects:
         self.free = pruned
 
 
+def mesh_uv_extent(project: Project) -> dict[str, tuple[float, float, float, float] | None]:
+    """For every image a mesh draws: the UV box its vertices reach, (u0, v0, u1, v1) in 0..1 of the ORIGINAL image
+    (v down). Whitespace stripping must never crop inside it: a mesh vertex in the stripped border would map outside
+    the packed region and sample the neighbouring image on the page (a 9-slice's soft corner, a contour hull padded
+    past the art). Linked meshes get None (their UVs live on the parent): never strip those."""
+    out: dict[str, tuple[float, float, float, float] | None] = {}
+
+    def add(name, box):
+        if name in out and (out[name] is None or box is None):
+            out[name] = None
+        elif name in out:
+            o = out[name]
+            out[name] = (min(o[0], box[0]), min(o[1], box[1]), max(o[2], box[2]), max(o[3], box[3]))
+        else:
+            out[name] = box
+    for skin in project.data.skins:
+        for an, att in ((an, att) for atts in skin.attachments.values() for an, att in atts.items()):
+            if att.type not in ("mesh", "linkedmesh"):
+                continue
+            path = getattr(att, "path", None) or an
+            seq = getattr(att, "sequence", None)
+            frames = [path] if seq is None else [f"{path}{str(seq.start + i).zfill(seq.digits)}" for i in range(seq.count)]
+            uv = getattr(att, "uvs", None) if att.type == "mesh" else None
+            box = (min(uv[0::2]), min(uv[1::2]), max(uv[0::2]), max(uv[1::2])) if uv else None
+            for fr in frames:
+                add(fr, box)
+    return out
+
+
 def referenced_images(project: Project) -> list[str]:
     names: list[str] = []
     seen = set()
@@ -114,6 +144,7 @@ def pack(project: Project, out_dir: str | Path | None = None, name: str | None =
     name = name or project.name
     items = []
     missing = []
+    meshes = mesh_uv_extent(project) if strip else {}
     for n in referenced_images(project):
         try:
             im = project.image(n)
@@ -128,6 +159,13 @@ def pack(project: Project, out_dir: str | Path | None = None, name: str | None =
             bbox = im.getchannel("A").point(lambda a: 255 if a > 0 else 0).getbbox()
             if bbox is None:
                 bbox = (0, 0, 1, 1)
+            if n in meshes:                       # never crop inside what a mesh samples (+1 px for bilinear)
+                ub = meshes[n]
+                if ub is None:
+                    bbox = (0, 0, ow, oh)
+                else:
+                    bbox = (max(0, min(bbox[0], math.floor(ub[0] * ow) - 1)), max(0, min(bbox[1], math.floor(ub[1] * oh) - 1)),
+                            min(ow, max(bbox[2], math.ceil(ub[2] * ow) + 1)), min(oh, max(bbox[3], math.ceil(ub[3] * oh) + 1)))
             left, top = bbox[0], bbox[1]
             im = im.crop(bbox)
         items.append((n, im, left, top, ow, oh))

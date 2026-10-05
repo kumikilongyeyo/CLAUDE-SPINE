@@ -298,13 +298,20 @@ def fx_generate(project: str, preset: str, x: float = 0, y: float = 0, size: flo
 def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
               duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
               parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-              options: dict | None = None, art: dict | None = None) -> dict:
+              options: dict | None = None, art: dict | None = None, tier: str = "") -> dict:
     """Authored FX layers lifted from real reference clips: lotus set (rune_ring, burst_flare, rim_wisps, bloom_aura,
     floor_glow, fireflies, twinkles, plus magic_reveal = all seven timed like the clip, 13.2 s), light_beam (style
     gold | ribbon | blue), crosshair / hit_burst / lock_on (reticle locks on, fires, impact), cell_glow (resizable
     9-slice glowing cells that pop), puff (cartoon smoke puff, or flash + ring for an AE smoke_puff), smoke_glow (rising haze with a base glow),
     meteor_trace (comet racing around a frame), projectile (shot on an arc + impact), ice and water (frost, icicles,
-    ice_shatter, bubbles, water_splash; AE template caustics), explosion and shine, and the hybrids portal and electric_frame, whose plasma / lightning part is
+    ice_shatter, bubbles, water_splash; AE template caustics), explosion and shine, the reel moments reel_stop (spring thud, squash, dust, screen shake on your reel/screen bones
+    through inserted carrier bones) and anticipation_reel (accelerating heartbeat glow, edge flames or sparks, dimmed
+    neighbours), the slot families (spin: near_miss, spin_blur, turbo_spin, screen_shake; wins: payline,
+    win_highlight, multiplier_stack, win_rollup; payouts: coin_fountain, cascade_pop; features: wild_land, expanding_wild,
+    scatter_trigger, free_spins_transition; bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill; ambient: weather,
+    god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm; UI: button_press, idle_shimmer, focus_glow, padlock,
+    popup; recipes that move your reel / symbol / screen / button bones do it through inserted carrier bones, never your
+    own keys), and the hybrids portal and electric_frame, whose plasma / lightning part is
     After Effects: they return a ring_hint to pass to ae_fx_to_spine (guide explains). Procedural textures, additive only (one draw call), one group bone per recipe so it
     recolours, resizes and retimes as one piece, and it merges into any animation with into=.
 
@@ -317,7 +324,12 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
 
     art = your own pictures instead of the generated ones, keeping all the motion: {role: "file.png" |
     "file.psd#Layer" | {path, blend, scale, slice, px, anchor}}; the roles of each recipe are in the listing
-    (e.g. crosshair: reticle). For lock_on / magic_reveal key it by member: {"crosshair": {"reticle": ...}}."""
+    (e.g. crosshair: reticle). For lock_on / magic_reveal key it by member: {"crosshair": {"reticle": ...}}.
+
+    tier = small | medium | big | mega | epic: one recipe covers every win size (scale, counts, one-shot time and the
+    recipe's own tier overrides; see the listing's `tiers`). Bundles: sequence = any list of recipes with offsets into one
+    animation (options={steps: [{recipe, start, dx, dy, ...any fx_recipe argument}]}); win_banner = Big/Mega/Epic banner
+    from one recipe (tier= picks the layers; options={banner: bone} slams your banner art in on an exact spring)."""
     if recipe == "guide":
         from .fx_recipes_guide import GUIDE
         return {"guide": GUIDE}
@@ -327,7 +339,7 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
         raise ValueError("project is required to add a recipe")
     p = _open(project)
     res = fx_recipes.apply(p, recipe, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of,
-                           behind, count, name, options, art)
+                           behind, count, name, options, art, tier)
     return _saved(p, res)
 
 
@@ -517,6 +529,14 @@ def export_runtime(spine_project: str, out_dir: str, fmt: str = "json") -> dict:
     """Export a .spine project to runtime data with the Spine CLI (json|binary
     or a path to an export-settings JSON)."""
     return spine_cli.export_project(spine_project, out_dir, fmt)
+
+
+# rig families register their tools on this server (each module starts with `from .server import mcp, _open, _saved`)
+from . import tools_face  # noqa: E402,F401   rig_face, face_clip, look_at, lipsync, make_face_sample
+from . import tools_addons  # noqa: E402,F401   rig_serpent, rig_flier, attach_rig, sample makers
+from . import tools_gait  # noqa: E402,F401   gait, rig_quadruped, make_quadruped_sample
+from . import tools_body  # noqa: E402,F401   rig_biped, clip_set, secondary, squash_stretch, qa_character, make_biped_sample
+from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sample
 
 
 def main() -> None:

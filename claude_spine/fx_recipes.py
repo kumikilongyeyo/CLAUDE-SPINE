@@ -296,6 +296,7 @@ def tex_rrglow(w: float = 400, h: float = 400, corner: float = 0.14, spread: flo
     inn = 0.9 * np.exp(-(np.maximum(-d, 0) / (spread * 0.9)) ** 2)     # inside: fades inward, no fill
     a = np.where(d > 0, out, inn)
     a *= np.clip((1 - np.hypot(x, y) * 0.74) / 0.08, 0, 1)
+    a *= np.clip((1 - np.maximum(np.abs(x), np.abs(y))) / 0.06, 0, 1)   # exactly 0 on the border: no faint box edge
     return _rgba(np.ones((n, n)), np.clip(a, 0, 1))
 
 
@@ -1548,7 +1549,6 @@ def puff(c: Ctx, P: dict) -> dict:
     if sc:
         c.bone_keys(bc, "scale", ts, lambda u: (0.3 + 1.1 * ease_out(u / 0.5, 2.2),) * 2)
         c.color_keys(sc, ts, lambda u: hexa("FFFFFF", c.a(0.95 * env(u, 0.0))))
-    c.ab.event(c.T(0.0), "fx_puff")
     hint = dict(parent=c.group, front_of=ring_after, mode="alpha", seq_mode="once", start=c.T(0.0),
                 note="realistic smoke: ae_template smoke_puff -> save -> ae_fx_to_spine with these args (scale ~ size*2.6/comp size)")
     return c.result(duration=D * c.k, blobs=n, ae_hint=hint)
@@ -1885,7 +1885,6 @@ def shine(c: Ctx, P: dict) -> dict:
         c.ab.slot_attachment(t_["s"], [(0.0, None), (c.T(t_["t"]), "fx"), (c.T(min(D, t_["t"] + t_["life"])), None)])
         c.ab.bone(t_["b"], "scale", _uniq([(c.T(t_["t"]), 0, 0), (c.T(t_["t"] + t_["life"] * 0.4), 1, 1), (c.T(min(D, t_["t"] + t_["life"])), 0, 0)]), "quad_in_out")
         c.ab.bone(t_["b"], "rotate", _uniq([(c.T(t_["t"]), 0), (c.T(min(D, t_["t"] + t_["life"])), t_["rot"])]), "linear")
-    c.ab.event(c.T(0.0), "fx_shine")
     return c.result(duration=D * c.k, loop=(D if pulse > 0 else None))
 
 
@@ -2106,6 +2105,10 @@ def list_recipes() -> dict:
                     "overrides": {"default": {}, "what": "{recipe: {param: value}} to retune any member"}},
         "art_note": "art={'<recipe>': {role: spec}} for any member; roles are listed under that recipe",
     }
+    out.update({k: dict(v) for k, v in BUNDLE_INFO.items()})
+    for n, d in RECIPES.items():
+        if d.get("tiers"):
+            out[n]["tiers"] = d["tiers"]
     return out
 
 
@@ -2123,20 +2126,61 @@ def _params(recipe: str, color: str, count: int, duration: float, options: dict 
     return P
 
 
+# win tiers: one recipe covers small .. epic. Generic multipliers (scale, default count, intensity, one-shot time), then
+# the recipe's own `tiers` overrides (RECIPES[name]["tiers"][tier] = {option: value}); the caller's options win over both.
+TIERS: dict[str, dict[str, float]] = {
+    "small": dict(scale=0.8, count=0.6, intensity=0.85, time=0.85),
+    "medium": dict(scale=1.0, count=1.0, intensity=1.0, time=1.0),
+    "big": dict(scale=1.15, count=1.4, intensity=1.0, time=1.1),
+    "mega": dict(scale=1.3, count=1.9, intensity=1.0, time=1.25),
+    "epic": dict(scale=1.5, count=2.6, intensity=1.0, time=1.4),
+}
+
+# bundles (recipes made of recipes) register here: name -> fn(project, **apply kwargs) and a listing entry
+BUNDLES: dict[str, Callable[..., dict]] = {}
+BUNDLE_INFO: dict[str, dict] = {}
+
+
+def tiered(recipe: str, tier: str, scale: float, count: int, duration: float, intensity: float,
+           options: dict | None) -> tuple[float, int, float, float, dict | None]:
+    """Apply a win tier to one recipe's arguments (see TIERS). tier "" leaves everything as given."""
+    if not tier:
+        return scale, count, duration, intensity, options
+    if tier not in TIERS:
+        raise ValueError(f"unknown tier {tier!r}; one of {list(TIERS)}")
+    m, d = TIERS[tier], RECIPES[recipe]
+    opts = dict(d.get("tiers", {}).get(tier, {}))
+    t_count, t_duration = opts.pop("count", None), opts.pop("duration", None)   # arguments, not options
+    opts.update(options or {})
+    if not count:
+        count = int(t_count) if t_count else (max(1, round(d["count"] * m["count"])) if d.get("count") else 0)
+    if not duration:
+        duration = float(t_duration) if t_duration else (d["duration"] * m["time"] if d["kind"] == "one-shot" else 0.0)
+    return scale * m["scale"], count, duration, intensity * m["intensity"], opts or None
+
+
 def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
           duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
           parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-          options: dict | None = None, art: dict | None = None) -> dict:
+          options: dict | None = None, art: dict | None = None, tier: str = "") -> dict:
     """Add one recipe (or a bundle) to the project. Does not save. ``art`` swaps the recipe's pictures for the
-    user's own (see ``ROLES``); for the bundles it is keyed by member recipe."""
+    user's own (see ``ROLES``); for the bundles it is keyed by member recipe. ``tier`` (small | medium | big | mega |
+    epic) scales the recipe for a win size (see TIERS)."""
+    if recipe in BUNDLES:
+        return BUNDLES[recipe](project, x=x, y=y, scale=scale, start=start, duration=duration, color=color,
+                               intensity=intensity, seed=seed, into=into, parent=parent, front_of=front_of,
+                               behind=behind, count=count, name=name, options=options or {}, art=art or {}, tier=tier)
+    if tier and recipe in ("lock_on", "magic_reveal"):
+        raise ValueError(f"tier is not supported for {recipe}; put its members in a sequence with tier instead")
     if recipe == "lock_on":
         return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
     if recipe == "magic_reveal":
         return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
     if recipe not in RECIPES:
-        raise ValueError(f"unknown recipe {recipe!r}; one of {sorted([*RECIPES, 'magic_reveal'])}")
+        raise ValueError(f"unknown recipe {recipe!r}; one of {sorted([*RECIPES, 'lock_on', 'magic_reveal', *BUNDLES])}")
     if scale <= 0:
         raise ValueError("scale must be > 0")
+    scale, count, duration, intensity, options = tiered(recipe, tier, scale, count, duration, intensity, options)
     d = RECIPES[recipe]
     P = _params(recipe, color, count, duration, options)
     bad = [r for r in (art or {}) if r not in d.get("roles", {})]
@@ -2214,5 +2258,14 @@ def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind
     return out
 
 
-# ice and water elements register themselves into RECIPES / ROLES
+# ice and water elements, and the reel moments, register themselves into RECIPES / ROLES
 from . import fx_elements  # noqa: E402,F401
+from . import fx_reels  # noqa: E402,F401   reel_stop, anticipation_reel
+from . import fx_wins  # noqa: E402,F401   payline, win_highlight, multiplier_stack, win_rollup
+from . import fx_payouts  # noqa: E402,F401   coin_fountain, cascade_pop
+from . import fx_spin  # noqa: E402,F401   near_miss, spin_blur, turbo_spin, screen_shake
+from . import fx_ui  # noqa: E402,F401   button_press, idle_shimmer, focus_glow, padlock, popup
+from . import fx_ambient  # noqa: E402,F401   weather, god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm
+from . import fx_features  # noqa: E402,F401   wild_land, expanding_wild, scatter_trigger, free_spins_transition
+from . import fx_bonus  # noqa: E402,F401   pick_reveal, hold_respin, jackpot_wheel, meter_fill
+from . import fx_bundles  # noqa: E402,F401   sequence, win_banner

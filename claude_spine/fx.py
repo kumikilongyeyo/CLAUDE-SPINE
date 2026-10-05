@@ -418,8 +418,13 @@ def shine_sweep(project: Project, slot: str, duration: float = 0.6, start: float
     pre = [(0.0, None)] if t0 > 0 else []
     ab.slot_attachment(clip_slot, pre + [(r(t0), "clip"), (r(t1), None)])
     ab.slot_attachment(streak_slot, pre + [(r(t0), "fx"), (r(t1), None)])
-    # streak bone is rotated so local y runs across the band; travel along y
-    ab.bone(grp, "translate", [(r(t0), 0, -span * 0.75, "sine_in_out"), (r(t1), 0, span * 0.75)])
+    # the band lies along the bone's x (world direction 90 + angle); it must travel ACROSS itself, along world
+    # direction `angle`. Translate keys live in the PARENT's space, so map the world offsets through its inverse.
+    ux, uy = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    ox, oy = bw.to_local(cx, cy)
+    ax_, ay_ = bw.to_local(cx - ux * span * 0.75, cy - uy * span * 0.75)
+    bx_, by_ = bw.to_local(cx + ux * span * 0.75, cy + uy * span * 0.75)
+    ab.bone(grp, "translate", [(r(t0), ax_ - ox, ay_ - oy, "sine_in_out"), (r(t1), bx_ - ox, by_ - oy)])
     c = _hex(color, "FFFFFFFF")
     ab.slot_color(streak_slot, [(r(t0), _fade(c, 0)), (r(t0 + duration * 0.3), _fade(c, strength)),
                                 (r(t0 + duration * 0.7), _fade(c, strength)), (r(t1), _fade(c, 0))])

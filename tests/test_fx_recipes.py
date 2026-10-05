@@ -36,7 +36,7 @@ def test_each_recipe_builds_and_validates(proj, name):
     res = R.apply(proj, name)
     assert res["animation"] == f"fx_{name}" and res["slots"] and res["event"] == f"fx_{name}"
     assert all(s.blend == "additive" or (name == "portal" and "disc" in s.name) or (name == "cell_glow" and s.blend == "normal")
-               or (name in ("puff", "smoke_glow", "frost", "ice_shatter", "explosion") and s.blend == "normal")
+               or ((name in ("puff", "smoke_glow", "frost", "ice_shatter", "explosion") or R.RECIPES[name].get("normal_blend")) and s.blend == "normal")
                for s in proj.data.slots)
     assert all(s.attachment is None for s in proj.data.slots), "FX slots must be hidden in the setup pose"
     v = qa.validate(proj.data)

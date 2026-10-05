@@ -60,6 +60,10 @@ def _rasterize(scr: np.ndarray, uv: np.ndarray, tri: np.ndarray, page: np.ndarra
     ys, xs, k = ys[keep], xs[keep], k[keep]
     px = np.c_[xs + 0.5, ys + 0.5, np.ones(len(xs))]
     u = (px[:, None, :] @ C[k])[:, 0, :]
+    # outline pixels sit partly outside their triangle and extrapolate: keep every sample inside the triangle's own
+    # UV box, or a minified texture reads past the atlas padding into the neighbouring image (a faint edge line)
+    tuv = uv[tri]
+    u = np.clip(u, tuv.min(1)[k], tuv.max(1)[k])
     PH, PW = page.shape[:2]
     fx = np.clip(u[:, 0] - 0.5, 0, PW - 1)
     fy = np.clip(u[:, 1] - 0.5, 0, PH - 1)

@@ -405,6 +405,12 @@ class SkeletonData(_M):
                 for an, a in atts.items():
                     if a.type != "region":
                         sk_d["attachments"][slot][an] = {"type": a.type, **sk_d["attachments"][slot][an]}
+                    else:
+                        # spine-core has NO default for a region's size (Spine always writes it): dropping a 32 x 32
+                        # that matches the model default loads as NaN vertices, so the size is always written
+                        d = sk_d.setdefault("attachments", {}).setdefault(slot, {}).setdefault(an, {})
+                        d.setdefault("width", a.width)
+                        d.setdefault("height", a.height)
         order = ["skeleton", "bones", "slots", "ik", "transform", "path", "physics", "skins", "events", "animations"]
         if "animations" in out:
             for a in out["animations"].values():

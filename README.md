@@ -45,7 +45,10 @@ check everything.
 | Mesh | `rig_mesh` | Region → contour mesh with bone-heat weights |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
 | Motion | `juice_apply`, `fx_generate`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, FX presets, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
-| QA | `validate`, `qa_budget`, `preview` | Structural and runtime validation, mobile budget, GIF previews |
+| QA | `validate`, `qa_budget`, `qa_character`, `preview` | Structural and runtime validation, mobile budget, character QA (joint cracks, foot slide, per-rig bone budgets), GIF previews |
+| Characters | `rig_face`, `face_clip`, `look_at`, `lipsync`, `rig_biped`, `clip_set`, `secondary`, `squash_stretch` | Whole-face rig and 2.5D turn from layer names (clamped eyes, blinks, brows, visemes, jaw); biped rig with floor-pinned IK feet and the 11-clip character contract; physics on every strand; volume-preserving squash |
+| Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
+| Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
 | Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
 
 A typical session, as Claude would run it:
@@ -65,6 +68,31 @@ FX recipes (rune ring, flare, wisps, aura, floor glow, fireflies, twinkles, or a
 `fx_recipe` lists them, `fx_recipe recipe=guide` explains how to use, fork and mix them (also in [docs/FX_RECIPES.md](docs/FX_RECIPES.md)).
 
 ![magic_reveal](docs/magic_reveal.gif)
+
+The two FX on every spin are recipes too: `reel_stop` (the strip overshoots, squashes and springs back on an exact
+spring, dust, shock rings, screen shake) and `anticipation_reel` (an accelerating heartbeat glow with edge flames while
+the other reels dim). They move your reel and screen bones through inserted carrier bones, never your own keys.
+
+![reel_stop](docs/reel_stop.gif)
+
+The rest of a slot game is recipes too, one family per moment (`fx_recipe` with no recipe lists them all; the guide
+is [docs/FX_RECIPES.md](docs/FX_RECIPES.md)). Every one takes `tier=` small | medium | big | mega | epic, and
+`sequence` turns a whole win choreography into a JSON list. Recipes that move your reel, symbol, screen or button bones
+do it through inserted carrier bones, never your own keys.
+
+| | | |
+|---|---|---|
+| ![spin](docs/spin.gif) spin: near_miss, spin_blur, turbo_spin, screen_shake | ![wins](docs/wins.gif) wins: payline, win_highlight, multiplier_stack, win_rollup | ![banner](docs/win_banner.gif) win_banner: big, mega, epic from one recipe |
+| ![payouts](docs/payouts.gif) payouts: coin_fountain, cascade_pop | ![features](docs/features.gif) features: wild_land, expanding_wild, scatter_trigger, free_spins_transition | ![bonus](docs/bonus.gif) bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill |
+| ![ambient](docs/ambient.gif) ambient: weather, god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm | ![ui](docs/ui.gif) UI: button_press, idle_shimmer, focus_glow, padlock, popup | |
+
+Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
+set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):
+
+| | | |
+|---|---|---|
+| ![face](docs/face.gif) rig_face: look, blink, brows, expressions | ![talk](docs/face_talk.gif) lipsync + look_at | ![body](docs/body.gif) rig_biped + clip_set |
+| ![gait](docs/gait.gif) gait + rig_quadruped | ![addons](docs/addons.gif) rig_serpent, rig_flier, attach_rig | ![creature](docs/creature.gif) rig_creature: eight kinds |
 
 ## How it works
 
@@ -202,13 +230,16 @@ cross-checked frame for frame against the Spine editor's own PNG export.
 uv venv && uv pip install -e ".[dev]" && (cd validator && npm ci) && pytest
 ```
 
-There are 369 tests:
+There are 1,028 tests:
 
 - IR round-trip and bone remapping
 - Meshing, plus 300 random silhouettes in CI (1,000 run locally)
 - Weight properties
 - Rigs
-- Every juice clip and FX preset
+- Every juice clip, FX preset and FX recipe, with each recipe's physics read back from its keys (springs, drag,
+  restitution, lags, Poisson schedules, loop closure)
+- Every rig recipe: faces, bipeds, quadrupeds, gaits, serpents, fliers, add-ons and creatures, with planted feet
+  and clip contracts measured in the runtime
 - QA catching broken input
 - The MCP tool chain
 - The runtime
