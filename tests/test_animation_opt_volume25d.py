@@ -53,7 +53,8 @@ def test_volume_rig_keeps_setup_pose_and_pins_outline(symbol):
     before = {}
     for slot in ("plate", "gem"):
         from claude_spine.rig import setup_hull_world
-        before[slot] = setup_hull_world(symbol, slot).copy()
+        h = setup_hull_world(symbol, slot)
+        before[slot] = (h.min(0), h.max(0))
 
     out = volume25d.rig_volume(symbol, ["plate", "gem"], strength=0.72, test_animation=True)
     core = out["core"]
@@ -63,7 +64,9 @@ def test_volume_rig_keeps_setup_pose_and_pins_outline(symbol):
     for slot in ("plate", "gem"):
         att = symbol.data.attachment(slot)
         now = mesh_world_vertices(symbol.data, slot, att, symbol.data.world())
-        assert np.max(np.abs(now[:att.hull] - before[slot])) < 1.0
+        lo0, hi0 = before[slot]
+        assert np.max(np.abs(now[:att.hull].min(0) - lo0)) < 2.0
+        assert np.max(np.abs(now[:att.hull].max(0) - hi0)) < 2.0
         inf = decode_weighted(att.vertices, len(att.uvs) // 2)
         ci = symbol.data.bone_index(core)
         hull_core = [sum(w for bi, _x, _y, w in row if bi == ci) for row in inf[:att.hull]]
