@@ -260,3 +260,116 @@ def test_psd_faint_stray_alpha_does_not_widen_a_layer(tmp_path):
     assert p.image("shell").size == (60, 40)
     att = p.data.attachment("shell")
     assert (att.x, att.y) == (pytest.approx(130 - 150), pytest.approx(100 - 70))
+
+
+# ------------------------------------------------------------------ slot tools: edit_slots, clone_art, art_twin, hue_cycle
+from claude_spine import art_tools  # noqa: E402
+from claude_spine.ir import Animation, DrawOrderKey, DrawOrderOffset  # noqa: E402
+
+
+def test_draw_order_offsets_round_trip():
+    rng = np.random.default_rng(4)
+    base = [f"s{i}" for i in range(12)]
+    for _ in range(50):
+        order = list(rng.permutation(base))
+        offs = art_tools._offsets(base, order)
+        assert art_tools._absolute(base, offs) == order
+    assert art_tools._offsets(base, base) is None
+
+
+def test_edit_slots_visibility_blend_color(ball):
+    art_tools.edit_slots(ball, ["cap"], "hide")
+    assert ball.data.slot("cap").attachment is None
+    art_tools.edit_slots(ball, ["cap"], "show")
+    assert ball.data.slot("cap").attachment == "cap"
+    art_tools.edit_slots(ball, ["cap", "wick"], "blend", "screen")
+    art_tools.edit_slots(ball, ["wick"], "color", "#ff8800")
+    assert ball.data.slot("cap").blend == "screen" and ball.data.slot("wick").color == "FF8800FF"
+    with pytest.raises(ValueError):
+        art_tools.edit_slots(ball, ["cap"], "blend", "overlay")
+    with pytest.raises(ValueError):
+        art_tools.edit_slots(ball, ["cap"], "spin")
+
+
+def test_edit_slots_move_and_remove_keep_draw_order_keys(ball):
+    sk = ball.data
+    sk.animations["a"] = Animation()
+    old = [s.name for s in sk.slots]                                            # shell, cap, wick
+    sk.animations["a"].drawOrder = [DrawOrderKey(time=0.5, offsets=[DrawOrderOffset(slot="shell", offset=2)])]
+    meant = art_tools._absolute(old, sk.animations["a"].drawOrder[0].offsets)    # cap, wick, shell
+    art_tools.edit_slots(ball, ["wick"], "before", "shell")
+    new = [s.name for s in sk.slots]
+    assert new == ["wick", "shell", "cap"]
+    assert art_tools._absolute(new, sk.animations["a"].drawOrder[0].offsets) == meant
+    sk.animations["a"].slots["cap"] = {"rgba": []}
+    art_tools.edit_slots(ball, ["cap"], "remove")
+    assert not sk.has_slot("cap") and "cap" not in sk.skin().attachments and "cap" not in sk.animations["a"].slots
+    assert art_tools._absolute([s.name for s in sk.slots], sk.animations["a"].drawOrder[0].offsets) == ["wick", "shell"]
+    assert qa.validate(sk)["ok"]
+
+
+def test_clone_art_copies_bones_and_shares_images(ball):
+    sk = ball.data
+    sk.add_bone_world("bulge", "ball", 0, 0)
+    rig_mesh(ball, "shell", bones=["ball", "bulge"])
+    n_img = len(list(ball.images_dir.rglob("*.png")))
+    res = art_tools.clone_art(ball, ["shell", "cap", "wick"], "c1 ", (0, -500))
+    assert set(res["slots"]) == {"c1 shell", "c1 cap", "c1 wick"} and "c1 ball" in res["bones"]
+    assert len(list(ball.images_dir.rglob("*.png"))) == n_img                    # images shared
+    w = sk.world()
+    assert w["c1 cap"].y == pytest.approx(w["cap"].y - 500) and w["c1 wick"].x == pytest.approx(w["wick"].x)
+    att = sk.attachment("c1 shell", "shell")
+    used = {sk.bones[bi].name for inf in decode_weighted(att.vertices, len(att.uvs) // 2) for bi, *_ in inf}
+    assert used == {"c1 ball", "c1 bulge"}                                       # weights follow the cloned bones
+    assert sk.attachment("c1 cap", "cap").path == "cap"
+    names = [s.name for s in sk.slots]
+    assert names.index("c1 shell") > names.index("wick")                         # after the originals
+    with pytest.raises(ValueError, match="already exists"):
+        art_tools.clone_art(ball, ["cap"], "c1 ")
+    assert qa.validate(sk)["ok"]
+
+
+def test_sphere_spin_frames_from_shares_the_frames(ball):
+    sphere.sphere_spin(ball, ["shell"], "a", 0, 0.6, riders=["cap"], frames=8, size=96)
+    n = len(list((ball.images_dir / "spin").glob("*.png")))
+    art_tools.clone_art(ball, ["shell", "cap", "wick"], "c1 ", (0, -500))
+    res = sphere.sphere_spin(ball, ["c1 shell"], "a", 0.2, 0.6, riders=["c1 cap"], name="spin_c1", frames_from="spin")
+    sk = ball.data
+    assert res["frames_from"] == "spin" and len(list((ball.images_dir / "spin").glob("*.png"))) == n
+    a0, a1 = sk.attachment("spin body", "fx"), sk.attachment("spin_c1 body", "fx")
+    assert a1.path == a0.path and a1.sequence.count == 8 and a1.width == pytest.approx(a0.width, rel=0.02)
+    assert sk.world()[sk.slot("spin_c1 body").bone].y + a1.y == pytest.approx(
+        sk.world()[sk.slot("spin body").bone].y + a0.y - 500, abs=2)
+    with pytest.raises(ValueError, match="no spin named"):
+        sphere.sphere_spin(ball, ["shell"], "b", 0, 0.5, name="x", frames_from="nope")
+    assert qa.validate(sk)["ok"]
+
+
+def test_art_twin_and_hue_cycle(ball):
+    res = art_tools.art_twin(ball, ["shell"])
+    sk = ball.data
+    assert res["twins"] == ["shell glow"]
+    tw = sk.slot("shell glow")
+    assert tw.blend == "additive" and tw.attachment is None and tw.bone == "ball"
+    names = [s.name for s in sk.slots]
+    assert names.index("shell glow") == names.index("shell") + 1
+    h = art_tools.hue_cycle(ball, "rainbow", ["shell glow"], 0.5, 2.0, alpha=0.6, cycles=1.5)
+    a = sk.animations["rainbow"]
+    att = [(k.time, k.name) for k in a.slots["shell glow"]["attachment"]]
+    assert att == [(0.0, None), (0.5, "shell"), (2.0, None)]
+    cols = [k.color for k in a.slots["shell glow"]["rgba"]]
+    assert cols[0].endswith("00") and cols[-1].endswith("00") and len({c[:6] for c in cols}) >= 6
+    assert h["keys"] == len(cols)
+    with pytest.raises(ValueError):
+        art_tools.hue_cycle(ball, "x", ["shell glow"], 1, 1)
+    assert qa.validate(sk)["ok"]
+
+
+@needs_node
+def test_slot_tools_play_in_spine_core(ball):
+    art_tools.clone_art(ball, ["shell", "cap", "wick"], "c1 ", (0, -500))
+    art_tools.art_twin(ball, ["shell", "c1 shell"])
+    art_tools.hue_cycle(ball, "rainbow", ["shell glow", "c1 shell glow"], 0, 1.0)
+    art_tools.edit_slots(ball, ["c1 wick"], "remove")
+    ball.save()
+    assert runtime.load_check(ball)["ok"]

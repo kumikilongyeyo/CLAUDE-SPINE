@@ -219,14 +219,17 @@ def _put(store: dict, key: str, new: list[Key], t0: float, t1: float) -> None:
 
 def sphere_spin(project: Project, slots: list[str], animation: str, start: float = 0.0, duration: float = 1.0,
                 turns: int = 1, riders: list[str] | None = None, flip: list[str] | None = None, glow: float = 0.0,
-                frames: int = 24, size: int = 640, name: str = "spin", host: str = "", fps: float = 30.0) -> dict:
+                frames: int = 24, size: int = 640, name: str = "spin", host: str = "", fps: float = 30.0,
+                frames_from: str = "") -> dict:
     """Turn the ball made of `slots` around its vertical axis inside `animation` (created if missing).
 
     riders: bones on the surface that orbit with it, as one group led by the first (a cap; their slots pass
     behind the ball). flip: bones that
     stick out sideways and turn with it (a wick: flattened by cos, mirrored past 90). glow > 0 adds an additive
     twin that swells to that alpha mid-turn. host: the bone the ball sprite rides (default the first slot's bone).
-    Re-running reuses the frames and slots already made for `name`."""
+    Re-running reuses the frames and slots already made for `name`. frames_from: the name of a spin already made on
+    a ball with the same art (a copy made with clone_art): its frames are reused, scaled to this ball, nothing is
+    rendered and the atlas holds one set."""
     sk = project.data
     if turns < 1:
         raise ValueError("turns must be a whole number >= 1 (the ball has to end where it started)")
@@ -249,10 +252,19 @@ def sphere_spin(project: Project, slots: list[str], animation: str, start: float
     else:
         art, origin = setup_art(project, slots)
         cx, cy, R, cxw, cyw = fit_sphere(art, origin)
-        imgs, span, info = render_turn(art, cx, cy, R, frames, size)
-        digits = max(2, len(str(frames - 1)))
-        for k, im in enumerate(imgs):
-            project.write_image(f"{path}{str(k).zfill(digits)}", im)
+        if frames_from:
+            src = f"{frames_from} body"
+            if not sk.has_slot(src):
+                raise ValueError(f"frames_from={frames_from!r}: no spin named that (no slot {src!r})")
+            satt = sk.attachment(src, "fx")
+            path, frames, digits = satt.path, satt.sequence.count, satt.sequence.digits
+            span = float(satt.width) * R / (float(satt.width) / 2 - 6.0)
+            info = {"reused": True, "frames_from": frames_from}
+        else:
+            imgs, span, info = render_turn(art, cx, cy, R, frames, size)
+            digits = max(2, len(str(frames - 1)))
+            for k, im in enumerate(imgs):
+                project.write_image(f"{path}{str(k).zfill(digits)}", im)
         lx, ly = world[host].to_local(cxw, cyw)
 
         def seq_att():

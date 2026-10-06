@@ -50,7 +50,7 @@ check everything.
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
 | Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
 | Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
-| Symbol from the art | `sphere_spin`, `liquid_splat`, `shake`, `ae_check` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a violent build-up shake; read a saved After Effects project's comps and script errors without AE |
+| Symbol from the art | `sphere_spin`, `liquid_splat`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
 
 A typical session, as Claude would run it:
 
@@ -106,6 +106,11 @@ Some symbols are best animated from the artist's own pixels rather than procedur
   optical ghost chain; land its off-centre source with `ae_fx_to_spine anchor=` and `feather=`) and `surface_sweep`
   (a shine that sits on the surface: the art's own colours brightened in a band bent round the volume; play it with
   `deform_like=` so it bends with the art's meshes). `ae_check` confirms what a saved .aep holds.
+- Slot tools: `edit_slots` (hide, show, remove, blend, tint, move in the draw order; every animation's draw-order
+  keys are rewritten so they keep meaning the same order), `clone_art` (copy slots and their bone subtree under a
+  prefix at an offset, images shared, weighted meshes re-pointed: one symbol becomes a reel column, and
+  `sphere_spin frames_from=` lets every copy reuse one set of turn frames), `art_twin` (an additive twin of any art,
+  hidden until keyed) and `hue_cycle` (walk a twin's tint round the colour wheel: a rainbow wash inside the art).
 
 Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
 set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):

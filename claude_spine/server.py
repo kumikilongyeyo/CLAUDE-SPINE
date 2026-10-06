@@ -553,7 +553,7 @@ from . import tools_addons  # noqa: E402,F401   rig_serpent, rig_flier, attach_r
 from . import tools_gait  # noqa: E402,F401   gait, rig_quadruped, make_quadruped_sample
 from . import tools_body  # noqa: E402,F401   rig_biped, clip_set, secondary, squash_stretch, qa_character, make_biped_sample
 from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sample
-from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check
+from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check, edit_slots, clone_art, art_twin, hue_cycle
 
 
 def main() -> None:
