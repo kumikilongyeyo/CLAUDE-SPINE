@@ -295,9 +295,40 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
             "blend": bl, "mode": mode, "seq_mode": seq_mode, **(manifest_extra or {})}
 
 
+def copy_sequence(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
+                  until: float = 0.0, parent: str | None = None) -> str:
+    """Another instance of an imported sequence (``res`` = the import's result) on a new slot that SHARES its frames:
+    the atlas holds one set of images however many copies play (glitter in every cell of a cluster, sparks on every
+    coin). x, y in ``parent``'s space (default: the original's parent); start defaults to the original's, until to the
+    original's end for loops. Returns the new slot."""
+    sk = project.data
+    src = next(s for s in sk.slots if s.name == res["slot"])
+    src_bone = next(b for b in sk.bones if b.name == res["bone"])
+    parent = parent or src_bone.parent
+    if parent not in {b.name for b in sk.bones}:
+        raise ValueError(f"no bone named {parent!r} to parent the sequence copy to")
+    t0 = res["start"] if start is None else start
+    bn = sk.unique_name(res["bone"])
+    sk.bones.append(Bone(name=bn, parent=parent, x=x, y=y, length=0, color="FF9E00FF"))
+    slot = Slot(name=sk.unique_name(bn, "slot"), bone=bn, color=src.color, blend=src.blend)
+    sk.add_slot(slot, after=res["slot"])
+    sk.set_attachment(slot.name, "fx", sk.attachment(res["slot"], "fx").model_copy(deep=True))
+    ab = AnimBuilder(sk, res["animation"], replace=False)
+    if res["seq_mode"] == "once":
+        end = t0 + res["sequence_seconds"]
+    else:
+        end = until or (t0 + (res["end"] - res["start"]))
+    pts = [(r(t0), "fx"), (r(end), None)]
+    if t0 > 0:
+        pts.insert(0, (0.0, None))
+    ab.slot_attachment(slot.name, pts)
+    ab.sequence(slot.name, "fx", [(t0, res["seq_mode"], 0, res["delay"])])
+    return slot.name
+
+
 def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", frames_dir: str = "",
                 fps: float = 0, start_frame: int | None = None, end_frame: int | None = None,
-                keep_frames: str = "", template: str = DEFAULT_TEMPLATE, **kw) -> dict:
+                keep_frames: str = "", template: str = DEFAULT_TEMPLATE, copies: list | None = None, **kw) -> dict:
     """Render (or read) the frames and import them. Either ``aep`` + ``comp`` (rendered with aerender) or
     ``frames_dir`` + ``fps`` (frames already on disk: TIFF premultiplied, or PNG straight RGBA / light-on-black
     RGB)."""
@@ -327,6 +358,10 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
             raise ValueError("give aep + comp, or frames_dir + fps")
         res = import_sequence(project, name, frames, fps_v, first_frame_time=first_time, **kw)
         res["source"] = src
+        if copies:                          # [[x, y], [x, y, start], ...]: more instances sharing the same frames
+            res["copies"] = [copy_sequence(project, res, x=float(cp[0]), y=float(cp[1]),
+                                           start=float(cp[2]) if len(cp) > 2 else None, until=kw.get("until", 0.0))
+                             for cp in copies]
         return res
     finally:
         if tmp is not None:

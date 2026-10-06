@@ -2271,4 +2271,5 @@ from . import fx_bonus  # noqa: E402,F401   pick_reveal, hold_respin, jackpot_wh
 from . import fx_saber  # noqa: E402,F401   saber (Spine half; the AE half is ae_templates/saber.jsx)
 from . import fx_pinata  # noqa: E402,F401   wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop
 from . import fx_focus  # noqa: E402,F401   speed_lines
+from . import fx_cluster  # noqa: E402,F401   cluster_dim, combo_banner, amount_to_bar, jelly_pop, scatter_shine
 from . import fx_bundles  # noqa: E402,F401   sequence, win_banner

@@ -507,6 +507,27 @@ role with the same name, so an artist's pack drops in by name and the motion sta
   CASCADE pop (bubble_pop), not the WILD transform (a white flash); the multiplier drops into the WIN BAR; the X comes
   FROM the sign. Before trusting a first read of a clip, break it down at full frame rate around every beat.
 
+## Cluster-pays family (candy cluster win flow)
+
+From a 4x4 candy cluster slot: the whole win flow, Spine-native, with two optional After Effects upgrades.
+
+    fx_recipe recipe=cluster_dim project=p.json options={cells: [[-187, 207], [-69, 207]]}   -> cluster_dim_in, then cluster_dim (loop)
+    fx_recipe recipe=combo_banner project=p.json into=win options={style: zoom}             -> event combo_land
+    fx_recipe recipe=amount_to_bar project=p.json into=win start=0.9                        -> event bar_hit; ae_hint burst
+    fx_recipe recipe=jelly_pop project=p.json options={cells: [...], twinkles: 0}           -> ae_hint sparkle with copies=
+    fx_recipe recipe=scatter_shine project=p.json options={cells: [[172, 207], [50, -17]]}
+
+- cluster_dim is TWO animations: `<name>_in` (2-frame fade-in, event cluster_found) and `<name>` (a seamless loop). A
+  fade-in inside a loop blinks off and on at every repeat.
+- combo_banner style=zoom: Spine has no motion blur; three ghost copies at larger scales and lower alpha trail the title
+  and read as blur at game speed. Play it over cluster_dim: additive magenta over a bright magenta board washes out.
+- The AE upgrades come back as `ae_hint` (template, params, and the ae_fx_to_spine args). jelly_pop's hint uses
+  `copies=`: one glitter sequence shared by every cube (one set of frames in the atlas, however many cells).
+- `ae_fx_to_spine copies=[[x, y], [x, y, start], ...]` (and `ae_bridge.copy_sequence`) works for any sequence:
+  a crackle on every scatter, sparks on every coin.
+- Pictures: the piñata kit (shared texture paths) plus panel, jelly_cube, combo_plate, amount_plate; all `art=` roles,
+  `gain` / `thick` as in the piñata family. `examples/build_cluster_demo.py` renders `docs/cluster.gif`.
+
 ## Ice and water
 
 Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is

@@ -310,7 +310,7 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     win_highlight, multiplier_stack, win_rollup; payouts: coin_fountain, cascade_pop; features: wild_land, expanding_wild,
     scatter_trigger, free_spins_transition; bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill; ambient: weather,
     god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm; UI: button_press, idle_shimmer, focus_glow, padlock,
-    popup; saber = a port of Video Copilot's Saber beams with 12 presets and an ae_hint for the saber AE template; pinata family = wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop from one picture kit (swap a texture pack in by name with art=, retune it with options gain / thick); recipes that move your reel / symbol / screen / button bones do it through inserted carrier bones, never your
+    popup; saber = a port of Video Copilot's Saber beams with 12 presets and an ae_hint for the saber AE template; cluster family = cluster_dim (+ _in intro), combo_banner, amount_to_bar, jelly_pop, scatter_shine; pinata family = wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop from one picture kit (swap a texture pack in by name with art=, retune it with options gain / thick); recipes that move your reel / symbol / screen / button bones do it through inserted carrier bones, never your
     own keys), and the hybrids portal and electric_frame, whose plasma / lightning part is
     After Effects: they return a ring_hint to pass to ae_fx_to_spine (guide explains). Procedural textures, additive only (one draw call), one group bone per recipe so it
     recolours, resizes and retimes as one piece, and it merges into any animation with into=.
@@ -350,7 +350,7 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
                    x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                    blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                    behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                   keep_frames: str = "") -> dict:
+                   keep_frames: str = "", copies: list[list[float]] | None = None) -> dict:
     """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
 
     Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
@@ -365,7 +365,9 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     until= (default: the end of the animation it is merged into). max_frames/max_size shrink it (every Nth
     frame; longest side in px), scale = game units per comp pixel, fade = fade-out seconds.
     animation= merges into an existing animation, otherwise ae_<name> is created. Leading and trailing empty
-    frames are trimmed. Frames land in images/ae/<name>_NN.png; an event ae_<name> fires at the start."""
+    frames are trimmed. Frames land in images/ae/<name>_NN.png; an event ae_<name> fires at the start.
+    copies=[[x, y], [x, y, start], ...] plays more instances that SHARE the frames (one set in the atlas): glitter in
+    every cell of a cluster, a crackle on every scatter."""
     p = _open(project)
     res = ae_bridge.fx_to_spine(
         p, name, aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
@@ -373,7 +375,7 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         hit_at=None if hit_at < 0 else hit_at, fit_duration=fit_duration, until=until, x=x, y=y, scale=scale,
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
-        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
+        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies)
     return _saved(p, res)
 
 
