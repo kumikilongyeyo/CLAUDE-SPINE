@@ -38,6 +38,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .fx import tex_glow, tex_ring, tex_spark, _rgba
+from . import fx_style
 from .ir import Bone, MeshAttachment, RegionAttachment, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
@@ -583,6 +584,7 @@ class Ctx:
         self.last_slot: str | None = None
         self.slots: list[str] = []
         self.bones: list[str] = []
+        self.depth: dict[str, str] = {}
         self.group = self.bone("grp", parent, x, y, sx=scale, sy=scale, root=True)
 
     # -- structure
@@ -640,6 +642,7 @@ class Ctx:
         h = height if height is not None else width * th / tw
         self.sk.set_attachment(nm, "fx", RegionAttachment(path=tex, x=round(ox, 2), y=round(oy, 2), width=round(width, 2), height=round(h, 2)))
         self.slots.append(nm)
+        self.depth[nm] = fx_style.depth_class(role, f"{bone} {tex}", blend)
         return nm
 
     def strand(self, parent: str, tex: str, width: float, height: float, rows: int, x: float = 0.0,
@@ -690,6 +693,7 @@ class Ctx:
         sk.set_attachment(nm, "fx", MeshAttachment(path=tex, uvs=uvs, triangles=tris, vertices=verts, hull=n2, edges=edges,
                                                     width=round(width, 2), height=round(height, 2)))
         self.slots.append(nm)
+        self.depth[nm] = fx_style.depth_class(role, f"{base} {tex}", blend)
         return nm, nodes
 
     def slice9(self, parent: str, tex: str, w: float, h: float, slice_px: float = 64.0, color: str = "FFFFFFFF",
@@ -749,6 +753,7 @@ class Ctx:
         sk.set_attachment(nm, "fx", MeshAttachment(path=tex, uvs=uvs, triangles=tris, vertices=verts, hull=12, edges=edges,
                                                     width=tw, height=th))
         self.slots.append(nm)
+        self.depth[nm] = fx_style.depth_class(role, f"{base} {tex}", blend)
         self._last_s9 = (base, cb)
         return nm, cb
 
@@ -778,8 +783,10 @@ class Ctx:
 
     def result(self, **extra) -> dict:
         self.ab.event(self.t0, f"fx_{self.recipe}")
+        groups = {k: [s for s, d in self.depth.items() if d == k] for k in ("back", "subject", "front", "lens")}
         return {"recipe": self.recipe, "animation": self.anim, "group_bone": self.group, "bones": len(self.bones),
-                "slots": list(self.slots), "event": f"fx_{self.recipe}", "start": self.t0, **extra}
+                "slots": list(self.slots), "event": f"fx_{self.recipe}", "start": self.t0,
+                "depth": dict(self.depth), "depth_groups": groups, **extra}
 
 
 def _uniq(pts: list) -> list:
@@ -2074,7 +2081,8 @@ for _n, _d in ROLES.items():
     RECIPES[_n]["roles"] = _d
 
 SHARED = ("x", "y", "scale", "start", "duration", "color", "intensity", "seed", "into", "parent", "front_of", "behind",
-          "count", "name", "art")
+          "count", "name", "art", "tier", "style", "realism", "style_profile", "relight_slots", "relight_color",
+          "relight_strength", "relight_duration")
 
 
 def list_recipes() -> dict:
@@ -2162,26 +2170,40 @@ def tiered(recipe: str, tier: str, scale: float, count: int, duration: float, in
 def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
           duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
           parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-          options: dict | None = None, art: dict | None = None, tier: str = "") -> dict:
+          options: dict | None = None, art: dict | None = None, tier: str = "", style: str = "",
+          realism: float = -1.0, style_profile: dict | None = None, relight_slots: list[str] | None = None,
+          relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0) -> dict:
     """Add one recipe (or a bundle) to the project. Does not save. ``art`` swaps the recipe's pictures for the
     user's own (see ``ROLES``); for the bundles it is keyed by member recipe. ``tier`` (small | medium | big | mega |
-    epic) scales the recipe for a win size (see TIERS)."""
+    epic) scales the recipe for a win size (see TIERS).
+
+    ``style`` is stylized | premium | realistic; ``realism`` 0..1 interpolates stylized -> realistic when style
+    is omitted. ``style_profile`` deep-merges custom tuning over that profile. ``relight_slots`` adds a short,
+    cheap additive response using the subject's own art, so impacts illuminate the thing they hit."""
     if recipe in BUNDLES:
         return BUNDLES[recipe](project, x=x, y=y, scale=scale, start=start, duration=duration, color=color,
                                intensity=intensity, seed=seed, into=into, parent=parent, front_of=front_of,
-                               behind=behind, count=count, name=name, options=options or {}, art=art or {}, tier=tier)
+                               behind=behind, count=count, name=name, options=options or {}, art=art or {}, tier=tier,
+                               style=style, realism=realism, style_profile=style_profile or {},
+                               relight_slots=relight_slots or [], relight_color=relight_color,
+                               relight_strength=relight_strength, relight_duration=relight_duration)
     if tier and recipe in ("lock_on", "magic_reveal"):
         raise ValueError(f"tier is not supported for {recipe}; put its members in a sequence with tier instead")
     if recipe == "lock_on":
-        return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
+        return _lock_on(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {},
+                        style, realism, style_profile or {}, relight_slots or [], relight_color, relight_strength, relight_duration)
     if recipe == "magic_reveal":
-        return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {})
+        return _reveal(project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options or {}, art or {},
+                       style, realism, style_profile or {}, relight_slots or [], relight_color, relight_strength, relight_duration)
     if recipe not in RECIPES:
         raise ValueError(f"unknown recipe {recipe!r}; one of {sorted([*RECIPES, 'lock_on', 'magic_reveal', *BUNDLES])}")
     if scale <= 0:
         raise ValueError("scale must be > 0")
     scale, count, duration, intensity, options = tiered(recipe, tier, scale, count, duration, intensity, options)
     d = RECIPES[recipe]
+    scale, count, duration, intensity, options, style_info = fx_style.tune(
+        d, style=style, realism=realism, custom=style_profile,
+        scale=scale, count=count, duration=duration, intensity=intensity, options=options)
     P = _params(recipe, color, count, duration, options)
     bad = [r for r in (art or {}) if r not in d.get("roles", {})]
     if bad:
@@ -2192,6 +2214,15 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
     res = d["fn"](c, P)
     if c.art_used:
         res["art"] = dict(c.art_used)
+    if style_info:
+        res["style"] = style_info
+        res["depth_parallax"] = dict(style_info.get("depth", {}))
+    if relight_slots:
+        prof = fx_style.resolve(style, realism, style_profile) or fx_style.resolve("premium")
+        source = relight_color or color or d.get("color", "") or prof["lighting"].get("color", "")
+        res["relight"] = fx_style.relight(project, res["animation"], relight_slots, start=start, color=source,
+                                         strength=relight_strength, duration=relight_duration, profile=prof,
+                                         name=name or recipe)
     return res
 
 
