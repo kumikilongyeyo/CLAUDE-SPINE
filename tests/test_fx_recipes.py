@@ -193,7 +193,7 @@ def test_the_mcp_tool_lists_returns_the_guide_and_applies(tmp_path):
 def test_docs_guide_mirrors_the_tool_guide():
     from claude_spine.fx_recipes_guide import GUIDE
     doc = Path(__file__).resolve().parents[1] / "docs" / "FX_RECIPES.md"
-    assert doc.read_text() == GUIDE
+    assert doc.read_text(encoding="utf-8") == GUIDE
 
 
 # ---------------------------------------------------------------- beams, portal, electric frame
