@@ -42,9 +42,9 @@ check everything.
 |---|---|---|
 | Setup | `doctor`, `make_sample`, `inspect_psd`, `import_psd`, `project_info` | Check the toolchain; turn PSDs into a project (`<name>.json` + `images/`) |
 | Bones | `add_bones`, `add_chain`, `reparent_slot` | Add bones in world coordinates. Art never moves |
-| Mesh | `rig_mesh` | Region → contour mesh with bone-heat weights |
+| Mesh | `rig_mesh`, `rig_volume_2p5d` | Region → contour mesh with bone-heat weights; layer centre-volume weights over an existing rig for squash/bulge/2.5D bounce |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
-| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, authored FX recipes, global style profiles, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
+| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `volume_bounce`, `optimize_animation`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol clips, authored FX, global style profiles, sparse 2.5D bounce, adaptive key cleanup, AE sequences, custom easing and game events |
 | QA | `validate`, `qa_budget`, `qa_character`, `qa_fx_premium`, `preview` | Structural and runtime validation, mobile budget, character QA, heuristic FX art-direction QA, GIF previews |
 | Characters | `rig_face`, `face_clip`, `look_at`, `lipsync`, `rig_biped`, `clip_set`, `secondary`, `squash_stretch` | Whole-face rig and 2.5D turn from layer names (clamped eyes, blinks, brows, visemes, jaw); biped rig with floor-pinned IK feet and the 11-clip character contract; physics on every strand; volume-preserving squash |
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
@@ -75,6 +75,22 @@ fx_recipe recipe=explosion style=stylized
 fx_recipe recipe=explosion style=premium relight_slots=["symbol"]
 fx_recipe recipe=explosion realism=0.85 relight_slots=["symbol"]
 ```
+
+For editable production rigs, keep deformation and timeline cleanup separate:
+
+```
+rig_volume_2p5d slots=["face"] strength=0.6
+volume_bounce bones=["volume_core"] animation="win"
+optimize_animation animation="win" mode=editable
+```
+
+`rig_volume_2p5d` preserves the mesh's existing turn/limb weights, adds one centre-heavy
+volume influence, pins the rim by default, and re-normalises to the mobile influence cap.
+That lets the centre squash/bulge while the silhouette and original 2.5D deformation keep
+working. `volume_bounce` uses only a handful of meaningful impact/rebound/settle keys.
+`optimize_animation` reduces dense linear samples after the full clip is assembled, keeps
+extrema/holds/endpoints, and rebuilds monotone Bezier handles; authored or stepped curves are
+left untouched unless explicitly forced.
 
 `style=` is `stylized | premium | realistic`; `realism=0..1` continuously interpolates graphic -> physical.
 `fx_style_profile` lists the profiles and can turn normalised measurements from the `clip-breakdown` skill into a
