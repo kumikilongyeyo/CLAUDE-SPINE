@@ -21,7 +21,8 @@ from .project import Project
 from .timeline import AnimBuilder
 
 STEP_KEYS = {"recipe", "start", "dx", "dy", "scale", "duration", "color", "intensity", "seed", "count", "name", "options",
-             "art", "tier", "parent", "front_of", "behind"}
+             "art", "tier", "parent", "front_of", "behind", "style", "realism", "style_profile", "relight_slots",
+             "relight_color", "relight_strength", "relight_duration"}
 
 
 def anim_end(project: Project, anim: str) -> float:
@@ -42,7 +43,10 @@ def anim_end(project: Project, anim: str) -> float:
 
 
 def run_steps(project: Project, steps: list[dict], anim: str, x: float, y: float, scale: float, start: float,
-              intensity: float, seed: int, parent: str, front_of: str, behind: str, tier: str) -> list[dict]:
+              intensity: float, seed: int, parent: str, front_of: str, behind: str, tier: str,
+              style: str = "", realism: float = -1.0, style_profile: dict | None = None,
+              relight_slots: list[str] | None = None, relight_color: str = "",
+              relight_strength: float = 0.0, relight_duration: float = 0.0) -> list[dict]:
     if not isinstance(steps, list) or not steps:
         raise ValueError("a sequence needs options={steps: [{recipe, start, ...}, ...]}")
     parts: list[dict] = []
@@ -62,7 +66,14 @@ def run_steps(project: Project, steps: list[dict], anim: str, x: float, y: float
                   start=start + float(st.pop("start", 0.0)), intensity=intensity * float(st.pop("intensity", 1.0)),
                   seed=int(st.pop("seed", seed + i)), into=anim, parent=st.pop("parent", parent),
                   front_of=st.pop("front_of", last), behind=st.pop("behind", behind if not parts else ""),
-                  tier=st.pop("tier", tier))
+                  tier=st.pop("tier", tier), style=st.pop("style", style), realism=float(st.pop("realism", realism)),
+                  style_profile=st.pop("style_profile", style_profile or {}))
+        # A bundle's reactive light belongs on its hero impact. Steps may override it explicitly; otherwise
+        # only the first impact-like member gets the shared target to avoid pulsing on every decorative layer.
+        impact_like = rec in {"hit_burst", "explosion", "wild_land", "scatter_trigger", "burst_flare", "shine"}
+        if impact_like and relight_slots and "relight_slots" not in st:
+            kw.update(relight_slots=relight_slots, relight_color=relight_color, relight_strength=relight_strength,
+                      relight_duration=relight_duration)
         kw.update(st)
         res = apply(project, rec, **kw)
         res["step"] = i
@@ -83,7 +94,8 @@ def _summary(name: str, anim: str, parts: list[dict], project: Project, start: f
 
 # ------------------------------------------------------------------ sequence
 def sequence(project: Project, *, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of, behind,
-             count, name, options, art, tier) -> dict:
+             count, name, options, art, tier, style="", realism=-1.0, style_profile=None, relight_slots=None,
+             relight_color="", relight_strength=0.0, relight_duration=0.0) -> dict:
     """Play a list of recipes with offsets into one animation (a generic magic_reveal)."""
     bad = set(options) - {"steps", "length"}
     if bad:
@@ -95,7 +107,8 @@ def sequence(project: Project, *, x, y, scale, start, duration, color, intensity
     anim = into or name or "sequence"
     if not into:
         AnimBuilder(project.data, anim, replace=True)
-    parts = run_steps(project, options.get("steps"), anim, x, y, scale, start, intensity, seed, parent, front_of, behind, tier)
+    parts = run_steps(project, options.get("steps"), anim, x, y, scale, start, intensity, seed, parent, front_of, behind, tier,
+                      style, realism, style_profile or {}, relight_slots or [], relight_color, relight_strength, relight_duration)
     return _summary(name or "sequence", anim, parts, project, start, float(options.get("length", 0.0)))
 
 
@@ -147,7 +160,8 @@ def _slam(punch: float, hz: float = 3.4, zeta: float = 0.32):
 
 
 def win_banner(project: Project, *, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of, behind,
-               count, name, options, art, tier) -> dict:
+               count, name, options, art, tier, style="", realism=-1.0, style_profile=None, relight_slots=None,
+               relight_color="", relight_strength=0.0, relight_duration=0.0) -> dict:
     """Big / Mega / Epic win banner: the banner art slams in from the camera (falls in scale with gravity-like
     acceleration, lands with a volume-preserving squash on an exact spring), and the tier's layers fire on the impact."""
     from .fx_reels import _carrier, _merge_keys
@@ -204,7 +218,8 @@ def win_banner(project: Project, *, x, y, scale, start, duration, color, intensi
     if color:
         for s in steps:
             s.setdefault("color", color)
-    parts = run_steps(project, steps, anim, x, y, scale, start, intensity, seed + 1, parent, front_of, behind, tier)
+    parts = run_steps(project, steps, anim, x, y, scale, start, intensity, seed + 1, parent, front_of, behind, tier,
+                      style, realism, style_profile or {}, relight_slots or [], relight_color, relight_strength, relight_duration)
     out = _summary(name or "win_banner", anim, parts, project, start, float(options.get("length", 0.0)))
     c.ab.event(c.T(0.0), "fx_win_banner")
     c.ab.event(c.T(t_in), "fx_win_banner_land")
