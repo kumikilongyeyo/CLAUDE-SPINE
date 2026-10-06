@@ -2269,4 +2269,5 @@ from . import fx_ambient  # noqa: E402,F401   weather, god_rays, water_surface, 
 from . import fx_features  # noqa: E402,F401   wild_land, expanding_wild, scatter_trigger, free_spins_transition
 from . import fx_bonus  # noqa: E402,F401   pick_reveal, hold_respin, jackpot_wheel, meter_fill
 from . import fx_saber  # noqa: E402,F401   saber (Spine half; the AE half is ae_templates/saber.jsx)
+from . import fx_pinata  # noqa: E402,F401   wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop
 from . import fx_bundles  # noqa: E402,F401   sequence, win_banner

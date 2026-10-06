@@ -469,6 +469,33 @@ outlines and haze. It is ported twice, sharing ONE preset table (`PRESETS` insid
 - Why not the plug-in itself: a template that needs Saber renders nowhere Saber is missing (a render farm, a teammate's
   aerender). This port uses AE's own effects only. `examples/build_saber_demo.py` renders `docs/saber.gif`.
 
+## Piñata family (one picture kit, swap in your texture pack)
+
+Twelve effects lifted from a candy / piñata slot's free spins, all drawn from ONE kit of 23 neutral pictures (white
+glows Spine tints, plus normal-blend confetti, coin, smoke and two label placeholders). Every picture is also an `art=`
+role with the same name, so an artist's pack drops in by name and the motion stays the same:
+
+    fx_recipe recipe=wild_transform project=p.json x=-144 y=43                              -> event wild_pop
+    fx_recipe recipe=wild_glow project=p.json into=fx_wild_transform x=-144 y=43 start=1.2  (seamless hand-off)
+    fx_recipe recipe=jar_burst project=p.json art={glow_soft: pack/glow_soft.png, rays: pack/rays.png}
+              options={gain: {glow_soft: 0.5, rays: 0.6}, thick: {light_streak: [1, 2.4]}}
+
+- Cell recipes, centred on the anchor, one cell = `cell` (144): wild_glow (loop: breathing glow, tilted orbit ring,
+  stars bright on the near half), wild_transform (swirling glass bubble grows, squeezes, pops; ends on wild_glow's
+  first frame), mult_cell_glow (loop), cell_pop, confetti_burst (drag + gravity + flutter + 3D flip, six shapes).
+- Board recipes, positions relative to the anchor (defaults = the clip's 5x4 board on a 721 x 1200 screen, anchor at the
+  centre): mult_streak (row flashes, streak, number arcs into the sign), wild_merge (comets oriented along curved paths
+  converge on a target), coins_to_bar, bar_sweep (loop), jar_burst (bursts ripple out from the centre, then a big flare
+  with colour-split rings; the X label flies to the sign), banner_backdrop (exact loop behind a win banner: turning rays,
+  title shine, number bar, coin + confetti rain). pinata_hit is anchored on the thing that bursts; `land` = fireball targets.
+- A real pack is never tuned like the kit. Two shared options fix it without repainting: `gain` = {picture: alpha
+  multiplier} (a fuller glow_soft turns overlapping glows into a white blob: 0.5), `thick` = {picture: [w x, h x]} (a
+  hairline light_streak / shine_band vanishes when stretched: [1, 2.4] / [2.6, 1]). `fx_pinata.pack_tuning()` holds the
+  values measured on the first real pack.
+- Blend runs: coins_to_bar adds every coin first and every flash after, so 10 coins cost 2 draw calls, not 20; jar_burst
+  puts all smoke (normal) before all flashes (additive) for the same reason.
+- `examples/build_pinata_demo.py` renders `docs/pinata.gif` on a procedural board.
+
 ## Ice and water
 
 Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is
@@ -604,6 +631,10 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
 - Bouncing / hopping motion sampled at a fixed rate cuts the corner at every landing (the grain never touches the ground):
   add a key at every landing time.
 - GIF of many different scenes: per-frame 96-colour palettes band and recolour; quantise every frame to one global palette.
+- Looping rain that respawns: put keys on EXACT times either side of the wrap. Rounding the wrap time to the key grid can
+  land it just before the true wrap, and the piece then slides back up the screen, faintly, until the next key.
+- A picture that touches its own edge shows a hard line once tinted and stretched: every glow (and every cut-out, by
+  2 px of padding) must reach alpha 0 before the border. The kit is tested for it.
 - GIF previews of soft gradients dither to 10+ MB. Judge on the contact sheet; share a quantised/resized GIF.
 - No book, lotus or vines here by design: they need art (layered PSD) and are rigged with `import_psd` + `rig_mesh` +
   `rig_strand`. Put these recipes `front_of=` / `behind=` those slots.

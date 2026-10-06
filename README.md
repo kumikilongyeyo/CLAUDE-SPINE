@@ -85,6 +85,7 @@ do it through inserted carrier bones, never your own keys.
 | ![spin](docs/spin.gif) spin: near_miss, spin_blur, turbo_spin, screen_shake | ![wins](docs/wins.gif) wins: payline, win_highlight, multiplier_stack, win_rollup | ![banner](docs/win_banner.gif) win_banner: big, mega, epic from one recipe |
 | ![payouts](docs/payouts.gif) payouts: coin_fountain, cascade_pop | ![features](docs/features.gif) features: wild_land, expanding_wild, scatter_trigger, free_spins_transition | ![bonus](docs/bonus.gif) bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill |
 | ![ambient](docs/ambient.gif) ambient: weather, god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm | ![ui](docs/ui.gif) UI: button_press, idle_shimmer, focus_glow, padlock, popup | ![saber](docs/saber.gif) saber: a port of Video Copilot's Saber (Spine + AE template) |
+| ![pinata](docs/pinata.gif) piñata: wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop (one picture kit; swap in a texture pack by name, `gain` / `thick` retune it) | | |
 
 Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
 set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):
