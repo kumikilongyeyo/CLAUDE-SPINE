@@ -51,6 +51,7 @@ def run_steps(project: Project, steps: list[dict], anim: str, x: float, y: float
         raise ValueError("a sequence needs options={steps: [{recipe, start, ...}, ...]}")
     parts: list[dict] = []
     last = front_of
+    shared_relight_used = False
     for i, st in enumerate(steps):
         st = dict(st)
         bad = set(st) - STEP_KEYS
@@ -71,9 +72,10 @@ def run_steps(project: Project, steps: list[dict], anim: str, x: float, y: float
         # A bundle's reactive light belongs on its hero impact. Steps may override it explicitly; otherwise
         # only the first impact-like member gets the shared target to avoid pulsing on every decorative layer.
         impact_like = rec in {"hit_burst", "explosion", "wild_land", "scatter_trigger", "burst_flare", "shine"}
-        if impact_like and relight_slots and "relight_slots" not in st:
+        if impact_like and relight_slots and not shared_relight_used and "relight_slots" not in st:
             kw.update(relight_slots=relight_slots, relight_color=relight_color, relight_strength=relight_strength,
                       relight_duration=relight_duration)
+            shared_relight_used = True
         kw.update(st)
         res = apply(project, rec, **kw)
         res["step"] = i
