@@ -20,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from . import ae_bridge, ae_templates
 from . import atlas as atlas_mod
 from . import fx as fx_mod
-from . import fx_recipes
+from . import fx_recipes, fx_style
 from . import juice as juice_mod
 from . import psd as psd_mod
 from . import qa, render, rig, runtime, samples, spine_cli
@@ -300,7 +300,9 @@ def fx_generate(project: str, preset: str, x: float = 0, y: float = 0, size: flo
 def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, scale: float = 1.0, start: float = 0.0,
               duration: float = 0.0, color: str = "", intensity: float = 1.0, seed: int = 7, into: str = "",
               parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
-              options: dict | None = None, art: dict | None = None, tier: str = "") -> dict:
+              options: dict | None = None, art: dict | None = None, tier: str = "", style: str = "",
+              realism: float = -1.0, style_profile: dict | None = None, relight_slots: list[str] | None = None,
+              relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0) -> dict:
     """Authored FX layers lifted from real reference clips: lotus set (rune_ring, burst_flare, rim_wisps, bloom_aura,
     floor_glow, fireflies, twinkles, plus magic_reveal = all seven timed like the clip, 13.2 s), light_beam (style
     gold | ribbon | blue), crosshair / hit_burst / lock_on (reticle locks on, fires, impact), cell_glow (resizable
@@ -329,7 +331,16 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     (e.g. crosshair: reticle). For lock_on / magic_reveal key it by member: {"crosshair": {"reticle": ...}}.
 
     tier = small | medium | big | mega | epic: one recipe covers every win size (scale, counts, one-shot time and the
-    recipe's own tier overrides; see the listing's `tiers`). Bundles: sequence = any list of recipes with offsets into one
+    recipe's own tier overrides; see the listing's `tiers`).
+
+    style = stylized | premium | realistic retunes the SAME physical recipe instead of choosing a different effect.
+    realism=0..1 interpolates stylized -> realistic when style is omitted. style_profile can deep-merge custom/captured
+    tuning. relight_slots=[...] adds a short additive response using the target art itself; relight_color/strength/duration
+    override its source colour and pulse. Results include semantic depth groups (back / subject / front / lens) and,
+    when styled, recommended depth_parallax values. Use fx_style_profile to list/capture profiles and qa_fx_premium
+    for a heuristic art-direction pass.
+
+    Bundles: sequence = any list of recipes with offsets into one
     animation (options={steps: [{recipe, start, dx, dy, ...any fx_recipe argument}]}); win_banner = Big/Mega/Epic banner
     from one recipe (tier= picks the layers; options={banner: bone} slams your banner art in on an exact spring)."""
     if recipe == "guide":
@@ -341,8 +352,36 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
         raise ValueError("project is required to add a recipe")
     p = _open(project)
     res = fx_recipes.apply(p, recipe, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of,
-                           behind, count, name, options, art, tier)
+                           behind, count, name, options, art, tier, style, realism, style_profile,
+                           relight_slots, relight_color, relight_strength, relight_duration)
     return _saved(p, res)
+
+
+@mcp.tool()
+def fx_style_profile(style: str = "", realism: float = -1.0, metrics: dict | None = None,
+                     profile: dict | None = None) -> dict:
+    """List/resolve the global FX art-direction profiles.
+
+    style: stylized | premium | realistic.
+    realism: 0..1 interpolates stylized -> realistic when style is omitted.
+    profile: advanced deep-merge overrides (the result can be passed to fx_recipe style_profile=).
+    metrics: normalised measurements from clip-breakdown (realism, glow_spread, particle_density,
+    motion_exaggeration, decay, saturation; each 0..1). When metrics is supplied this returns a captured profile
+    ready for style_profile=, keeping reference analysis separate from the low-level Spine package."""
+    if metrics is not None:
+        return fx_style.capture(metrics)
+    if not style and realism < 0 and not profile:
+        return fx_style.listing()
+    return {"profile": fx_style.resolve(style, realism, profile)}
+
+
+@mcp.tool()
+def qa_fx_premium(project: str, animation: str = "", subject_slots: list[str] | None = None) -> dict:
+    """Heuristic art-direction QA for an FX build: lighting integration, depth separation, impact hierarchy,
+    material richness and mobile readability. It flags additive white-soup, one-plane effects, excessive lens
+    layers and missing reactive subject light. This is a lint pass; final judgement still belongs to preview/video."""
+    p = _open(project)
+    return fx_style.qa_premium(p, animation, subject_slots)
 
 
 @mcp.tool()
