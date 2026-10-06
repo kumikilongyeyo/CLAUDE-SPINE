@@ -89,6 +89,7 @@ do it through inserted carrier bones, never your own keys.
 | speed_lines: anime focus lines that flicker like hand-drawn ones and rush in on the hit | AE template fire_aura: a flame ring shooting out of a hole (fire or electric), built on the fire template | ae_fx_to_spine sequences follow a rotated / scaled parent bone (aim a flame along a reel edge or away from a punch) |
 | ![cluster](docs/cluster.gif) cluster pays: cluster_dim, combo_banner, amount_to_bar, jelly_pop, scatter_shine (AE upgrades for glitter / coin spray as ae_hint) | ae_fx_to_spine copies=: many instances of one sequence sharing its frames | |
 | ![potion](docs/potion.gif) props: prop_idle (grow, tilt, overshoot, glow) and liquid_slosh (world-space surface, clipping mask) on YOUR rig | | |
+| ![props](docs/props.gif) prop library: 26 recipes (reveal: peek, shake, open, hit, upgrade, shatter; collect: absorb, overflow, counter_plate, multiplier_slam, charge, gem_glint; living: bob, blink, breathe_heavy, hover_spin, dangle, sway_wind; elements: flame_wick, liquid_bubble, drip, steam, electric, freeze, dissolve, smoke_wisp) | bundles: bonus_chest_reveal, collect_into_prop, pinata_style_break, magic_vessel (chained on events) | all on YOUR rig through carriers |
 
 Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
 set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):

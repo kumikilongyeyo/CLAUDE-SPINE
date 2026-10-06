@@ -2274,3 +2274,8 @@ from . import fx_focus  # noqa: E402,F401   speed_lines
 from . import fx_cluster  # noqa: E402,F401   cluster_dim, combo_banner, amount_to_bar, jelly_pop, scatter_shine
 from . import fx_props  # noqa: E402,F401   prop_idle, liquid_slosh
 from . import fx_bundles  # noqa: E402,F401   sequence, win_banner
+from . import fx_props_reveal  # noqa: E402,F401   prop_peek, prop_shake, prop_open, prop_hit, prop_upgrade, prop_shatter
+from . import fx_props_collect  # noqa: E402,F401   prop_absorb, prop_overflow, counter_plate, prop_multiplier_slam, prop_charge, gem_glint
+from . import fx_props_life  # noqa: E402,F401   prop_bob, prop_blink, prop_breathe_heavy, prop_hover_spin, prop_dangle, prop_sway_wind
+from . import fx_props_elements  # noqa: E402,F401   flame_wick, liquid_bubble, prop_drip, prop_steam, prop_electric, prop_freeze, prop_dissolve, smoke_wisp
+from . import fx_props_bundles  # noqa: E402,F401   bonus_chest_reveal, collect_into_prop, pinata_style_break, magic_vessel

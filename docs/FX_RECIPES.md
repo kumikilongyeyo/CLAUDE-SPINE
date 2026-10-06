@@ -541,6 +541,61 @@ artist's rig through carriers: no keys on your bones.
 - `stepped: true` holds every pose 2 frames: the hand-drawn flipbook look of the reference.
 - `examples/build_props_demo.py` renders `docs/potion.gif` (procedural potion, layered like an artist's PSD).
 
+## Prop library (26 recipes + 4 bundles)
+
+Life for props the artist already rigged. Every recipe drives YOUR bones only through inserted carriers (your keys stay
+untouched); with no bone option it builds its own bones and a stand-in picture, so it previews on its own. Rig the prop
+bone at its base (or pass `pivot`) so squashes stand on the ground; glows go behind your art, light in front.
+
+Reveal (your chest / jar / box):
+
+    fx_recipe recipe=prop_peek project=p.json options={lid: lid, prop: chest, pivot: [-120, 40]}     -> prop_peek_shut
+    fx_recipe recipe=prop_shake project=p.json duration=1.2 options={prop: chest}                    -> prop_shake_release
+    fx_recipe recipe=prop_open project=p.json options={lid: lid, prop: chest, pivot: [-60, 40]}      -> prop_open, prop_open_settled
+    fx_recipe recipe=prop_hit project=p.json options={prop: chest, direction: -90}                   -> prop_hit
+    fx_recipe recipe=prop_upgrade project=p.json color2=7DF4FF options={prop: chest}                 -> prop_upgrade_swap (swap the art)
+    fx_recipe recipe=prop_shatter project=p.json options={prop: chest, at: [0, 20]}                  -> prop_crack, prop_shatter
+
+Collect / payout:
+
+    fx_recipe recipe=prop_absorb project=p.json options={prop: jar, at: [0, 260], sources: [[-200, 100], [180, 60]]}  -> prop_absorb_hit each
+    fx_recipe recipe=prop_overflow project=p.json count=18 options={prop: jar, rim: [0, 260, 190], floor: 0}
+    fx_recipe recipe=counter_plate project=p.json options={plate: total_plate, steps: 8}           -> counter_tick n, counter_done
+    fx_recipe recipe=prop_multiplier_slam project=p.json options={prop: jar} art={stamp: x5.png}  -> prop_slam
+    fx_recipe recipe=prop_charge project=p.json options={prop: jar, level: 0.55}                   -> prop_charged (at full)
+    fx_recipe recipe=gem_glint project=p.json into=idle options={prop: jar, sync_tilt: true}       (loop, in step with prop_idle)
+
+Living props (seamless loops; sx * sy = 1 where they squash):
+
+    fx_recipe recipe=prop_bob project=p.json into=idle options={prop: gem, ground: -120, trail: 6}
+    fx_recipe recipe=prop_blink project=p.json into=idle options={prop: pot, eyes: [eye_l, eye_r]}       -> blink, hop, hop_land
+    fx_recipe recipe=prop_breathe_heavy project=p.json into=idle options={prop: chest, rising: zzz}
+    fx_recipe recipe=prop_hover_spin project=p.json into=idle options={prop: coin, turns: 2}             -> glint
+    fx_recipe recipe=prop_dangle project=p.json into=idle options={prop: lantern, pivot: [0, 300], strands: [tassel_l, tassel_r]}
+    fx_recipe recipe=prop_sway_wind project=p.json into=idle options={chain: [flag0, flag1, flag2, flag3], gust: 30}
+
+Elements on a prop (AE versions as ae_hint where AE looks better):
+
+    fx_recipe recipe=flame_wick project=p.json into=idle options={follow: lantern}       (leans against the bone's motion)
+    fx_recipe recipe=liquid_bubble project=p.json into=idle options={radius: 110, surface_y: 6}
+    fx_recipe recipe=prop_drip project=p.json options={at: [40, -90], floor_y: -260}      -> prop_drip_snap, prop_drip_splat
+    fx_recipe recipe=prop_steam project=p.json options={at: [150, 60], climax: 2.6}       -> prop_steam_climax
+    fx_recipe recipe=prop_electric project=p.json into=idle options={points: [[-60, 90], [60, 90], [0, -80]]}
+    fx_recipe recipe=prop_freeze project=p.json options={prop: chest, idle: idle}         -> prop_frozen (thaw > 0 reverses)
+    fx_recipe recipe=prop_dissolve project=p.json options={prop: chest}                   -> prop_dissolve_hide (a clip really wipes)
+    fx_recipe recipe=smoke_wisp project=p.json into=idle options={at: [0, 120]}
+
+Bundles (members chained on each other's EVENTS, so retiming one keeps the chain in sync; shared options go to every
+member that takes them; `steps={recipe: {...}}` overrides one, `skip=[...]` drops some):
+
+    fx_recipe recipe=bonus_chest_reveal project=p.json options={prop: chest, lid: lid, pivot: [-120, 40]}
+    fx_recipe recipe=collect_into_prop project=p.json options={prop: jar}       (one counter tick per absorbed item)
+    fx_recipe recipe=pinata_style_break project=p.json options={prop: pinata}   (swing + 3 hits + shatter + pinata_hit)
+    fx_recipe recipe=magic_vessel project=p.json options={prop: bottle, liquid: liquid}   (4 idle cycles, seamless)
+
+- prop_idle / liquid_slosh take `cycles` to repeat the measured 0.755 s cycle inside a longer loop.
+- `examples/build_props_bundle_demo.py` renders `docs/props.gif`: an unanimated chest, one call.
+
 ## Ice and water
 
 Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is

@@ -38,10 +38,17 @@ def keyed(u, pts):
     return pts[-1][1]
 
 
-def _times(D, stepped):
-    n = max(2, int(round(D * FPS)))
-    ts = [D * i / n for i in range(n + 1)]
+def _times(D, stepped, cycles=1):
+    total = D * max(1, int(cycles))
+    n = max(2, int(round(total * FPS)))
+    ts = [total * i / n for i in range(n + 1)]
     return ts[::2] + ([ts[-1]] if n % 2 else []) if stepped else ts
+
+
+def _u(t, D):
+    """Phase 0..1 inside the current cycle (the last key of the last cycle reads 1.0, not 0)."""
+    q = t / D
+    return 1.0 if q > 0 and abs(q - round(q)) < 1e-9 else q % 1.0
 
 
 def _key(c: Ctx, bone: str, timeline: str, ts, fn, stepped: bool):
@@ -66,11 +73,11 @@ def _descendants(sk, bone):
 
 def prop_idle(c: Ctx, P: dict) -> dict:
     from .fx_reels import _carrier, _merge_keys
-    D, stepped = float(P["duration"]), bool(P["stepped"])
+    D, stepped, N = float(P["duration"]), bool(P["stepped"]), max(1, int(P["cycles"]))
     sk = c.sk
     grow, tilt = float(P["grow"]), float(P["tilt"])
-    ts = _times(D, stepped)
-    sc = lambda t: 1 + grow * keyed(t / D, SCALE)  # noqa: E731
+    ts = _times(D, stepped, N)
+    sc = lambda t: 1 + grow * keyed(_u(t, D), SCALE)  # noqa: E731
     if P["prop"]:                                   # your prop: carriers above its bone, your keys untouched
         prop = str(P["prop"])
         if not sk.has_bone(prop):
@@ -85,8 +92,8 @@ def prop_idle(c: Ctx, P: dict) -> dict:
         at = (sk.world()[c.group].x, sk.world()[c.group].y)
         _key(c, car_s, "scale", ts, lambda t: (sc(t), sc(t)), stepped)
         P = dict(P, glow=P["glow"] or 260.0)
-    _key(c, car_r, "rotate", ts, lambda t: tilt * keyed(t / D, TILT), stepped)
-    res = dict(duration=D, loop=D, carriers=[car_s, car_r] if car_s != car_r else [], prop_bone=prop, pivot=list(at))
+    _key(c, car_r, "rotate", ts, lambda t: tilt * keyed(_u(t, D), TILT), stepped)
+    res = dict(duration=D * N, loop=D * N, carriers=[car_s, car_r] if car_s != car_r else [], prop_bone=prop, pivot=list(at))
     if P["glow"]:
         col = _hexn(P["color"], "FF4FE0")
         under = [s.name for s in sk.slots if s.bone in _descendants(sk, prop)]
@@ -98,8 +105,8 @@ def prop_idle(c: Ctx, P: dict) -> dict:
         if P["prop"]:                                # glow centred on the pivot (world = root space here)
             gb = sk.bones[[b.name for b in sk.bones].index(c.group)]
             gb.parent, gb.x, gb.y = "root", at[0], at[1]
-        _key(c, g, "scale", ts, lambda t: (1 + 0.35 * grow * keyed(t / D, SCALE),) * 2, stepped)
-        c.ab.slot_color(s, [(c.T(t), hexa(col, c.a(0.65 + 0.35 * keyed(t / D, SCALE)))) for t in ts],
+        _key(c, g, "scale", ts, lambda t: (1 + 0.35 * grow * keyed(_u(t, D), SCALE),) * 2, stepped)
+        c.ab.slot_color(s, [(c.T(t), hexa(col, c.a(0.65 + 0.35 * keyed(_u(t, D), SCALE)))) for t in ts],
                         "stepped" if stepped else "linear")
         res["glow_slot"] = s
     return c.result(**res)
@@ -107,10 +114,10 @@ def prop_idle(c: Ctx, P: dict) -> dict:
 
 def liquid_slosh(c: Ctx, P: dict) -> dict:
     from .fx_reels import _carrier, _merge_keys
-    D, stepped = float(P["duration"]), bool(P["stepped"])
+    D, stepped, N = float(P["duration"]), bool(P["stepped"]), max(1, int(P["cycles"]))
     sk = c.sk
     slosh, tilt, shift = float(P["slosh"]), float(P["tilt"]), float(P["shift"])
-    ts = _times(D, stepped)
+    ts = _times(D, stepped, N)
     if P["liquid"]:
         liq = str(P["liquid"])
         if not sk.has_bone(liq):
@@ -123,15 +130,15 @@ def liquid_slosh(c: Ctx, P: dict) -> dict:
         s = c.slot(liq, "fx/pinata_light_streak", 240.0, height=40.0, make=PICS["light_streak"], role="surface")
         c.show([s], 0, None)
         tilt = 0.0 if not P["tilt"] else tilt
-    world = lambda t: slosh * keyed(t / D, SURF)  # noqa: E731   the lag behind the tilt is built into SURF
+    world = lambda t: slosh * keyed(_u(t, D), SURF)  # noqa: E731   the lag behind the tilt is built into SURF
     # the prop's own tilt (prop_idle with the same tilt) is inherited: subtract it so the surface angle is the WORLD one
-    local = lambda t: world(t) - tilt * keyed(t / D, TILT)  # noqa: E731
+    local = lambda t: world(t) - tilt * keyed(_u(t, D), TILT)  # noqa: E731
     _key(c, car, "rotate", ts, local, stepped)
     if P["liquid"]:
         _merge_keys(c, car, "translate", ts, lambda t: (shift * world(t) / max(abs(slosh), 1e-9), 0.0), "add")
     else:
         _key(c, car, "translate", ts, lambda t: (shift * world(t) / max(abs(slosh), 1e-9), 0.0), stepped)
-    res = dict(duration=D, loop=D, carrier=car, vessel=vessel)
+    res = dict(duration=D * N, loop=D * N, carrier=car, vessel=vessel)
     if P["clip"]:
         layers = [s.name for s in sk.slots if s.bone in _descendants(sk, liq)]
         if not layers:
@@ -164,7 +171,8 @@ RECIPES.update({
         options=dict(prop=("", "the prop's root bone (empty: a bone of the recipe's own; parent your art to it)"), pivot=(None, "[x, y] world pivot (default: the bone's origin)"),
                      grow=(0.17, "extra scale at the peak (0.17 = +17 %)"), tilt=(14.0, "peak tilt, degrees (clockwise)"),
                      glow=(0.0, "> 0: add a pulsing glow this wide behind the prop"),
-                     stepped=(False, "hold every pose 2 frames (the hand-drawn flipbook look)"))),
+                     stepped=(False, "hold every pose 2 frames (the hand-drawn flipbook look)"),
+                     cycles=(1, "repeat the cycle N times (duration stays ONE cycle): match a longer loop"))),
     "liquid_slosh": dict(
         fn=liquid_slosh, duration=0.755, kind="window", color="",
         summary="Liquid sloshing in a vessel: the surface angle is driven in WORLD space (it swings against the vessel's tilt "
@@ -177,7 +185,8 @@ RECIPES.update({
                      clip=(0.0, "radius (circle) or [[x, y], ...] polygon in the vessel bone's space; 0 = no mask"),
                      clip_center=([0.0, 0.0], "circle centre in the vessel bone's space"),
                      clip_slots=(None, "[first, last] slots to clip (default: every slot on the liquid bone)"),
-                     stepped=(False, "hold every pose 2 frames"))),
+                     stepped=(False, "hold every pose 2 frames"),
+                     cycles=(1, "repeat the cycle N times (duration stays ONE cycle)"))),
 })
 ROLES["prop_idle"] = {"glow": "soft round glow behind the prop (additive, white: tinted by color)"}
 ROLES["liquid_slosh"] = {"surface": "the surface line shown when no liquid bone is given (additive)"}
