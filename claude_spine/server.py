@@ -18,12 +18,13 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import ae_bridge, ae_templates
+from . import animation_opt
 from . import atlas as atlas_mod
 from . import fx as fx_mod
 from . import fx_recipes, fx_style
 from . import juice as juice_mod
 from . import psd as psd_mod
-from . import qa, render, rig, runtime, samples, spine_cli
+from . import qa, render, rig, runtime, samples, spine_cli, volume25d
 from .ir import Bone
 from .mesh import rig_mesh as _rig_mesh
 from .project import Project
@@ -187,6 +188,25 @@ def rig_mesh(project: str, slot: str, bones: list[str] | None = None, auto_bones
                                max_influences, smooth))
 
 
+@mcp.tool()
+def rig_volume_2p5d(project: str, slots: list[str], strength: float = 0.72, falloff: float = 1.6,
+                    rim_weight: float = 0.0, parent: str = "", detail: float = 1.2,
+                    max_vertices: int = 280, min_weight: float = 0.03, max_influences: int = 4,
+                    physics: str = "none", test_animation: bool = True, name: str = "volume") -> dict:
+    """Add a non-destructive 2.5D volume core to one or more slots.
+
+    Existing heat/turn/limb weights are preserved, then a centre-heavy volume
+    influence is layered on and renormalised to max_influences. The outline is
+    pinned by default (rim_weight=0), so squash/bulge reads as depth instead of
+    melting the silhouette. The returned core bone can be animated directly;
+    physics="jiggle" adds runtime secondary motion. A sparse volume_test clip is
+    created by default so the deformation can be judged immediately."""
+    p = _open(project)
+    return _saved(p, volume25d.rig_volume(
+        p, slots, strength, falloff, rim_weight, parent, detail, max_vertices,
+        min_weight, max_influences, physics, test_animation, name))
+
+
 # ----------------------------------------------------------------- constraints
 @mcp.tool()
 def rig_ik(project: str, bones: list[str], target: str = "", target_parent: str = "",
@@ -251,6 +271,33 @@ def rig_turn(project: str, head_bone: str, face_slot: str, features: dict[str, f
 
 
 # --------------------------------------------------------------------- motion
+@mcp.tool()
+def optimize_animation(project: str, animation: str, mode: str = "editable", tolerance: float = 1.0,
+                       recurve: bool = True, force_curved: bool = False, ease_ends: bool = True) -> dict:
+    """Turn dense procedural keys into animator-friendly curves.
+
+    mode: fidelity | balanced | editable. Keeps endpoints, extrema, direction
+    changes and holds, removes redundant sampled keys within per-channel error
+    tolerances, then rebuilds smooth monotone Bezier handles. Existing authored
+    or stepped curves are untouched unless force_curved=True. Events,
+    attachments and draw order are never simplified."""
+    p = _open(project)
+    return _saved(p, animation_opt.optimize(
+        p, animation, mode, tolerance, recurve, force_curved, ease_ends))
+
+
+@mcp.tool()
+def volume_bounce(project: str, bones: list[str], animation: str = "volume_bounce", start: float = 0.0,
+                  duration: float = 0.55, strength: float = 0.18, wobble: float = 0.03,
+                  merge: bool = False) -> dict:
+    """Sparse five-key squash/rebound animation for volume-core bones.
+
+    Intended for bones returned by rig_volume_2p5d. Uses authored ease-in,
+    back-out and settle curves rather than an evenly sampled bake."""
+    p = _open(project)
+    return _saved(p, volume25d.bounce(p, bones, animation, start, duration, strength, wobble, merge))
+
+
 @mcp.tool()
 def juice_apply(project: str, clips: list[str] | None = None, intensity: float = 1.0,
                 durations: dict[str, float] | None = None, fx: bool = False, shine_slot: str = "",
