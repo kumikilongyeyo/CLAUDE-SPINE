@@ -267,3 +267,10 @@ repairs.
 
 MIT. See `LICENSE`. The original work is © 2026 Egor Fedorov; this fork is
 © 2026 kumikilongyeyo.
+
+## Claude Code skills
+
+`skills/` ships two skills for working from reference videos (install with `sh skills/install.sh`):
+`clip-breakdown` watches a clip and writes an animator's breakdown (beat sheet, timings, easing, layout, which tool
+each part needs), and `clip-to-spine` rebuilds its effects in Spine with After Effects for lightning / fire / auras /
+smoke. See [skills/README.md](skills/README.md).
