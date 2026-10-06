@@ -509,6 +509,43 @@ Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (modul
   slot on its own bone, thrown out from the centre and pulled down by gravity.
 - Droplets are turned and stretched along their velocity (unwrapped angles) so they read as water, not confetti.
 
+## After Effects -> Spine, end to end (lightning, auras, flame trails, speed lines)
+
+The workflow that shipped a whole free-spins sequence (two-fighter slot: reel fire, scatter lightning, fire and
+electric auras, clash fireballs, flame trails, focus lines), in the order that saves the most iterations:
+
+1. Contact sheet of the clip (16-24 frames) and a GRIDDED still: measure reel centres, rows and anchor points in
+   pixels before placing anything (a guessed layout cost a full rebuild: the board had 5 rows, not 4).
+2. Split every effect into "needs real noise" (lightning, flames, auras, smoke, fireballs: AE) and "light that moves"
+   (flashes, hit bursts, streaks, glows, flares, speed lines: Spine recipes). The second group is most of a clip.
+3. Build ALL the AE comps in one script with `ae_template` (fresh comp names each attempt: AE caches by name), save,
+   render each with aerender into a frames folder, and judge them on a contact sheet before going near Spine.
+4. Bring each comp in with `ae_fx_to_spine` (frames_dir= the rendered folder) on its own bone; aim and stretch with
+   that bone (sequences now follow a rotated / scaled parent). 256 px is plenty for a looping aura.
+5. Mix Spine recipes into the same animation with `into=`, preview over a frame of the clip, tune, export.
+
+Recipes for the parts:
+
+    ae_template name=lightning params={width: 320, height: 640, start: [0.45, 0], end: [0.55, 1], branching: 0.45}
+    ae_template name=fire_aura params={size: 512}                                    -> fire ring, loop, mode alpha
+    ae_template name=fire_aura params={hot: F0FFFF, mid: 3AA8FF, cool: 1030B0}       -> electric blue aura
+    ae_template name=fire params={width: 320, height: 640, taper: 2.9, body: 0.2, core: 0.32, edge_fade: 0.16}
+              -> a long flame trail: aim its bone AWAY from the motion, base just behind the fist, NORMAL blend
+    ae_template name=fire params={width: 1024, height: 320, core: 0.18, body: 0.06, scale: 24, alpha_cut: 0.34}
+              -> a flame strip to stand along a reel edge (rotate its bone 90, stretch x to the reel height)
+    ae_template name=smoke_puff params={light: FFF3A0, mid: FF7A1C, shadow: 3A2018}  -> clash fireball
+    fx_recipe recipe=speed_lines options={hit: 1.35}                                 -> focus lines, rush at the hit
+
+- `fire_aura` = a fire strip (thin body, tall tongues), mirrored (seamless), flipped, squeezed square, wrapped with
+  Polar Coordinates (Rect to Polar). Templates can now build on each other: a header `"uses": ["fire"]` inlines that
+  template as `AEFX.T_fire(P)` with its defaults in `AEFX.D_fire`.
+- `speed_lines` redraws every line on STEPPED keys (12 a second): hand-drawn focus lines flicker; tweened ones read as
+  a tunnel.
+
+Caveats to tell the client up front: a flipbook repeats exactly (each variant costs memory); a bolt has a fixed shape
+(stretching changes its thickness); sequences follow bones but don't bend with a mesh; additive light vanishes on bright
+or same-coloured backgrounds (use normal blend for flames there); budget ~10-15 MB of GPU memory per 2048 atlas page.
+
 ## Hybrids: Spine recipe + After Effects part
 
 `portal` and `electric_frame` return a `ring_hint` (parent bone, the slot to draw in front of, additive, loop, until).
@@ -635,6 +672,12 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
   land it just before the true wrap, and the piece then slides back up the screen, faintly, until the next key.
 - A picture that touches its own edge shows a hard line once tinted and stretched: every glow (and every cut-out, by
   2 px of padding) must reach alpha 0 before the border. The kit is tested for it.
+- Polar Coordinates: its interpolation is 0..1 (not percent), and it wraps in the LAYER's pixels using the short
+  side as the radius: squeeze a wide strip into a square comp first or the ring comes out a thin oval.
+- The fire template's hot body is a ramp sized to the comp WIDTH: on a wide strip leave `body` tiny (0.06) or the
+  strip is one solid band of flame; `taper` sets how TALL the body reaches (2.9 for a long trail).
+- A flame that "isn't there" in the preview: print the slot's draw bounds from runtime.run(geometry=True) before
+  retuning. Twice it was there all along: additive orange on a red background, and a hot base parked on the subject.
 - GIF previews of soft gradients dither to 10+ MB. Judge on the contact sheet; share a quantised/resized GIF.
 - No book, lotus or vines here by design: they need art (layered PSD) and are rigged with `import_psd` + `rig_mesh` +
   `rig_strand`. Put these recipes `front_of=` / `behind=` those slots.

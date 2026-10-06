@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .ir import RegionAttachment, Sequence, Slot
+from .ir import Bone, RegionAttachment, Sequence, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
 
@@ -253,9 +253,12 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
 
     # ---- skeleton: group bone, slot, attachment
     gname = sk.unique_name(f"ae_{name}")
-    pw = sk.world()[parent]
-    wx, wy = pw.to_world(x, y)
-    sk.add_bone_world(gname, parent, wx, wy, 0, color="FF9E00FF")
+    # a plain child at (x, y) in the parent's own space: it inherits the parent's rotation and scale, so a sequence
+    # parented to a rotated bone (a flame pointed along a reel edge, a trail aimed away from a punch) turns with it
+    # (placing it in world space with world rotation 0 silently cancelled the parent's rotation)
+    if parent not in {bn.name for bn in sk.bones}:
+        raise ValueError(f"no bone named {parent!r} to parent the sequence to")
+    sk.bones.append(Bone(name=gname, parent=parent, x=x, y=y, length=0, color="FF9E00FF"))
     bl = blend or ("additive" if mode == "additive" else "normal")
     slot = Slot(name=sk.unique_name(f"{gname}", "slot"), bone=gname, color=color, blend=bl)
     if behind:

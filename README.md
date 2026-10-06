@@ -86,6 +86,7 @@ do it through inserted carrier bones, never your own keys.
 | ![payouts](docs/payouts.gif) payouts: coin_fountain, cascade_pop | ![features](docs/features.gif) features: wild_land, expanding_wild, scatter_trigger, free_spins_transition | ![bonus](docs/bonus.gif) bonus: pick_reveal, hold_respin, jackpot_wheel, meter_fill |
 | ![ambient](docs/ambient.gif) ambient: weather, god_rays, water_surface, heat_shimmer, fog_roll, lightning_storm | ![ui](docs/ui.gif) UI: button_press, idle_shimmer, focus_glow, padlock, popup | ![saber](docs/saber.gif) saber: a port of Video Copilot's Saber (Spine + AE template) |
 | ![pinata](docs/pinata.gif) piñata: wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop (one picture kit; swap in a texture pack by name, `gain` / `thick` retune it) | | |
+| speed_lines: anime focus lines that flicker like hand-drawn ones and rush in on the hit | AE template fire_aura: a flame ring shooting out of a hole (fire or electric), built on the fire template | ae_fx_to_spine sequences follow a rotated / scaled parent bone (aim a flame along a reel edge or away from a punch) |
 
 Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
 set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):

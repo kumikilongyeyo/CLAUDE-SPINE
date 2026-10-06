@@ -43,12 +43,16 @@ def build_script(name: str, params: dict | None = None, out_dir: str | Path | No
         raise ValueError(f"template {name!r} has no parameter(s) {unknown}; it takes {sorted(meta['params'])}")
     merged = {**meta["params"], **given}
     body = (HERE / f"{name}.jsx").read_text()
+    # "uses": other templates this one builds on, inlined as AEFX.T_<name>(P) (returns that template's JSON line)
+    # with their defaults as AEFX.D_<name>, so a composite template reuses them instead of copying their code
+    uses = "".join(f"AEFX.D_{u} = {json.dumps(templates[u]['params'])};\n"
+                   f"AEFX.T_{u} = function (P) {{\n{(HERE / f'{u}.jsx').read_text()}\n}};\n" for u in meta.get("uses", []))
     save = ""
     if merged.get("save_as"):
         save = f"\napp.project.save(new File({json.dumps(str(Path(merged['save_as']).expanduser()))}));"
     # the template ends in `return <json string>`, so wrap it in a function and save after it ran
     src = (f"var P = {json.dumps(merged)};\n{(HERE / '_lib.jsx').read_text()}\n"
-           f"var __r = (function () {{\n{body}\n}})();{save}\n__r;\n")
+           f"{uses}var __r = (function () {{\n{body}\n}})();{save}\n__r;\n")
     out = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="ae_tpl_"))
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{name}.jsx"

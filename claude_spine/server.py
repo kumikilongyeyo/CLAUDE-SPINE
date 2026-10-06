@@ -383,7 +383,8 @@ def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -
 
     name="" lists the templates with their parameters and defaults. Otherwise name is one of: glow_pulse,
     shockwave, sparkle, relief_shimmer (light wave over a picture, traced by its relief or a depth map),
-    fire, lightning, burst (parabolic sparks), splash. params override the defaults (comp= names the comp;
+    fire, fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic sparks),
+    splash. params override the defaults (comp= names the comp;
     save_as= saves the open AE project to that .aep right after, which aerender needs).
     Then: run the returned `run_with` with the After Effects MCP's ae_run_script (it creates the comp in an
     ae_fx_templates folder of the OPEN project and returns its name, size, fps, frames), save the project, and
