@@ -528,6 +528,22 @@ From a 4x4 candy cluster slot: the whole win flow, Spine-native, with two option
 - Pictures: the piñata kit (shared texture paths) plus panel, jelly_cube, combo_plate, amount_plate; all `art=` roles,
   `gain` / `thick` as in the piñata family. `examples/build_cluster_demo.py` renders `docs/cluster.gif`.
 
+## Props (idle life for a rigged symbol)
+
+From a potion symbol clip, measured frame by frame (registration of the rigid parts, liquid tracking). They work on the
+artist's rig through carriers: no keys on your bones.
+
+    fx_recipe recipe=prop_idle project=p.json into=idle options={prop: bottle, glow: 640}
+    fx_recipe recipe=liquid_slosh project=p.json into=idle options={liquid: liquid, clip: 118}
+
+- prop_idle: grows ~17 % while tilting ~14 deg clockwise (0.36 s ease in-out), holds, shrinks back with a +4 deg
+  counter-tilt overshoot; 0.755 s seamless loop; `pivot` = the vessel centre; optional pulsing glow under the prop.
+- liquid_slosh: the liquid bone sits on the SURFACE line; the surface angle is keyed in world space (local = world -
+  the prop's tilt), so it reads right under prop_idle; `clip` = circle radius or polygon in the vessel bone's space
+  (one clipping attachment from the first to the last liquid slot; +1 draw call).
+- `stepped: true` holds every pose 2 frames: the hand-drawn flipbook look of the reference.
+- `examples/build_props_demo.py` renders `docs/potion.gif` (procedural potion, layered like an artist's PSD).
+
 ## Ice and water
 
 Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is

@@ -88,6 +88,7 @@ do it through inserted carrier bones, never your own keys.
 | ![pinata](docs/pinata.gif) piñata: wild_glow, wild_transform, mult_cell_glow, cell_pop, confetti_burst, mult_streak, wild_merge, coins_to_bar, bar_sweep, pinata_hit, jar_burst, banner_backdrop (one picture kit; swap in a texture pack by name, `gain` / `thick` retune it) | | |
 | speed_lines: anime focus lines that flicker like hand-drawn ones and rush in on the hit | AE template fire_aura: a flame ring shooting out of a hole (fire or electric), built on the fire template | ae_fx_to_spine sequences follow a rotated / scaled parent bone (aim a flame along a reel edge or away from a punch) |
 | ![cluster](docs/cluster.gif) cluster pays: cluster_dim, combo_banner, amount_to_bar, jelly_pop, scatter_shine (AE upgrades for glitter / coin spray as ae_hint) | ae_fx_to_spine copies=: many instances of one sequence sharing its frames | |
+| ![potion](docs/potion.gif) props: prop_idle (grow, tilt, overshoot, glow) and liquid_slosh (world-space surface, clipping mask) on YOUR rig | | |
 
 Characters and animals are rig recipes that read your PSD by layer name and return a finished rig plus a standard clip
 set, so swapping the theme means swapping the PSD ([docs/RIGS.md](docs/RIGS.md)):
