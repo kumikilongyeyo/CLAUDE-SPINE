@@ -17,27 +17,29 @@ from .timeline import AnimBuilder, r
 from .weights import decode_weighted, finalize, skin_vertices
 
 
-def _weights(sk, slot: str, att: MeshAttachment) -> tuple[list[int], np.ndarray]:
+def _weights(sk, slot: str, att: MeshAttachment) -> tuple[list[str], np.ndarray]:
+    """Return stable bone names + weight matrix (bone indices can change when the core is inserted)."""
     n = len(att.uvs) // 2
     if len(att.vertices) == 2 * n:
-        return [sk.bone_index(sk.slot(slot).bone)], np.ones((n, 1), float)
+        return [sk.slot(slot).bone], np.ones((n, 1), float)
     inf = decode_weighted(att.vertices, n)
-    ids: list[int] = []
+    names: list[str] = []
     for row in inf:
         for bi, *_ in row:
-            if bi not in ids:
-                ids.append(bi)
-    col = {bi: j for j, bi in enumerate(ids)}
-    W = np.zeros((n, len(ids)), float)
+            name = sk.bones[bi].name
+            if name not in names:
+                names.append(name)
+    col = {name: j for j, name in enumerate(names)}
+    W = np.zeros((n, len(names)), float)
     for i, row in enumerate(inf):
         for bi, _x, _y, w in row:
-            W[i, col[bi]] = float(w)
-    return ids, W
+            W[i, col[sk.bones[bi].name]] = float(w)
+    return names, W
 
 
-def _dominant_parent(sk, ids: list[int], W: np.ndarray, pts: np.ndarray, centre: np.ndarray) -> str:
+def _dominant_parent(names: list[str], W: np.ndarray, pts: np.ndarray, centre: np.ndarray) -> str:
     i = int(np.argmin(np.sum((pts - centre[None]) ** 2, axis=1)))
-    return sk.bones[ids[int(np.argmax(W[i]))]].name
+    return names[int(np.argmax(W[i]))]
 
 
 def rig_volume(project: Project, slots: list[str], strength: float = 0.72, falloff: float = 1.6,
@@ -64,7 +66,7 @@ def rig_volume(project: Project, slots: list[str], strength: float = 0.72, fallo
         raise ValueError("rim_weight must be between 0 and strength")
 
     sk = project.data
-    prepared: list[tuple[str, MeshAttachment, np.ndarray, list[int], np.ndarray]] = []
+    prepared: list[tuple[str, MeshAttachment, np.ndarray, list[str], np.ndarray]] = []
     hulls = []
     for slot in slots:
         sk.slot(slot)
@@ -75,8 +77,8 @@ def rig_volume(project: Project, slots: list[str], strength: float = 0.72, fallo
         if not isinstance(att, MeshAttachment):
             raise ValueError(f"{slot}: volume rig needs a region or mesh attachment")
         pts = mesh_world_vertices(sk, slot, att, sk.world())
-        ids, W = _weights(sk, slot, att)
-        prepared.append((slot, att, pts, ids, W))
+        names, W = _weights(sk, slot, att)
+        prepared.append((slot, att, pts, names, W))
         hulls.append(pts[:att.hull])
 
     H = np.vstack(hulls)
@@ -88,8 +90,8 @@ def rig_volume(project: Project, slots: list[str], strength: float = 0.72, fallo
         sk.bone(parent)
         par = parent
     else:
-        slot, att, pts, ids, W = prepared[0]
-        par = _dominant_parent(sk, ids, W, pts, centre)
+        slot, att, pts, names, W = prepared[0]
+        par = _dominant_parent(names, W, pts, centre)
 
     core = sk.unique_name(f"{name}_core")
     sk.add_bone_world(core, par, float(centre[0]), float(centre[1]), 0, color="FF9A3CFF")
@@ -97,7 +99,7 @@ def rig_volume(project: Project, slots: list[str], strength: float = 0.72, fallo
     world = sk.world()
 
     results = {}
-    for slot, att, pts, ids, Wold in prepared:
+    for slot, att, pts, names, Wold in prepared:
         q = np.sqrt(((pts[:, 0] - centre[0]) / rx) ** 2 + ((pts[:, 1] - centre[1]) / ry) ** 2)
         radial = np.clip(1.0 - q, 0.0, 1.0) ** float(falloff)
         wv = rim_weight + (strength - rim_weight) * radial
@@ -106,9 +108,10 @@ def rig_volume(project: Project, slots: list[str], strength: float = 0.72, fallo
         Wnew = np.c_[Wold * (1.0 - wv[:, None]), wv]
         fallback = np.argmax(Wold, axis=1)
         Wnew = finalize(Wnew, min_weight=min_weight, max_influences=max_influences, fallback=fallback)
-        bone_ids = ids + [core_i]
+        bone_names = names + [core]
+        bone_ids = [sk.bone_index(n) for n in bone_names]
         att.vertices = skin_vertices(
-            pts, Wnew, bone_ids, [world[sk.bones[i].name] for i in bone_ids]
+            pts, Wnew, bone_ids, [world[n] for n in bone_names]
         )
 
         inf_count = (Wnew > 0).sum(1)
