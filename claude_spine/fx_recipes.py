@@ -31,6 +31,7 @@ Rules every recipe follows (they are why the output is cheap and drops into a ga
 """
 from __future__ import annotations
 
+import inspect
 import math
 from typing import Any, Callable
 
@@ -2181,12 +2182,16 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
     is omitted. ``style_profile`` deep-merges custom tuning over that profile. ``relight_slots`` adds a short,
     cheap additive response using the subject's own art, so impacts illuminate the thing they hit."""
     if recipe in BUNDLES:
-        return BUNDLES[recipe](project, x=x, y=y, scale=scale, start=start, duration=duration, color=color,
-                               intensity=intensity, seed=seed, into=into, parent=parent, front_of=front_of,
-                               behind=behind, count=count, name=name, options=options or {}, art=art or {}, tier=tier,
-                               style=style, realism=realism, style_profile=style_profile or {},
-                               relight_slots=relight_slots or [], relight_color=relight_color,
-                               relight_strength=relight_strength, relight_duration=relight_duration)
+        fn = BUNDLES[recipe]
+        kw = dict(x=x, y=y, scale=scale, start=start, duration=duration, color=color, intensity=intensity, seed=seed,
+                  into=into, parent=parent, front_of=front_of, behind=behind, count=count, name=name,
+                  options=options or {}, art=art or {}, tier=tier)
+        extras = dict(style=style, realism=realism, style_profile=style_profile or {},
+                      relight_slots=relight_slots or [], relight_color=relight_color,
+                      relight_strength=relight_strength, relight_duration=relight_duration)
+        accepted = inspect.signature(fn).parameters
+        kw.update({k: v for k, v in extras.items() if k in accepted})
+        return fn(project, **kw)
     if tier and recipe in ("lock_on", "magic_reveal"):
         raise ValueError(f"tier is not supported for {recipe}; put its members in a sequence with tier instead")
     if recipe == "lock_on":
@@ -2220,9 +2225,10 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
     if relight_slots:
         prof = fx_style.resolve(style, realism, style_profile) or fx_style.resolve("premium")
         source = relight_color or color or d.get("color", "") or prof["lighting"].get("color", "")
+        light_name = res["group_bone"].replace("fx_", "", 1)
         res["relight"] = fx_style.relight(project, res["animation"], relight_slots, start=start, color=source,
                                          strength=relight_strength, duration=relight_duration, profile=prof,
-                                         name=name or recipe)
+                                         name=light_name)
     return res
 
 
