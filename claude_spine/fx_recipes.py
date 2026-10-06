@@ -2233,7 +2233,9 @@ def _split_art(art: dict, members: list[str]) -> dict[str, dict]:
     return {k: dict(v) for k, v in art.items()}
 
 
-def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None) -> dict:
+def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None,
+             style="", realism=-1.0, style_profile=None, relight_slots=None, relight_color="", relight_strength=0.0,
+             relight_duration=0.0) -> dict:
     """Crosshairs lock onto each target in turn, fire, and a hit burst lands on every one."""
     targets = options.get("targets") or [[0.0, 0.0]]
     stagger = float(options.get("stagger", 0.18))
@@ -2244,13 +2246,16 @@ def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behin
     hit_at = float(ch_opts.get("hit", 0.85))
     arts = _split_art(art or {}, ["crosshair", "hit_burst"])
     for i, (tx, ty) in enumerate(targets):
-        base = dict(x=x, y=y, scale=scale, intensity=intensity, seed=seed + i, into=anim, parent=parent)
-        r1 = apply(project, "crosshair", start=start + i * stagger, front_of=last, behind=behind if not parts else "", options=ch_opts or None, art=arts.get("crosshair"), **base)
+        base = dict(x=x, y=y, scale=scale, intensity=intensity, seed=seed + i, into=anim, parent=parent,
+                    style=style, realism=realism, style_profile=style_profile or {})
+        r1 = apply(project, "crosshair", start=start + i * stagger, front_of=last, behind=behind if not parts else "",
+                   options=ch_opts or None, art=arts.get("crosshair"), **base)
         # the target offset is applied on the group bone (x, y are the parent-space centre of the whole set)
         g1 = project.data.bone(r1["group_bone"]); g1.x, g1.y = x + tx * scale, y + ty * scale
         last = r1["slots"][-1]
         r2 = apply(project, "hit_burst", start=start + i * stagger + hit_at, front_of=last, options=hit_opts or None,
-                   art=arts.get("hit_burst"), **base)
+                   art=arts.get("hit_burst"), relight_slots=relight_slots or [], relight_color=relight_color,
+                   relight_strength=relight_strength, relight_duration=relight_duration, **base)
         g2 = project.data.bone(r2["group_bone"]); g2.x, g2.y = x + tx * scale, y + ty * scale
         last = r2["slots"][-1]
         parts += [r1, r2]
@@ -2259,7 +2264,9 @@ def _lock_on(project: Project, x, y, scale, start, into, parent, front_of, behin
             "length": start + (len(targets) - 1) * stagger + hit_at + 0.95}
 
 
-def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None) -> dict:
+def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind, intensity, seed, name, options, art=None,
+            style="", realism=-1.0, style_profile=None, relight_slots=None, relight_color="", relight_strength=0.0,
+            relight_duration=0.0) -> dict:
     arts = _split_art(art or {}, [r for r, *_ in REVEAL])
     skip = set(options.get("skip", []))
     over = options.get("overrides", {})
@@ -2275,7 +2282,11 @@ def _reveal(project: Project, x, y, scale, start, into, parent, front_of, behind
         o = dict(over.get(rec, {}))
         o_opts = o.pop("options", None)
         kw = dict(x=x, y=y, scale=scale, start=start + t0, intensity=intensity, seed=seed, into=anim, parent=parent,
-                  front_of=last, behind=first_behind if not parts else "", name="", options=o_opts, art=arts.get(rec))
+                  front_of=last, behind=first_behind if not parts else "", name="", options=o_opts, art=arts.get(rec),
+                  style=style, realism=realism, style_profile=style_profile or {})
+        if rec == "burst_flare" and relight_slots:
+            kw.update(relight_slots=relight_slots, relight_color=relight_color, relight_strength=relight_strength,
+                      relight_duration=relight_duration)
         if dur is not None:
             kw["duration"] = dur
         kw.update(o)
