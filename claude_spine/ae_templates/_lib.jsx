@@ -156,3 +156,23 @@ AEFX.done = function (comp, extra) {
   if (extra) s += "," + extra;
   return s + "}";
 };
+// Import a file once per project (re-runs reuse the footage) into the ae_fx_templates folder.
+AEFX.imp = function (path) {
+  var f = new File(path); if (!f.exists) throw new Error("file not found: " + path);
+  for (var i = 1; i <= app.project.numItems; i++) {
+    var q = app.project.item(i);
+    if (q instanceof FootageItem && q.mainSource instanceof FileSource && q.mainSource.file && q.mainSource.file.fsName === f.fsName) return q;
+  }
+  var it = app.project.importFile(new ImportOptions(f)); it.parentFolder = AEFX.folder(); return it;
+};
+// A filled rectangle on a SHAPE layer (comp-sized, so a blur on it is never clipped the way a narrow solid's is).
+AEFX.rect = function (comp, name, w, h, color) {
+  var l = comp.layers.addShape(); l.name = name;
+  var g = l.property("ADBE Root Vectors Group").addProperty("ADBE Vector Group");
+  g.property("ADBE Vectors Group").addProperty("ADBE Vector Shape - Rect");
+  g.property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
+  var cc = l.property("ADBE Root Vectors Group").property(1).property("ADBE Vectors Group");
+  cc.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([w, h]);
+  cc.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(color || [1, 1, 1]);
+  return l;
+};

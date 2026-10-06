@@ -96,11 +96,13 @@ def inspect_psd(psd: str) -> dict:
 
 @mcp.tool()
 def import_psd(psd: str, out_dir: str, name: str = "", origin: str = "center",
-               groups_as_bones: bool = False, include_hidden: bool = False, scale: float = 1.0) -> dict:
+               groups_as_bones: bool = False, include_hidden: bool = False, scale: float = 1.0,
+               alpha_threshold: int = 8) -> dict:
     """PSD → project: one slot per visible layer, placed exactly as on the
     canvas, PNGs cropped to content, Photoshop blend modes mapped.
     origin "center" for symbols, "bottom" for characters standing on y=0."""
-    return psd_mod.import_psd(psd, out_dir, name or None, origin, groups_as_bones, include_hidden, scale)
+    return psd_mod.import_psd(psd, out_dir, name or None, origin, groups_as_bones, include_hidden, scale,
+                              alpha_threshold)
 
 
 @mcp.tool()
@@ -350,7 +352,9 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
                    x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                    blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                    behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                   keep_frames: str = "", copies: list[list[float]] | None = None) -> dict:
+                   keep_frames: str = "", copies: list[list[float]] | None = None,
+                   feather: float = 0.0, anchor: list[float] | None = None,
+                   deform_like: list[str] | None = None) -> dict:
     """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
 
     Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
@@ -367,7 +371,11 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     animation= merges into an existing animation, otherwise ae_<name> is created. Leading and trailing empty
     frames are trimmed. Frames land in images/ae/<name>_NN.png; an event ae_<name> fires at the start.
     copies=[[x, y], [x, y, start], ...] plays more instances that SHARE the frames (one set in the atlas): glitter in
-    every cell of a cluster, a crackle on every scatter."""
+    every cell of a cluster, a crackle on every scatter.
+    anchor=[fx, fy]: the comp point (fractions, y down) that lands on x, y (an off-centre lens-flare source);
+    feather (0..0.5): fade the frames to nothing toward their border (a halo the comp edge would cut square);
+    deform_like=[slots]: the sequence becomes a grid mesh whose weights are copied from those slots' meshes, so
+    light baked on the art (surface_sweep) bends with the art (its tilt, its 2.5D turn)."""
     p = _open(project)
     res = ae_bridge.fx_to_spine(
         p, name, aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
@@ -375,7 +383,8 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         hit_at=None if hit_at < 0 else hit_at, fit_duration=fit_duration, until=until, x=x, y=y, scale=scale,
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
-        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies)
+        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies, feather=feather,
+        anchor=anchor, deform_like=deform_like)
     return _saved(p, res)
 
 
@@ -385,9 +394,13 @@ def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -
 
     name="" lists the templates with their parameters and defaults. Otherwise name is one of: glow_pulse,
     shockwave, sparkle, relief_shimmer (light wave over a picture, traced by its relief or a depth map),
-    fire, fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic sparks),
-    splash. params override the defaults (comp= names the comp;
-    save_as= saves the open AE project to that .aep right after, which aerender needs).
+    fire, fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic
+    sparks), splash, surface_sweep (the art's own colours brightened in a soft band bent round the volume: a
+    shine that sits ON the surface), lens_flare (optical flare with a ghost chain), and the rest the listing
+    shows. params override the defaults (comp= names the comp; save_as= saves the open AE project to that .aep
+    right after, which aerender needs, then reopens the artist's own project if it was saved and clean). With no
+    AE MCP connected, ask the artist to run the script via File > Scripts > Run Script File (AfterFX.exe -r may
+    never reach an open AE), then confirm the comps with ae_check.
     Then: run the returned `run_with` with the After Effects MCP's ae_run_script (it creates the comp in an
     ae_fx_templates folder of the OPEN project and returns its name, size, fps, frames), save the project, and
     pass the comp to ae_fx_to_spine (use mode="additive" when the result says so). After Effects caches
@@ -540,6 +553,7 @@ from . import tools_addons  # noqa: E402,F401   rig_serpent, rig_flier, attach_r
 from . import tools_gait  # noqa: E402,F401   gait, rig_quadruped, make_quadruped_sample
 from . import tools_body  # noqa: E402,F401   rig_biped, clip_set, secondary, squash_stretch, qa_character, make_biped_sample
 from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sample
+from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check
 
 
 def main() -> None:

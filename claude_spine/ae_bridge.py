@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .ir import Bone, RegionAttachment, Sequence, Slot
+from .ir import Bone, MeshAttachment, RegionAttachment, Sequence, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
 
@@ -195,7 +195,8 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
                     y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0, blend: str = "",
                     color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                     behind: str = "", fade: float = 0.0, trim: bool = True, first_frame_time: float = 0.0,
-                    manifest_extra: dict | None = None) -> dict:
+                    manifest_extra: dict | None = None, feather: float = 0.0, anchor=None,
+                    deform_like: list[str] | None = None) -> dict:
     """Frames on disk -> sprites in ``images/ae/`` -> a sequence attachment on a new slot, keyed in
     ``animation`` (default ``ae_<name>``; an existing one is merged into).
 
@@ -232,6 +233,8 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
         old.unlink()
     for n, i in enumerate(keep):
         out = to_straight(pms[i], mode, (tw, th) if (tw, th) != (w, h) else None)
+        if feather > 0:
+            out[..., 3] *= edge_window(out.shape[1], out.shape[0], feather)
         im = Image.fromarray(np.round(out * 255).astype(np.uint8), "RGBA")
         project.write_image(f"ae/{name}_{str(n).zfill(digits)}", im)
 
@@ -267,9 +270,15 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
         sk.add_slot(slot, after=front_of)
     else:
         sk.add_slot(slot)
-    sk.set_attachment(slot.name, "fx", RegionAttachment(
-        path=f"ae/{name}_", width=round(w * scale, 2), height=round(h * scale, 2),
-        sequence=Sequence(count=n_out, start=0, digits=digits)))
+    ax, ay = (0.0, 0.0) if anchor is None else ((0.5 - anchor[0]) * w * scale, (anchor[1] - 0.5) * h * scale)
+    seq = Sequence(count=n_out, start=0, digits=digits)
+    if deform_like:
+        sk.set_attachment(slot.name, "fx", follow_mesh(sk, gname, f"ae/{name}_", w * scale, h * scale, ax, ay,
+                                                       deform_like, tw, th, seq))
+    else:
+        sk.set_attachment(slot.name, "fx", RegionAttachment(
+            path=f"ae/{name}_", x=round(ax, 2), y=round(ay, 2), width=round(w * scale, 2),
+            height=round(h * scale, 2), sequence=seq))
 
     anim = animation or f"ae_{name}"
     ab = AnimBuilder(sk, anim, replace=animation == "")
@@ -366,3 +375,101 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
     finally:
         if tmp is not None:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+# --------------------------------------------------------------- placement helpers
+def edge_window(w: int, h: int, feather: float) -> np.ndarray:
+    """1 inside, falling to 0 over `feather` (fraction of the longest side) toward the frame border: light the
+    comp edge would cut square (a lens-flare halo near the border) fades out instead."""
+    yy, xx = np.mgrid[0:h, 0:w]
+    e = np.minimum.reduce([xx, yy, w - 1 - xx, h - 1 - yy]) / (feather * max(w, h))
+    return np.clip(e, 0, 1) ** 1.5
+
+
+def follow_mesh(sk, bone: str, path: str, W: float, H: float, ox: float, oy: float, like: list[str],
+                tw: int, th: int, seq: Sequence, nx: int = 12, ny: int = 12) -> MeshAttachment:
+    """A grid mesh over the sequence whose vertices take their bone weights from the nearest vertices of the
+    `like` slots (skin transfer), so baked light on the art deforms exactly like the art does."""
+    from .mesh import mesh_world_vertices, region_pixel_to_local, to_world
+    from .weights import decode_weighted, skin_vertices
+    world = sk.world()
+    src_pts, src_inf = [], []
+    for sl in like:
+        s = sk.slot(sl)
+        names = [s.attachment] if s.attachment else list(sk.skin().attachments.get(sl, {}))
+        att = sk.attachment(sl, names[0])
+        if isinstance(att, MeshAttachment):
+            n = len(att.uvs) // 2
+            wv = mesh_world_vertices(sk, sl, att, world)
+            infs = decode_weighted(att.vertices, n) if len(att.vertices) != 2 * n else                 [[(sk.bone_index(s.bone), 0, 0, 1.0)]] * n
+            for p, inf in zip(wv, infs):
+                src_pts.append(p)
+                src_inf.append({bi: wt for bi, _, _, wt in inf})
+        elif isinstance(att, RegionAttachment):
+            f, _ = region_pixel_to_local(att, 2, 2)
+            for p in to_world(world[s.bone], f(np.array([[0, 0], [2, 0], [0, 2], [2, 2], [1, 1]], float))):
+                src_pts.append(p)
+                src_inf.append({sk.bone_index(s.bone): 1.0})
+    if not src_pts:
+        raise ValueError(f"deform_like: none of {like} has a region or mesh to follow")
+    src = np.asarray(src_pts, float)
+    gx, gy = np.meshgrid(np.arange(nx), np.arange(ny))
+    idx = np.arange(nx * ny).reshape(ny, nx)
+    ring = list(idx[0, :]) + list(idx[1:, -1]) + list(idx[-1, -2::-1]) + list(idx[-2:0:-1, 0])
+    inner = [i for i in range(nx * ny) if i not in set(ring)]
+    order = ring + inner
+    pos = {v: k for k, v in enumerate(order)}
+    u = (gx.ravel() / (nx - 1))[order]
+    v = (gy.ravel() / (ny - 1))[order]
+    local = np.c_[ox - W / 2 + u * W, oy + H / 2 - v * H]
+    wpts = to_world(world[bone], local)
+    bones = sorted({b for inf in src_inf for b in inf})
+    col = {b: i for i, b in enumerate(bones)}
+    Wt = np.zeros((len(wpts), len(bones)))
+    for i, p in enumerate(wpts):
+        d = np.hypot(*(src - p).T)
+        near = np.argsort(d)[:4]
+        ws = 1 / np.maximum(d[near], 1.0) ** 2
+        for j, wv in zip(near, ws / ws.sum()):
+            for b, wt in src_inf[j].items():
+                Wt[i, col[b]] += wv * wt
+        top = np.argsort(Wt[i])[::-1][4:]
+        Wt[i, top] = 0
+        Wt[i] /= Wt[i].sum()
+    tris = []
+    for j in range(ny - 1):
+        for i in range(nx - 1):
+            a, b, c, d = idx[j, i], idx[j, i + 1], idx[j + 1, i], idx[j + 1, i + 1]
+            tris += [pos[a], pos[b], pos[c], pos[b], pos[d], pos[c]]
+    verts = skin_vertices(wpts, Wt, bones, [world[sk.bones[b].name] for b in bones])
+    hull_edges = []
+    for i in range(len(ring)):
+        hull_edges += [i * 2, ((i + 1) % len(ring)) * 2]
+    return MeshAttachment(path=path, uvs=[round(float(q), 5) for q in np.c_[u, v].ravel()], triangles=tris,
+                          vertices=verts, hull=len(ring), edges=hull_edges, width=tw, height=th, sequence=seq)
+
+
+def check_aep(aep: str | Path, comps: list[str] | None = None) -> dict:
+    """What a SAVED .aep holds, without After Effects: every item / layer / effect name (the file's Utf8
+    chunks), the ``CLAUDE_ERR ...`` comps a template script leaves when it fails, and whether the given comps
+    exist. Use it after running a template in AE to confirm the comps are there before aerender."""
+    data = Path(aep).expanduser().read_bytes()
+    names, i = [], 0
+    while True:
+        i = data.find(b"Utf8", i)
+        if i < 0 or i + 8 > len(data):
+            break
+        n = struct.unpack(">I", data[i + 4:i + 8])[0]
+        if 0 < n < 4096:
+            try:
+                names.append(data[i + 8:i + 8 + n].decode("utf-8"))
+            except UnicodeDecodeError:
+                pass
+        i += 8
+    uniq = list(dict.fromkeys(names))
+    errors = [x for x in uniq if x.startswith("CLAUDE_ERR")]
+    out = {"aep": str(Path(aep).expanduser()), "names": len(uniq), "errors": errors}
+    if comps:
+        out["found"] = {c: c in uniq for c in comps}
+    out["sample"] = [x for x in uniq if not x.startswith("ADBE")][:60]
+    return out

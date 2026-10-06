@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 from .ir import RegionAttachment, Slot, new_skeleton
@@ -29,6 +30,7 @@ TAG = re.compile(r"\s*\[([a-z0-9_:=.\- ]+)\]\s*", re.I)
 
 def _clean(name: str) -> tuple[str, list[str]]:
     tags = [t.strip().lower() for t in TAG.findall(name)]
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name)   # invisible control chars (a stray DEL) break file names
     base = TAG.sub(" ", name).strip()
     base = re.sub(r"[\\:*?\"<>|]+", "_", base) or "layer"
     return base, tags
@@ -65,8 +67,11 @@ def inspect(psd_path: str) -> dict:
 
 
 def import_psd(psd_path: str, out_dir: str, name: str | None = None, origin: str = "center",
-               groups_as_bones: bool = False, include_hidden: bool = False, scale: float = 1.0) -> dict:
-    """origin: "center" (slot symbols) or "bottom" (characters stand on y=0)."""
+               groups_as_bones: bool = False, include_hidden: bool = False, scale: float = 1.0,
+               alpha_threshold: int = 8) -> dict:
+    """origin: "center" (slot symbols) or "bottom" (characters stand on y=0). Pixels at or below
+    alpha_threshold are cleared before cropping, so a layer with faint stray alpha over the whole canvas
+    (a soft brush, a feathered selection) crops to its real art instead of the full canvas."""
     from psd_tools import PSDImage
     psd = PSDImage.open(psd_path)
     W, H = psd.width, psd.height
@@ -119,6 +124,10 @@ def import_psd(psd_path: str, out_dir: str, name: str | None = None, origin: str
                 report["skipped"].append(prefix + nm + " (could not render)")
                 continue
             im = im.convert("RGBA")
+            if alpha_threshold > 0:
+                a = np.asarray(im).copy()
+                a[a[..., 3] <= alpha_threshold] = 0
+                im = Image.fromarray(a, "RGBA")
             l, t = layer.bbox[0], layer.bbox[1]
             bbox = im.getchannel("A").getbbox()
             if bbox is None:
