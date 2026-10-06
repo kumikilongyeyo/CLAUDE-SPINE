@@ -3,12 +3,12 @@ back. Writes ./out/pinata (a contact sheet per scene and a GIF) and refreshes do
 
     python examples/build_pinata_demo.py
 
-1. wild_transform on three cells, then wild_glow (the hand-off is seamless: same glow, same size, same alpha)
+1. wild_transform on three cells, then wild_glow (seamless hand-off), and a bubble_pop cascade on four corners
 2. mult_cell_glow on two cells + mult_streak across the second row
 3. wild_merge: five WILD cells feed one multiplier
 4. pinata_hit above the board + coins_to_bar
 5. jar_burst: the board bursts from the middle out, then the X5 flare flies into the sign
-6. banner_backdrop + confetti_burst (the loop runs half way)
+6. banner_backdrop + confetti_burst + a tier_swap (the loop runs half way)
 """
 import shutil
 import sys
@@ -71,13 +71,15 @@ def scene(name, length, *calls):
 
 scene("s1_wild", 3.4, *[("wild_transform", dict(x=c(i, j)[0], y=c(i, j)[1], start=0.1 * k, name=f"wt{k}"))
                        for k, (i, j) in enumerate([(1, 1), (3, 1), (2, 2)])],
-      *[("wild_glow", dict(x=c(i, j)[0], y=c(i, j)[1], start=1.2 + 0.1 * k, name=f"wg{k}")) for k, (i, j) in enumerate([(1, 1), (3, 1), (2, 2)])])
+      *[("wild_glow", dict(x=c(i, j)[0], y=c(i, j)[1], start=0.6 + 0.1 * k, name=f"wg{k}")) for k, (i, j) in enumerate([(1, 1), (3, 1), (2, 2)])],
+      ("bubble_pop", dict(start=1.6, options={"cells": [[c(0, 0)[0], c(0, 0)[1]], [c(4, 0)[0], c(4, 0)[1]], [c(0, 3)[0], c(0, 3)[1]], [c(4, 3)[0], c(4, 3)[1]]], "stagger": 0.04})))
 scene("s2_mult", 2.0, ("mult_cell_glow", dict(x=c(0, 0)[0], y=c(0, 0)[1], name="mc0")), ("mult_cell_glow", dict(x=c(4, 2)[0], y=c(4, 2)[1], name="mc1")),
       ("mult_streak", {}))
 scene("s3_merge", 1.7, ("wild_merge", {}))
 scene("s4_hit", 2.6, ("pinata_hit", dict(x=PINATA[0], y=PINATA[1])), ("coins_to_bar", dict(start=0.7)))
 scene("s5_jars", 2.7, ("jar_burst", {}))
-scene("s6_banner", 4.0, ("banner_backdrop", {}), ("confetti_burst", dict(y=-300, start=0.3)))
+scene("s6_banner", 4.0, ("banner_backdrop", {}), ("confetti_burst", dict(y=-300, start=0.3)),
+      ("tier_swap", dict(y=120, start=2.2, options={"radius": 220.0})))
 v = qa.validate(p.data)
 assert v["ok"], v["errors"]
 p.save()

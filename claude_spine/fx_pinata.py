@@ -284,7 +284,54 @@ def wild_glow(c: Ctx, P: dict) -> dict:
     return _finish(c, P, duration=D, loop=D)
 
 
+def _wild_flash(c: Ctx, P: dict) -> dict:
+    """The WILD transform as the reference clip plays it: the cell flashes white with a pink rim (peak in 1-2 frames),
+    sparkles fly, the WILD art pops in with overshoot (option wild= its bone, through a carrier), and the pink glow it
+    leaves equals wild_glow's first frame (seamless hand-off)."""
+    D, POP, CL = 0.6, 0.04, float(P["cell"])
+    col2 = _hexn(P["color2"], PINK)
+    b_pk = c.bone("after")
+    s_pk = _s(c, b_pk, "glow_soft", CL * 1.9)
+    b_cf, b_co, b_ri = c.bone("cellflash"), c.bone("core"), c.bone("ring")
+    s_cf = _s(c, b_cf, "cell_glow", CL * 1.18)
+    s_co = _s(c, b_co, "glow_core", CL * 1.5)
+    s_ri = _s(c, b_ri, "ring", CL * 1.25)
+    rng = np.random.default_rng(c.seed + 3)
+    stars = []
+    for i in range(6):
+        a = 2 * math.pi * (i + 0.5) / 6 + rng.uniform(-0.25, 0.25)
+        bn = c.bone(f"st{i}")
+        stars.append((bn, _s(c, bn, "flare_star", float(rng.uniform(34, 50))), a))
+    c.show([s_pk], 0, None)
+    c.show([s_cf, s_co, s_ri] + [s for _, s, _ in stars], 0, D)
+    ts = times_dense(0, D, FPS)
+    fl = lambda t: smooth(t, 0.0, POP) * math.exp(-max(0.0, t - POP) / 0.09)  # noqa: E731   1-2 frame rise, fast decay
+    c.color_keys(s_cf, ts, lambda t: _h(c, WHITE if t < 0.12 else col2, max(fl(t), 0.8 * bell(t, 0.02, 0.05, 0.35))))
+    c.bone_keys(b_cf, "scale", ts, lambda t: (1.12 - 0.12 * ease_out(t / 0.2, 3),) * 2)
+    c.color_keys(s_co, ts, lambda t: _h(c, "FFF4FC", fl(t)))
+    c.bone_keys(b_co, "scale", ts, lambda t: (0.6 + 0.5 * ease_out(t / 0.15),) * 2)
+    c.bone_keys(b_ri, "scale", ts, lambda t: (0.4 + 0.9 * ease_out(t / 0.4, 2.4),) * 2)
+    c.color_keys(s_ri, ts, lambda t: _h(c, "FFB8F2", 0.85 * bell(t, 0.0, 0.04, 0.36)))
+    c.color_keys(s_pk, ts, lambda t: _h(c, col2, 0.65 * smooth(t, 0.04, D) + 0.35 * bell(t, 0.0, 0.05, 0.3)))
+    c.bone_keys(b_pk, "scale", ts, lambda t: (1.0 + 0.25 * bell(t, 0.0, 0.05, 0.4),) * 2)
+    for bn, s, a in stars:
+        rr = lambda t: CL * (0.3 + 0.5 * ease_out(t / 0.45, 2.5))  # noqa: E731
+        c.bone_keys(bn, "translate", ts, lambda t, a=a: (math.cos(a) * rr(t), math.sin(a) * rr(t)))
+        c.bone_keys(bn, "rotate", ts, lambda t: 150.0 * t)
+        c.color_keys(s, ts, lambda t: _h(c, WHITE, bell(t, 0.01, 0.05, 0.4)))
+    if P.get("wild"):
+        from .fx_reels import _carrier, _merge_keys
+        car = _carrier(c, str(P["wild"]), "wildpop")
+        _merge_keys(c, car, "scale", ts, lambda t: (backout(t / 0.18, 2.4) if t > 0 else 0.0,) * 2, "mul")
+    c.ab.event(c.T(POP), "wild_pop")
+    return _finish(c, P, duration=D * c.k, pop_at=c.T(POP), style="flash")
+
+
 def wild_transform(c: Ctx, P: dict) -> dict:
+    if P.get("style", "flash") == "flash":
+        return _wild_flash(c, P)
+    if P["style"] != "bubble":
+        raise ValueError("wild_transform style must be flash | bubble")
     D, POP, CL = 1.2, 0.62, float(P["cell"])
     col, col2 = _hexn(P["color"], CYAN), _hexn(P["color2"], PINK)
     b_bg, b_pk = c.bone("bg"), c.bone("after")
@@ -432,7 +479,10 @@ def mult_streak(c: Ctx, P: dict) -> dict:
     cells = _cells(P)
     Y = sum(y for _, y in cells) / len(cells)
     xs = [x for x, _ in cells]
-    NX, SX, SY = float(P["number"][0]), float(P["sign"][0]), float(P["sign"][1])
+    if P["to"] not in ("bar", "sign"):
+        raise ValueError("mult_streak to must be bar | sign")
+    tgt = P["sign"] if P["to"] == "sign" else P["bar"][:2]
+    NX, SX, SY = float(P["number"][0]), float(tgt[0]), float(tgt[1])
     NY = float(P["number"][1]) if P["number"][1] is not None else Y
     span = (max(xs) - min(xs)) + CL * 1.6
     parts = []
@@ -450,11 +500,15 @@ def mult_streak(c: Ctx, P: dict) -> dict:
     b_ng = c.bone("numglow", b_num)
     s_ng = _s(c, b_ng, "glow_soft", 260.0)
     s_num = _s(c, b_num, "mult_number", 130.0, blend="normal")
-    b_pf = c.bone("signflash", x=SX, y=SY)
+    b_pf = c.bone("signflash" if P["to"] == "sign" else "barflash", x=SX, y=SY)
     s_pf = _s(c, b_pf, "flash_burst", 220.0)
     c.show([s for _, a, b_, _ in parts for s in (a, b_)] + [s_long, s_head, s_hc], 0, 1.3)
-    c.show([s_ng, s_num], 0.18, 1.62)
-    c.show([s_pf], 1.5, D)
+    if P["to"] == "sign":
+        c.show([s_ng, s_num], 0.18, 1.62)
+        c.show([s_pf], 1.5, D)
+    else:
+        c.show([s_ng, s_num], 0.05, 1.12)
+        c.show([s_pf], 1.03, 1.5)
     ts = times_dense(0, D, FPS)
     for b, sg, sf, d in parts:
         lit = lambda t, d=d: bell(t, d + 0.1, 0.08, 0.95) * (0.8 + 0.2 * math.sin(2 * math.pi * 2.5 * t))  # noqa: E731
@@ -467,15 +521,34 @@ def mult_streak(c: Ctx, P: dict) -> dict:
     c.color_keys(s_hc, ts, lambda t: _h(c, WHITE, 0.9 * bell(t, 0.06, 0.06, 0.5)))
     c.bone_keys(b_long, "scale", ts, lambda t: (max(0.001, smooth(t, 0.08, 0.55)), 1.0 - 0.6 * smooth(t, 0.55, 1.2)))
     c.color_keys(s_long, ts, lambda t: _h(c, col, 0.9 * bell(t, 0.08, 0.4, 0.7)))
-    fly = lambda t: smooth(t, 1.25, 1.55)  # noqa: E731
-    c.bone_keys(b_num, "translate", ts, lambda t: (NX + (SX - NX) * fly(t), NY + (SY - NY) * fly(t) + 60 * math.sin(math.pi * fly(t))))
-    c.bone_keys(b_num, "scale", ts, lambda t: ((backout((t - 0.18) / 0.3, 3.0) if t < 1.25 else 1.0) * (1 - 0.55 * fly(t)),) * 2)
-    c.color_keys(s_num, ts, lambda t: _h(c, WHITE, 1 - smooth(t, 1.5, 1.6)))
-    c.color_keys(s_ng, ts, lambda t: _h(c, GOLD, 0.7 * smooth(t, 0.18, 0.3) * (1 - smooth(t, 1.45, 1.6)) * (0.8 + 0.2 * math.sin(4 * math.pi * t))))
-    c.bone_keys(b_pf, "scale", ts, lambda t: (0.3 + 0.9 * ease_out((t - 1.5) / 0.25, 2.5) if t >= 1.5 else 0.3,) * 2)
-    c.color_keys(s_pf, ts, lambda t: _h(c, "FFF2C8", math.exp(-max(0.0, t - 1.52) / 0.1) * smooth(t, 1.5, 1.53)))
-    c.ab.event(c.T(1.52), "mult_to_sign")
-    return _finish(c, P, duration=D * c.k)
+    if P["to"] == "sign":                       # the number arcs up into the multiplier sign
+        fly = lambda t: smooth(t, 1.25, 1.55)  # noqa: E731
+        c.bone_keys(b_num, "translate", ts, lambda t: (NX + (SX - NX) * fly(t), NY + (SY - NY) * fly(t) + 60 * math.sin(math.pi * fly(t))))
+        c.bone_keys(b_num, "scale", ts, lambda t: ((backout((t - 0.18) / 0.3, 3.0) if t < 1.25 else 1.0) * (1 - 0.55 * fly(t)),) * 2)
+        c.color_keys(s_num, ts, lambda t: _h(c, WHITE, 1 - smooth(t, 1.5, 1.6)))
+        c.color_keys(s_ng, ts, lambda t: _h(c, GOLD, 0.7 * smooth(t, 0.18, 0.3) * (1 - smooth(t, 1.45, 1.6)) * (0.8 + 0.2 * math.sin(4 * math.pi * t))))
+        c.bone_keys(b_pf, "scale", ts, lambda t: (0.3 + 0.9 * ease_out((t - 1.5) / 0.25, 2.5) if t >= 1.5 else 0.3,) * 2)
+        c.color_keys(s_pf, ts, lambda t: _h(c, "FFF2C8", math.exp(-max(0.0, t - 1.52) / 0.1) * smooth(t, 1.5, 1.53)))
+        c.ab.event(c.T(1.52), "mult_to_sign")
+        return _finish(c, P, duration=D * c.k, to="sign")
+    # the reference clip: revealed small, punched in (6-11 f, ease out), held, then DROPPED into the win bar
+    # (4-5 f, ease in = accelerating, shrinking), the bar flashing on arrival
+    R0, P0, P1, F0, F1 = 0.05, 0.5, 0.77, 0.89, 1.06
+    drop = lambda t: smooth(t, F0, F1) ** 1.8  # noqa: E731   accelerates into the bar
+    def num_scale(t):
+        if t < P0:
+            return 0.45
+        if t < F0:
+            return 0.45 + (1.6 - 0.45) * backout((t - P0) / (P1 - P0), 2.0)
+        return 1.6 - 1.1 * drop(t)
+    c.bone_keys(b_num, "translate", ts, lambda t: (NX + (SX - NX) * drop(t), NY + (SY - NY) * drop(t)))
+    c.bone_keys(b_num, "scale", ts, lambda t: (num_scale(t),) * 2)
+    c.color_keys(s_num, ts, lambda t: _h(c, WHITE, smooth(t, R0, R0 + 0.03) * (1 - smooth(t, F1, F1 + 0.04))))
+    c.color_keys(s_ng, ts, lambda t: _h(c, GOLD, 0.7 * smooth(t, P0, P1) * (1 - smooth(t, F0, F1))))
+    c.bone_keys(b_pf, "scale", ts, lambda t: (1.6, 0.25 + 0.5 * ease_out((t - F1) / 0.2, 2.5) if t >= F1 else 0.25))
+    c.color_keys(s_pf, ts, lambda t: _h(c, "FFF2C8", smooth(t, F1 - 0.02, F1 + 0.01) * math.exp(-max(0.0, t - F1) / 0.12)))
+    c.ab.event(c.T(F1), "mult_to_bar")
+    return _finish(c, P, duration=D * c.k, to="bar", lands_at=c.T(F1))
 
 
 def wild_merge(c: Ctx, P: dict) -> dict:
@@ -690,6 +763,8 @@ def jar_burst(c: Ctx, P: dict) -> dict:
     col = _hexn(P["color"], GOLD)
     CX, CY = (float(v) for v in P["flare"])
     SX, SY = (float(v) for v in P["sign"])
+    if P["x_path"] not in ("sign_to_cell", "flare_to_sign"):
+        raise ValueError("jar_burst x_path must be sign_to_cell | flare_to_sign")
     rng = np.random.default_rng(c.seed + 11)
     jars = _cells(P)
     smk, parts = [], []
@@ -762,17 +837,51 @@ def jar_burst(c: Ctx, P: dict) -> dict:
     for b, s, rc, off in rings:
         c.bone_keys(b, "scale", ts, lambda t, off=off: (0.3 + (1.9 + 3 * off) * ease_out(max(0.0, q(t) - off) / 0.55, 2.4),) * 2)
         c.color_keys(s, ts, lambda t, rc=rc, off=off: _h(c, rc, 0.85 * smooth(t, XT + off - 0.02, XT + off + 0.02) * (1 - smooth(q(t), 0.1, 0.6))))
-    F0, F1 = 1.95, 2.3
-    fly = lambda t: smooth(t, F0, F1)  # noqa: E731
-    c.show([s_lab], XT, F1 + 0.02)
-    c.bone_keys(b_lab, "translate", ts, lambda t: (CX + (SX - CX) * fly(t), CY + (SY - CY) * fly(t) + 80 * math.sin(math.pi * fly(t))))
-    c.bone_keys(b_lab, "scale", ts, lambda t: (backout(q(t) / 0.3, 3.2) * (1 + 0.05 * math.sin(4 * math.pi * q(t))) * (1 - 0.6 * fly(t)),) * 2)
+    if P["x_path"] == "flare_to_sign":          # the label punches in at the flare and arcs up into the sign
+        F0, F1 = 1.95, 2.3
+        fly = lambda t: smooth(t, F0, F1)  # noqa: E731
+        c.show([s_lab], XT, F1 + 0.02)
+        c.bone_keys(b_lab, "translate", ts, lambda t: (CX + (SX - CX) * fly(t), CY + (SY - CY) * fly(t) + 80 * math.sin(math.pi * fly(t))))
+        c.bone_keys(b_lab, "scale", ts, lambda t: (backout(q(t) / 0.3, 3.2) * (1 + 0.05 * math.sin(4 * math.pi * q(t))) * (1 - 0.6 * fly(t)),) * 2)
+        c.show([s_pf], F1 - 0.02, D)
+        c.bone_keys(b_pf, "scale", ts, lambda t: (0.3 + 0.9 * ease_out((t - F1) / 0.22, 2.5) if t > F1 else 0.3,) * 2)
+        c.color_keys(s_pf, ts, lambda t: _h(c, "FFF2C8", smooth(t, F1 - 0.02, F1 + 0.01) * math.exp(-max(0.0, t - F1) / 0.1)))
+        c.ab.event(c.T(XT), "x5_flare")
+        c.ab.event(c.T(F1), "x5_to_sign")
+        return _finish(c, P, duration=D * c.k, jars=len(jars), flare_at=c.T(XT), x_path="flare_to_sign")
+    # the reference clip: the X comes OUT of the sign as the jars burst, blooms over the board with the flare riding
+    # behind it, then wanders down an S-curve, shrinking (about 2x -> 0.5x, slight ease in), onto the winning cell
+    LX, LY = (float(v) for v in P["land"])
+    E0, F0, F1 = XT - 0.25, XT, XT + 0.7
+    pts = [(SX, SY), (CX - 0.8 * CELL, CY + 0.9 * CELL), (CX + 1.0 * CELL, CY - 0.4 * CELL), (LX, LY)]
+
+    def path(t):                                # cubic Bezier sign -> board -> win cell
+        u = smooth(t, F0, F1) ** 1.15 if t >= F0 else 0.0
+        if t < F0:
+            k = smooth(t, E0, F0)               # emerging: out of the sign toward the first control point
+            return (SX + (pts[1][0] - SX) * 0.25 * k, SY + (pts[1][1] - SY) * 0.25 * k)
+        a_, b_, c_, d_ = pts
+        m = 1 - u
+        x = m ** 3 * a_[0] + 3 * m * m * u * b_[0] + 3 * m * u * u * c_[0] + u ** 3 * d_[0]
+        y = m ** 3 * a_[1] + 3 * m * m * u * b_[1] + 3 * m * u * u * c_[1] + u ** 3 * d_[1]
+        e0 = (SX + (pts[1][0] - SX) * 0.25, SY + (pts[1][1] - SY) * 0.25)     # continue from where emerging stopped
+        w = 1 - smooth(t, F0, F0 + 0.15)
+        return (x + (e0[0] - SX) * w * m, y + (e0[1] - SY) * w * m)
+    def lab_scale(t):
+        if t < F0:
+            return 0.4 + 1.2 * backout(smooth(t, E0, F0), 2.2)
+        return 1.6 - 1.1 * smooth(t, F0, F1)
+    c.bone_keys(bx, "translate", ts, lambda t: (path(t)[0] - CX, path(t)[1] - CY))   # the flare rides behind the X
+    c.show([s_lab], E0, F1 + 0.02)
+    c.bone_keys(b_lab, "translate", ts, path)
+    c.bone_keys(b_lab, "scale", ts, lambda t: (lab_scale(t),) * 2)
+    c.bone_keys(b_pf, "translate", ts, lambda t: (LX - SX, LY - SY))       # the landing flash sits on the win cell
     c.show([s_pf], F1 - 0.02, D)
-    c.bone_keys(b_pf, "scale", ts, lambda t: (0.3 + 0.9 * ease_out((t - F1) / 0.22, 2.5) if t > F1 else 0.3,) * 2)
+    c.bone_keys(b_pf, "scale", ts, lambda t: (0.25 + 0.6 * ease_out((t - F1) / 0.22, 2.5) if t > F1 else 0.25,) * 2)
     c.color_keys(s_pf, ts, lambda t: _h(c, "FFF2C8", smooth(t, F1 - 0.02, F1 + 0.01) * math.exp(-max(0.0, t - F1) / 0.1)))
     c.ab.event(c.T(XT), "x5_flare")
-    c.ab.event(c.T(F1), "x5_to_sign")
-    return _finish(c, P, duration=D * c.k, jars=len(jars), flare_at=c.T(XT))
+    c.ab.event(c.T(F1), "x5_to_cell")
+    return _finish(c, P, duration=D * c.k, jars=len(jars), flare_at=c.T(XT), lands_at=c.T(F1), x_path="sign_to_cell")
 
 
 def banner_backdrop(c: Ctx, P: dict) -> dict:
@@ -849,6 +958,102 @@ def banner_backdrop(c: Ctx, P: dict) -> dict:
     return _finish(c, P, duration=D, loop=D, pieces=len(rain))
 
 
+def bubble_pop(c: Ctx, P: dict) -> dict:
+    """Cascade removal as the reference clip plays it: each removed symbol is wrapped in a cyan glass bubble (1 frame),
+    holds ~3 frames, then the bubble swells and bursts into confetti that flies out and falls (~9 frames), with a
+    ring and a sparkle. Cells pop in a stagger. Bubbles (additive) are one run, confetti (normal) another."""
+    D, CL = 0.75, float(P["cell"])
+    col = _hexn(P["color"], CYAN)
+    pal = [_hexn(x, "FFFFFF") for x in P["palette"]]
+    cells = _cells(P)
+    hold, stag = float(P["hold"]), float(P["stagger"])
+    rng = np.random.default_rng(c.seed + 41)
+    adds, conf, groups = [], [], []
+    for i, (x, y) in enumerate(cells):                  # pass 1: every bubble (one additive run)
+        t0 = stag * i
+        g = c.bone(f"cell{i}", x=x, y=y)
+        groups.append((t0, g))
+        bb, br = c.bone(f"c{i}_bub", g), c.bone(f"c{i}_ring", g)
+        adds.append((t0, bb, _s(c, bb, "bubble_rim", CL * 0.95), br, _s(c, br, "ring", CL * 0.9),
+                     _s(c, c.bone(f"c{i}_tint", g), "glow_soft", CL * 1.1)))
+    for i, (t0, g) in enumerate(groups):               # pass 2: every confetti piece (one normal run)
+        conf.append((t0, g, [_confetti(c, rng, i * 100 + k, (14, 22), pal) for k in range(int(P["pieces"]))]))
+    ts = times_dense(0, D, FPS)
+    for t0, bb, sb, br, sr, st in adds:
+        tb = t0 + hold                                      # the burst
+        c.show([sb, st], t0, tb + 0.08)
+        c.show([sr], tb - 0.02, tb + 0.35)
+        c.bone_keys(bb, "scale", ts, lambda t, t0=t0, tb=tb: (0.9 + 0.08 * smooth(t, t0, tb) + 0.25 * smooth(t, tb, tb + 0.06),) * 2)
+        c.color_keys(sb, ts, lambda t, t0=t0, tb=tb: _h(c, "BFF4FF", smooth(t, t0 - 0.01, t0 + 0.01) * (1 - smooth(t, tb, tb + 0.07))))
+        c.color_keys(st, ts, lambda t, t0=t0, tb=tb: _h(c, col, 0.35 * smooth(t, t0 - 0.01, t0 + 0.01) * (1 - smooth(t, tb, tb + 0.07))))
+        c.bone_keys(br, "scale", ts, lambda t, tb=tb: (0.6 + 0.8 * ease_out((t - tb) / 0.3, 2.4) if t > tb else 0.6,) * 2)
+        c.color_keys(sr, ts, lambda t, tb=tb: _h(c, "DFFAFF", 0.8 * bell(t, tb - 0.02, 0.03, 0.3)))
+    g_, k_ = -900.0, 4.0
+    for t0, g, pieces in conf:
+        tb = t0 + hold
+        for b, s, pc, spin, flip, ph, _ in pieces:
+            a = float(rng.uniform(0, 2 * math.pi))
+            sp = float(rng.uniform(220, 420))
+            vx, vy = sp * math.cos(a), sp * math.sin(a) + 120.0
+            tt = times_dense(tb, min(D, tb + 0.45), FPS)
+            c.show([s], tb, min(D, tb + 0.45))
+
+            def pos(t, vx=vx, vy=vy, tb=tb):
+                q = max(0.0, t - tb)
+                e = (1 - math.exp(-k_ * q)) / k_
+                return (vx * e, (vy + g_ / k_) * e - g_ * q / k_)
+            c.bone_keys(b, "translate", tt, pos)
+            c.bone_keys(b, "rotate", tt, lambda t, spin=spin, tb=tb: spin * (t - tb))
+            c.bone_keys(b, "scale", tt, lambda t, flip=flip, ph=ph, tb=tb: (math.cos(flip * (t - tb) + ph), 1.0))
+            c.color_keys(s, tt, lambda t, pc=pc, tb=tb: _h(c, pc, 1 - smooth(t, tb + 0.2, tb + 0.45)))
+        # the confetti hangs from the cell bone (the pieces were made as root-level fx bones: move them under it)
+        for b, *_ in pieces:
+            bone = next(x for x in c.sk.bones if x.name == b)
+            bone.parent = g
+    c.ab.event(c.T(hold), "bubble_burst")
+    return _finish(c, P, duration=D * c.k, cells=len(cells), burst_at=c.T(hold))
+
+
+def tier_swap(c: Ctx, P: dict) -> dict:
+    """Win-banner tier change (BIG -> MEGA -> SUPER) as the reference clip plays it, ~9 frames: the current card
+    shrinks into a white ribbon ring, the next tier's card pops through it with overshoot, a white flash and a star
+    sparkle at the swap. old= / new= are the bones of the two cards' art (scaled through carriers, your keys stay);
+    the event tier_swap marks the frame to switch the title / backdrop art."""
+    D, R_ = 0.6, float(P["radius"])
+    col = _hexn(P["color"], WHITE)
+    SW, P1 = 0.1, 0.3                                      # swap moment, new card settled
+    b_r1, b_r2 = c.bone("ribbon1"), c.bone("ribbon2")
+    s_r1 = _s(c, b_r1, "swirl", R_ * 2.3)
+    s_r2 = _s(c, b_r2, "swirl", R_ * 1.9)
+    b_ri, b_fl, b_st = c.bone("ring"), c.bone("flash"), c.bone("star")
+    s_ri = _s(c, b_ri, "ring", R_ * 2.0)
+    s_fl = _s(c, b_fl, "glow_soft", R_ * 2.4)
+    s_st = _s(c, b_st, "flare_star", R_ * 1.4)
+    c.show([s_r1, s_r2, s_ri, s_fl, s_st], 0, D)
+    ts = times_dense(0, D, FPS)
+    c.bone_keys(b_r1, "rotate", ts, lambda t: -540.0 * t)
+    c.bone_keys(b_r2, "rotate", ts, lambda t: 420.0 * t)
+    for b_, sl, k in ((b_r1, s_r1, 1.0), (b_r2, s_r2, 0.8)):
+        c.bone_keys(b_, "scale", ts, lambda t, k=k: ((0.55 + 0.15 * smooth(t, 0, SW) + 0.6 * ease_out((t - SW) / 0.35, 2.2) if t > SW else 0.55 + 0.15 * smooth(t, 0, SW)) * k,) * 2)
+        c.color_keys(sl, ts, lambda t, k=k: _h(c, col, 0.9 * k * smooth(t, 0, 0.05) * (1 - smooth(t, SW + 0.1, SW + 0.4))))
+    c.bone_keys(b_ri, "scale", ts, lambda t: (0.5 + 0.9 * ease_out(max(0.0, t - SW) / 0.4, 2.4),) * 2)
+    c.color_keys(s_ri, ts, lambda t: _h(c, col, 0.85 * bell(t, SW - 0.03, 0.03, 0.35)))
+    c.color_keys(s_fl, ts, lambda t: _h(c, col, 0.8 * math.exp(-((t - SW) / 0.06) ** 2)))
+    c.bone_keys(b_st, "scale", ts, lambda t: (0.2 + 1.0 * ease_out(max(0.0, t - SW) / 0.12),) * 2)
+    c.bone_keys(b_st, "rotate", ts, lambda t: 60.0 * t)
+    c.color_keys(s_st, ts, lambda t: _h(c, WHITE, bell(t, SW - 0.02, 0.03, 0.25)))
+    if P.get("old") or P.get("new"):
+        from .fx_reels import _carrier, _merge_keys
+        if P.get("old"):
+            co = _carrier(c, str(P["old"]), "tier_old")
+            _merge_keys(c, co, "scale", ts, lambda t: ((1 - 0.45 * smooth(t, 0, SW) ** 1.6) if t <= SW + 0.02 else 0.0,) * 2, "mul")
+        if P.get("new"):
+            cn = _carrier(c, str(P["new"]), "tier_new")
+            _merge_keys(c, cn, "scale", ts, lambda t: (0.0 if t < SW - 0.03 else 0.55 + 0.45 * backout((t - SW + 0.03) / (P1 - SW + 0.03), 2.6),) * 2, "mul")
+    c.ab.event(c.T(SW), "tier_swap")
+    return _finish(c, P, duration=D * c.k, swap_at=c.T(SW))
+
+
 # ------------------------------------------------------------------ registry
 _GT = dict(gain=({}, "{picture: alpha multiplier} for this recipe's pictures, e.g. {glow_soft: 0.5} when your glow is fuller"),
            thick=({}, "{picture: [width x, height x]} for thin stretched pictures, e.g. {light_streak: [1, 2.4]}"))
@@ -869,9 +1074,12 @@ RECIPES.update({
                                          stars=(2, "stars on the orbit"))),
     "wild_transform": dict(
         fn=wild_transform, duration=1.2, kind="one-shot", color=CYAN,
-        summary="A symbol turns WILD: a swirling glass bubble grows in the cell (overshoot), squeezes, pops in a white flash with "
-                "a ring and sparks (event wild_pop at 0.62 s), and leaves the wild_glow at its first frame: play wild_glow after.",
-        anchor="Cell centre.", options=_o(**_CELL, color2=(PINK, "the glow it hands off to (wild_glow's colour)"))),
+        summary="A symbol turns WILD, as the reference clip plays it: the cell flashes white with a pink rim (peak in 1-2 "
+                "frames), sparkles fly, the WILD art pops in with overshoot (wild= its bone), and it leaves the wild_glow at its "
+                "first frame: play wild_glow after. Event wild_pop. style=bubble keeps the earlier swirling-bubble intro (1.2 s).",
+        anchor="Cell centre.", options=_o(**_CELL, color2=(PINK, "the glow it hands off to (wild_glow's colour)"),
+                                         style=("flash", "flash (the clip) | bubble (swirling bubble intro, then the pop)"),
+                                         wild=("", "bone of the WILD symbol art: popped with overshoot through a carrier"))),
     "mult_cell_glow": dict(
         fn=mult_cell_glow, duration=1.2, kind="loop", color=CYAN,
         summary="A multiplier cell's idle loop: glowing rounded-square frame and soft fill pulsing, a few twinkles.",
@@ -888,11 +1096,15 @@ RECIPES.update({
                                            power=(1.0, "launch speed multiplier"))),
     "mult_streak": dict(
         fn=mult_streak, duration=1.8, kind="one-shot", color=CYAN, normal_blend=True,
-        summary="Multiplier collect: a row of cells flashes in sequence, a light streak shoots across with a hot head, the number "
-                "punches in, holds, then arcs into the multiplier sign with a flash (event mult_to_sign).",
+        summary="Multiplier collect, as the reference clip plays it: a row of cells flashes in sequence, a light streak shoots "
+                "across with a hot head, the number is revealed small, punches in (ease out), holds, then DROPS into the win bar "
+                "(4-5 frames, accelerating, shrinking) and the bar flashes (event mult_to_bar). to=sign arcs it up into the "
+                "multiplier sign instead (event mult_to_sign).",
         anchor="Board centre (the clip's layout); positions are relative to it.",
         options=_o(**_CELL, cells=([[x, ROWS[1]] for x in COLS], "[[x, y], ...] the cells that flash (one row)"),
-                   number=([COLS[2], None], "[x, y] where the number pops (y None = the row)"), sign=(SIGN, "[x, y] the multiplier sign"))),
+                   number=([COLS[2], None], "[x, y] where the number pops (y None = the row)"), sign=(SIGN, "[x, y] the multiplier sign"),
+                   to=("bar", "bar (drop into the win bar, the clip) | sign (arc up into the multiplier sign)"),
+                   bar=(BAR, "[x, y, w, h] the win bar"))),
     "wild_merge": dict(
         fn=wild_merge, duration=1.6, kind="one-shot", color=CYAN, normal_blend=True,
         summary="Several WILDs feed one multiplier: each source cell glows, a comet (oriented along its curved path) flies to the "
@@ -920,11 +1132,14 @@ RECIPES.update({
     "jar_burst": dict(
         fn=jar_burst, duration=2.6, kind="one-shot", color=GOLD, normal_blend=True,
         summary="Every jar on the board bursts, rippling out from the centre (flash, smoke, debris), then a big flare: two "
-                "counter-turning ray layers, colour-split rings, streak, star; the X label punches in and arcs into the sign "
-                "(events x5_flare, x5_to_sign).",
+                "counter-turning ray layers, colour-split rings, streak, star. As in the reference clip the X label comes OUT of "
+                "the multiplier sign, the flare riding behind it, and wanders down an S-curve, shrinking, onto the winning cell "
+                "(events x5_flare, x5_to_cell). x_path=flare_to_sign: the label punches in at the flare and arcs up into the sign.",
         anchor="Board centre; positions relative to it.",
         options=_o(cells=([[x, y] for (i, y) in enumerate(ROWS) for (j, x) in enumerate(COLS) if not (i == 3 and j in (1, 2, 3))],
-                          "[[x, y], ...] the jar cells"), flare=([0.0, -30.0], "[x, y] the flare centre"), sign=(SIGN, "[x, y] the multiplier sign"))),
+                          "[[x, y], ...] the jar cells"), flare=([0.0, -30.0], "[x, y] the flare centre"), sign=(SIGN, "[x, y] the multiplier sign"),
+                   x_path=("sign_to_cell", "sign_to_cell (the clip) | flare_to_sign"),
+                   land=([COLS[3], ROWS[3]], "[x, y] the winning cell the X lands on"))),
     "banner_backdrop": dict(
         fn=banner_backdrop, duration=8.0, kind="loop", color=GOLD, count=22, normal_blend=True,
         summary="Behind and around a BIG / MEGA / SUPER WIN banner (exact loop): counter-turning rays behind the subject, "
@@ -935,13 +1150,30 @@ RECIPES.update({
                    number=([0.0, -180.0], "[x, y] number bar"), title_color=("FF9AE8", "title glow tint"), twinkles=(9, "twinkles round the title"),
                    coins=(12, "falling coins (count = confetti pieces)"), palette=(PALETTE, "confetti colours"),
                    rain=([640.0, -640.0, 340.0], "[top y, bottom y, half width] of the rain"))),
+    "bubble_pop": dict(
+        fn=bubble_pop, duration=0.75, kind="one-shot", color=CYAN, normal_blend=True,
+        summary="Cascade removal, as the reference clip plays it: every removed symbol is wrapped in a cyan glass bubble (1 frame), "
+                "holds ~3 frames, then the bubble swells and bursts into confetti that flies out and falls (~9 frames) with a ring. "
+                "Cells pop in a stagger. Event bubble_burst. Hide the symbol art at the event.",
+        anchor="Board centre; cells relative to it.",
+        options=_o(**_CELL, cells=([[COLS[0], ROWS[1]], [COLS[2], ROWS[1]], [COLS[4], ROWS[2]]], "[[x, y], ...] the cells to pop"),
+                   hold=(0.1, "seconds the bubble holds before it bursts"), stagger=(0.0, "seconds between cells"),
+                   pieces=(10, "confetti pieces per cell"), palette=(PALETTE, "confetti colours"))),
+    "tier_swap": dict(
+        fn=tier_swap, duration=0.6, kind="one-shot", color=WHITE,
+        summary="Win-banner tier change (BIG -> MEGA -> SUPER), ~9 frames as in the reference clip: the current card shrinks into a "
+                "white ribbon ring (two counter-turning swirls), the next card pops through it with overshoot, flash and star at the "
+                "swap. old= / new= the two cards' bones (carriers, your keys untouched); event tier_swap = switch title / backdrop.",
+        anchor="Card centre.",
+        options=_o(radius=(150.0, "ring radius (about half the card)"), old=("", "bone of the current tier's card art"),
+                   new=("", "bone of the next tier's card art"))),
 })
 for _n in ("wild_glow", "wild_transform", "mult_cell_glow", "cell_pop", "confetti_burst", "mult_streak", "wild_merge",
-           "coins_to_bar", "bar_sweep", "pinata_hit", "jar_burst", "banner_backdrop"):
+           "coins_to_bar", "bar_sweep", "pinata_hit", "jar_burst", "banner_backdrop", "bubble_pop", "tier_swap"):
     ROLES[_n] = dict(PIC_ROLES)
     RECIPES[_n]["roles"] = ROLES[_n]
 PINATA_RECIPES = ("wild_glow", "wild_transform", "mult_cell_glow", "cell_pop", "confetti_burst", "mult_streak", "wild_merge",
-                  "coins_to_bar", "bar_sweep", "pinata_hit", "jar_burst", "banner_backdrop")
+                  "coins_to_bar", "bar_sweep", "pinata_hit", "jar_burst", "banner_backdrop", "bubble_pop", "tier_swap")
 
 
 def pack_tuning() -> dict[str, Any]:

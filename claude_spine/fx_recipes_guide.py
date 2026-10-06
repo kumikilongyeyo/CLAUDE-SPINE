@@ -476,17 +476,25 @@ glows Spine tints, plus normal-blend confetti, coin, smoke and two label placeho
 role with the same name, so an artist's pack drops in by name and the motion stays the same:
 
     fx_recipe recipe=wild_transform project=p.json x=-144 y=43                              -> event wild_pop
-    fx_recipe recipe=wild_glow project=p.json into=fx_wild_transform x=-144 y=43 start=1.2  (seamless hand-off)
+    fx_recipe recipe=wild_glow project=p.json into=fx_wild_transform x=-144 y=43 start=0.6  (seamless hand-off)
+    fx_recipe recipe=bubble_pop project=p.json options={cells: [[-288, 41], [3, 41]], stagger: 0.03}  -> bubble_burst
+    fx_recipe recipe=tier_swap project=p.json options={old: card_big, new: card_mega, radius: 220}    -> tier_swap
     fx_recipe recipe=jar_burst project=p.json art={glow_soft: pack/glow_soft.png, rays: pack/rays.png}
               options={gain: {glow_soft: 0.5, rays: 0.6}, thick: {light_streak: [1, 2.4]}}
 
 - Cell recipes, centred on the anchor, one cell = `cell` (144): wild_glow (loop: breathing glow, tilted orbit ring,
-  stars bright on the near half), wild_transform (swirling glass bubble grows, squeezes, pops; ends on wild_glow's
-  first frame), mult_cell_glow (loop), cell_pop, confetti_burst (drag + gravity + flutter + 3D flip, six shapes).
+  stars bright on the near half), wild_transform (white cell flash with a pink rim peaking in 1-2
+  frames, sparkles, the WILD art popped through a carrier with wild=; ends on wild_glow's first frame; style=bubble
+  keeps the older swirling-bubble intro), mult_cell_glow (loop), cell_pop, confetti_burst (drag + gravity + flutter +
+  3D flip, six shapes).
 - Board recipes, positions relative to the anchor (defaults = the clip's 5x4 board on a 721 x 1200 screen, anchor at the
-  centre): mult_streak (row flashes, streak, number arcs into the sign), wild_merge (comets oriented along curved paths
+  centre): mult_streak (row flashes, streak, the number punches in then DROPS into the win bar, accelerating; to=sign arcs it
+  up into the sign instead), wild_merge (comets oriented along curved paths
   converge on a target), coins_to_bar, bar_sweep (loop), jar_burst (bursts ripple out from the centre, then a big flare
-  with colour-split rings; the X label flies to the sign), banner_backdrop (exact loop behind a win banner: turning rays,
+  with colour-split rings; the X label comes OUT of the sign and wanders down onto the winning cell `land`, the flare
+  riding behind it; x_path=flare_to_sign for the reverse), bubble_pop (the cascade removal: cyan glass bubble for 1
+  frame, burst into confetti in ~9), tier_swap (BIG -> MEGA -> SUPER card swap through a white ribbon ring, ~9
+  frames; old= / new= card bones via carriers; event tier_swap = switch title and backdrop), banner_backdrop (exact loop behind a win banner: turning rays,
   title shine, number bar, coin + confetti rain). pinata_hit is anchored on the thing that bursts; `land` = fireball targets.
 - A real pack is never tuned like the kit. Two shared options fix it without repainting: `gain` = {picture: alpha
   multiplier} (a fuller glow_soft turns overlapping glows into a white blob: 0.5), `thick` = {picture: [w x, h x]} (a
@@ -495,6 +503,9 @@ role with the same name, so an artist's pack drops in by name and the motion sta
 - Blend runs: coins_to_bar adds every coin first and every flash after, so 10 coins cost 2 draw calls, not 20; jar_burst
   puts all smoke (normal) before all flashes (additive) for the same reason.
 - `examples/build_pinata_demo.py` renders `docs/pinata.gif` on a procedural board.
+- Corrected from a frame-by-frame breakdown of the reference clip (clip-breakdown skill): the cyan bubble is the
+  CASCADE pop (bubble_pop), not the WILD transform (a white flash); the multiplier drops into the WIN BAR; the X comes
+  FROM the sign. Before trusting a first read of a clip, break it down at full frame rate around every beat.
 
 ## Ice and water
 

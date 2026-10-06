@@ -116,8 +116,9 @@ def test_wild_transform_hands_off_to_wild_glow(proj, tmp_path):
 
 
 @pytest.mark.parametrize("name, events", [
-    ("wild_transform", {"wild_pop"}), ("mult_streak", {"mult_to_sign"}), ("wild_merge", {"merge_hit"}),
-    ("pinata_hit", {"fireball_land"}), ("jar_burst", {"x5_flare", "x5_to_sign"})])
+    ("wild_transform", {"wild_pop"}), ("mult_streak", {"mult_to_bar"}), ("wild_merge", {"merge_hit"}),
+    ("pinata_hit", {"fireball_land"}), ("jar_burst", {"x5_flare", "x5_to_cell"}), ("bubble_pop", {"bubble_burst"}),
+    ("tier_swap", {"tier_swap"})])
 def test_events(proj, name, events):
     R.apply(proj, name)
     names = {e.name for e in proj.data.animations[f"fx_{name}"].events}
@@ -171,3 +172,79 @@ def test_mult_streak_cells_option_moves_the_cells(proj):
     R.apply(proj, "mult_streak", options={"cells": [[-100, 10], [100, 10]]})
     cells = sorted((b.x, b.y) for b in proj.data.bones if b.name.startswith("fx_mult_streak_cell") and "cellg" not in b.name)
     assert cells == [(-100, 10), (100, 10)]
+
+
+# ---------------------------------------------------------------- corrections from the frame-by-frame breakdown
+def _anim_end(p, anim, bone, tl="translate"):
+    k = p.data.animations[anim].bones[bone][tl]
+    return k
+
+
+def test_mult_streak_drops_the_number_into_the_win_bar(proj, tmp_path):
+    R.apply(proj, "mult_streak")
+    k = _anim_end(proj, "fx_mult_streak", "fx_mult_streak_num")
+    xs = [(kk.time, kk.x or 0, kk.y or 0) for kk in k]
+    end = [v for v in xs if v[0] >= 1.06][0]
+    assert end[1:] == pytest.approx((0.0, -362.0), abs=1.0), "lands on the bar centre"
+    drop = [v for v in xs if 0.89 <= v[0] <= 1.06]
+    gaps = np.diff([v[2] for v in drop])
+    assert gaps[-1] < gaps[0] < 0, "accelerates downward (ease in)"
+    q = Project(tmp_path / "q.json", new_skeleton("q", 720, 1200))
+    R.apply(q, "mult_streak", options={"to": "sign"})
+    assert "mult_to_sign" in {e.name for e in q.data.animations["fx_mult_streak"].events}
+    with pytest.raises(ValueError, match="bar \\| sign"):
+        R.apply(proj, "mult_streak", name="m2", options={"to": "moon"})
+
+
+def test_wild_transform_is_a_flash_by_default_and_bubble_on_request(proj, tmp_path):
+    from claude_spine.ir import Bone
+    res = R.apply(proj, "wild_transform")
+    pics = {_pic(proj, s.name) for s in proj.data.slots}
+    assert res["style"] == "flash" and "bubble_rim" not in pics and "swirl" not in pics
+    ev = [e for e in proj.data.animations["fx_wild_transform"].events if e.name == "wild_pop"][0]
+    assert ev.time <= 0.07, "the flash peaks in 1-2 frames"
+    q = Project(tmp_path / "q.json", new_skeleton("q", 720, 1200))
+    R.apply(q, "wild_transform", options={"style": "bubble"})
+    assert "bubble_rim" in {_pic(q, s.name) for s in q.data.slots}
+    w = Project(tmp_path / "w.json", new_skeleton("w", 720, 1200))
+    w.data.bones.append(Bone(name="symbol", parent="root", x=10, y=20))
+    R.apply(w, "wild_transform", options={"wild": "symbol"})
+    sym = next(b for b in w.data.bones if b.name == "symbol")
+    assert sym.parent.startswith("fx_wildpop_") and "scale" in w.data.animations["fx_wild_transform"].bones[sym.parent]
+
+
+def test_jar_burst_x_flies_from_the_sign_to_the_win_cell(proj):
+    R.apply(proj, "jar_burst", options={"land": [150.0, -250.0]})
+    k = _anim_end(proj, "fx_jar_burst", "fx_jar_burst_label")
+    first = [kk for kk in k if kk.time >= 0.5][0]
+    last = k[-1]
+    assert (first.x or 0, first.y or 0) == pytest.approx((2.0, 309.0), abs=40), "starts at the sign"
+    assert (last.x or 0, last.y or 0) == pytest.approx((150.0, -250.0), abs=1.0), "ends on the win cell"
+    sc = proj.data.animations["fx_jar_burst"].bones["fx_jar_burst_label"]["scale"]
+    assert sc[-1].x < 0.6 and max(kk.x for kk in sc) > 1.4, "shrinks as it flies"
+
+
+def test_bubble_pop_bubbles_then_confetti_in_two_blend_runs(proj):
+    res = R.apply(proj, "bubble_pop", options={"cells": [[0, 0], [146, 0]], "pieces": 6, "stagger": 0.05})
+    runs = [proj.data.slots[0].blend]
+    for s in proj.data.slots[1:]:
+        if s.blend != runs[-1]:
+            runs.append(s.blend)
+    assert runs == ["additive", "normal"] and res["cells"] == 2
+    assert sum(1 for s in proj.data.slots if s.blend == "normal") == 12
+    conf = [b for b in proj.data.bones if "_cf" in b.name]
+    assert conf and all(b.parent.startswith("fx_bubble_pop_cell") for b in conf), "confetti hangs from its cell"
+
+
+def test_tier_swap_scales_the_cards_through_carriers(proj):
+    from claude_spine.ir import Bone
+    proj.data.bones += [Bone(name="banner", parent="root"), Bone(name="big", parent="banner"), Bone(name="mega", parent="banner")]
+    res = R.apply(proj, "tier_swap", options={"old": "big", "new": "mega"})
+    an = proj.data.animations["fx_tier_swap"]
+    big = next(b for b in proj.data.bones if b.name == "big")
+    mega = next(b for b in proj.data.bones if b.name == "mega")
+    assert "big" not in an.bones and "mega" not in an.bones, "the artist's bones keep their own keys"
+    old, new = an.bones[big.parent]["scale"], an.bones[mega.parent]["scale"]
+    assert old[-1].x == 0 and (old[0].x is None or old[0].x == 1)
+    assert new[0].x == 0 and new[-1].x == pytest.approx(1.0, abs=0.02) and max(k.x for k in new) > 1.02, "pops with overshoot"
+    assert res["swap_at"] == pytest.approx(0.1)
