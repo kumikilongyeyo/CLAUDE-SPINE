@@ -97,3 +97,9 @@ Send 2-3 preview GIFs. If a new effect is generally useful, offer to add it to C
 - A `//` comment inserted before a closing `}` on the same line comments the brace out (check generated JSX with
   `node --check` on a .js copy).
 - `claude mcp add`: the server NAME goes before the `-e KEY=V` flags (`-e` is variadic and eats it).
+- Re-importing into an existing `.spine` ADDS a skeleton (`name2`, `name3`, ...) instead of replacing it, so the
+  export grows `name2.json`, `name3.json` on every rebuild: delete the `.spine` (and clear `export/`) before each build
+  (the starter does). Check `export/` holds exactly one json per skeleton.
+- Spine has no motion blur: a fast zoom-in reads right with 2-3 ghost copies at larger scales and lower alpha.
+- Preview each effect over the board state the game shows at that moment (e.g. a win flare over the already-dimmed
+  board): additive pink over a bright pink board washes out in the preview and not in the game.

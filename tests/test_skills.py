@@ -57,3 +57,9 @@ def test_install_script(tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert (tmp_path / "clip-breakdown/scripts/cliptools.py").exists() and (tmp_path / "clip-to-spine/templates/build.py").exists()
+
+
+def test_starter_build_starts_from_a_fresh_spine_project():
+    src = (ROOT / "clip-to-spine/templates/build.py").read_text()
+    assert src.index(".unlink(missing_ok=True)") < src.index("spine_cli.make_project"), "a stale .spine gains a skeleton per build"
+    assert src.index('shutil.rmtree(ROOT / "export"') < src.index("atlas.pack")

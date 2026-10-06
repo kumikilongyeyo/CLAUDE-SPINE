@@ -86,8 +86,12 @@ def main():
     if not v["ok"]:
         raise SystemExit(v["errors"])
     p.save()
+    shutil.rmtree(ROOT / "export", ignore_errors=True)
     atlas.pack(p, ROOT / "export", NAME)
     (ROOT / "spine_project").mkdir(exist_ok=True)
+    # importing into an existing .spine ADDS another skeleton (NAME2, NAME3, ...) instead of replacing it, and the
+    # export then writes one json per skeleton: start from a fresh .spine on every build
+    (ROOT / "spine_project" / f"{NAME}.spine").unlink(missing_ok=True)
     r = spine_cli.make_project(str(p.path), str(ROOT / "spine_project" / f"{NAME}.spine"))
     spine_cli.export_project(str(ROOT / "spine_project" / f"{NAME}.spine"), str(ROOT / "export"), "json")
     print(list(p.data.animations), len(p.data.bones), "bones", len(p.data.slots), "slots; spine import repairs:", r["repairs"])
