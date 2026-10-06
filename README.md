@@ -44,8 +44,8 @@ check everything.
 | Bones | `add_bones`, `add_chain`, `reparent_slot` | Add bones in world coordinates. Art never moves |
 | Mesh | `rig_mesh` | Region → contour mesh with bone-heat weights |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
-| Motion | `juice_apply`, `fx_generate`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, FX presets, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
-| QA | `validate`, `qa_budget`, `qa_character`, `preview` | Structural and runtime validation, mobile budget, character QA (joint cracks, foot slide, per-rig bone budgets), GIF previews |
+| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol contract clips, authored FX recipes, global style profiles, After Effects comps played as frame sequences with matched timing, custom keys with named easing, game events |
+| QA | `validate`, `qa_budget`, `qa_character`, `qa_fx_premium`, `preview` | Structural and runtime validation, mobile budget, character QA, heuristic FX art-direction QA, GIF previews |
 | Characters | `rig_face`, `face_clip`, `look_at`, `lipsync`, `rig_biped`, `clip_set`, `secondary`, `squash_stretch` | Whole-face rig and 2.5D turn from layer names (clamped eyes, blinks, brows, visemes, jaw); biped rig with floor-pinned IK feet and the 11-clip character contract; physics on every strand; volume-preserving squash |
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
 | Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
@@ -67,6 +67,20 @@ validate     → qa_budget profile=mobile_symbol → preview → make_editable /
 
 FX recipes (rune ring, flare, wisps, aura, floor glow, fireflies, twinkles, or all seven as `magic_reveal`) are one tool:
 `fx_recipe` lists them, `fx_recipe recipe=guide` explains how to use, fork and mix them (also in [docs/FX_RECIPES.md](docs/FX_RECIPES.md)).
+
+The recipe's **physics stays the same while the art direction can change globally**:
+
+```
+fx_recipe recipe=explosion style=stylized
+fx_recipe recipe=explosion style=premium relight_slots=["symbol"]
+fx_recipe recipe=explosion realism=0.85 relight_slots=["symbol"]
+```
+
+`style=` is `stylized | premium | realistic`; `realism=0..1` continuously interpolates graphic -> physical.
+`fx_style_profile` lists the profiles and can turn normalised measurements from the `clip-breakdown` skill into a
+reusable `style_profile`. Styled recipe results also return semantic `back / subject / front / lens` depth groups and
+recommended parallax strengths. `relight_slots` adds a short additive response made from the target's own art so a hit
+lights the thing it hits; `qa_fx_premium` lints lighting integration, depth, hierarchy, materials and readability.
 
 ![magic_reveal](docs/magic_reveal.gif)
 
