@@ -163,7 +163,11 @@ def handoff_policy(target: str = "mobile_feature", event: str = "impact", style:
         max_frames = min(profile["hard_frames"], max(12, round(max_frames * 0.78)))
     if intensity < 0.7:
         max_frames = max(8, round(max_frames * 0.82))
-    raw_mb = profile["max_size"] * profile["max_size"] * max_frames * 4 / (1024 * 1024)
+    bytes_per_frame = profile["max_size"] * profile["max_size"] * 4
+    memory_frames = max(2, int(profile["budget_rgba_mb"] * 1024 * 1024 // bytes_per_frame))
+    requested_frames = max_frames
+    max_frames = min(max_frames, memory_frames)
+    raw_mb = bytes_per_frame * max_frames / (1024 * 1024)
     return {
         "target": target,
         "max_size": profile["max_size"],
@@ -173,6 +177,7 @@ def handoff_policy(target: str = "mobile_feature", event: str = "impact", style:
         "preferred_export_fps": profile["export_fps"],
         "raw_rgba_upper_mb": round(raw_mb, 2),
         "budget_rgba_mb": profile["budget_rgba_mb"],
+        "budget_limited": max_frames < requested_frames,
         "reuse_frames_for_copies": True,
         "preserve_world_size_when_downscaled": True,
         "notes": [
@@ -320,7 +325,8 @@ def review(metrics: dict[str, float], style: str = "realistic") -> dict[str, Any
         "style": style,
         "score": round(score, 2),
         "pass": score >= 8.0 and clean["readability"] >= 8.0 and clean["clarity"] >= 8.0
-                and clean["impact"] >= 8.0 and clean["timing"] >= 8.0,
+                and clean["impact"] >= 8.0 and clean["timing"] >= 8.0
+                and clean["lighting_integration"] >= 7.5,
         "metrics": clean,
         "actions": actions,
         "anti_soup_rule": "When clarity is low, subtraction comes before addition.",
