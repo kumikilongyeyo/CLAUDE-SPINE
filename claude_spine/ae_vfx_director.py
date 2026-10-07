@@ -338,8 +338,14 @@ def import_optimized(project: Project, name: str, *, event: str = "impact", styl
                      max_size: int = 0, max_frames: int = 0, feather: float = -1.0, **kwargs: Any) -> dict[str, Any]:
     """AE -> Spine using director defaults, while preserving explicit caller overrides."""
     policy = handoff_policy(target, event, style, intensity, duration)
-    kwargs["max_size"] = max_size or policy["max_size"]
-    kwargs["max_frames"] = max_frames or policy["max_frames"]
+    effective_size = max_size or policy["max_size"]
+    effective_frames = max_frames or policy["max_frames"]
+    if max_size and not max_frames:
+        bytes_per_frame = effective_size * effective_size * 4
+        memory_frames = max(2, int(policy["budget_rgba_mb"] * 1024 * 1024 // bytes_per_frame))
+        effective_frames = min(effective_frames, memory_frames)
+    kwargs["max_size"] = effective_size
+    kwargs["max_frames"] = effective_frames
     kwargs["feather"] = policy["feather"] if feather < 0 else feather
     result = ae_bridge.fx_to_spine(project, name, **kwargs)
     result["director"] = {
@@ -347,6 +353,9 @@ def import_optimized(project: Project, name: str, *, event: str = "impact", styl
         "style": style,
         "target": target,
         "policy": policy,
+        "effective_max_size": effective_size,
+        "effective_max_frames": effective_frames,
+        "explicit_budget_override": bool(max_size and max_frames),
         "optimized": True,
     }
     return result
