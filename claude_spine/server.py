@@ -640,6 +640,7 @@ from . import tools_gait  # noqa: E402,F401   gait, rig_quadruped, make_quadrupe
 from . import tools_body  # noqa: E402,F401   rig_biped, clip_set, secondary, squash_stretch, qa_character, make_biped_sample
 from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sample
 from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check, edit_slots, clone_art, art_twin, hue_cycle
+from . import tools_pipeline  # noqa: E402,F401   clean_project, secondary_motion_solver, ae_material_fx
 
 
 def main() -> None:
