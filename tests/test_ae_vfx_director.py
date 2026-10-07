@@ -66,12 +66,31 @@ def test_review_subtracts_before_adding_when_cluttered():
     assert "subtraction" in out["anti_soup_rule"].lower()
 
 
+def test_review_requires_integrated_lighting_to_pass():
+    out = D.review({
+        "readability": 9.0,
+        "impact": 9.0,
+        "depth": 9.0,
+        "lighting_integration": 6.5,
+        "motion_flow": 9.0,
+        "texture_quality": 9.0,
+        "timing": 9.0,
+        "clarity": 9.0,
+    }, style="realistic")
+    assert out["score"] >= 8.0
+    assert out["pass"] is False
+    assert any("relighting" in a for a in out["actions"])
+
+
 def test_handoff_budget_scales_by_target():
     symbol = D.handoff_policy("mobile_symbol", "impact", "premium")
     hero = D.handoff_policy("mobile_hero", "impact", "premium")
     desktop = D.handoff_policy("desktop_preview", "impact", "premium")
     assert symbol["max_size"] < hero["max_size"] < desktop["max_size"]
     assert symbol["max_frames"] <= hero["max_frames"] <= desktop["max_frames"]
+    assert symbol["raw_rgba_upper_mb"] <= symbol["budget_rgba_mb"]
+    assert hero["raw_rgba_upper_mb"] <= hero["budget_rgba_mb"]
+    assert desktop["raw_rgba_upper_mb"] <= desktop["budget_rgba_mb"]
     assert symbol["reuse_frames_for_copies"] is True
 
 
