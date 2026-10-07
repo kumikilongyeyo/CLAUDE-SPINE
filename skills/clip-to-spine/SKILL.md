@@ -37,6 +37,12 @@ supplies it. Respect "focus only on the effects".
 
 ## 3. After Effects: build all comps, judge, then import
 
+For hero / premium / realistic effects, call `ae_vfx_plan` before building the AE comps. Use its layer hierarchy,
+timing beats and look rules as the shot brief. After rendering the representative frames/contact sheet, score the
+pass with `ae_vfx_review` before importing. If clarity is weak, subtract decorative particles/lens layers first.
+For production handoff use `ae_vfx_to_spine` instead of the raw bridge unless you intentionally need manual frame
+or texture budgets; repeated instances still use `copies=` so they share one frame set.
+
 1. One script for ALL comps: `ae_template` for each (returns `run_with`), concatenate the `$.evalFile` calls into one
    `ae_run_script` (each in try/catch, push results), end with a save. Names: `<prefix>_<what>_v<N>`; AE caches renders
    by comp NAME, so every tuning attempt gets a new `_vN`. Delete failed / test comps and their unused solids.
