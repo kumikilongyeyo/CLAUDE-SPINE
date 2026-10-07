@@ -36,6 +36,19 @@ Pin to a commit you have reviewed by adding `@<sha>` after the URL. Set
 installs itself with `npm` the first time it is used. Run the `doctor` tool to
 check everything.
 
+### Production cleanup + material FX
+
+Three production passes target handoff quality rather than just adding more animation presets:
+
+```
+secondary_motion_solver animation="win" chain=["torso","jacket","hair","charm"]
+clean_project mode="production" max_influences=4
+ae_material_fx material="fire"
+ae_material_fx project="./wild/wild.json" name="hit" passes=[...] fps=30 subject_slots=["symbol"]
+```
+
+`clean_project` keeps animator structure intact while removing redundant timeline noise and, in production/runtime modes, enforcing a mobile-safe influence cap. `secondary_motion_solver` generates sparse dependency-driven response instead of dense evenly sampled keys. `ae_material_fx` separates core, smoke, sparks, interaction light and lens passes, with macro/mid/micro texture guidance and optional mesh-following subject light.
+
 ## The tools
 
 | Stage | Tool | What it does |
@@ -44,12 +57,12 @@ check everything.
 | Bones | `add_bones`, `add_chain`, `reparent_slot` | Add bones in world coordinates. Art never moves |
 | Mesh | `rig_mesh`, `rig_volume_2p5d` | Region → contour mesh with bone-heat weights; layer centre-volume weights over an existing rig for squash/bulge/2.5D bounce |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
-| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `volume_bounce`, `optimize_animation`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol clips, authored FX, global style profiles, sparse 2.5D bounce, adaptive key cleanup, AE sequences, custom easing and game events |
+| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `volume_bounce`, `optimize_animation`, `secondary_motion_solver`, `ae_template`, `ae_fx_to_spine`, `ae_material_fx`, `add_keys`, `add_event` | Symbol clips, authored FX, sparse 2.5D bounce, causal secondary motion, adaptive key cleanup, layered AE material FX, custom easing and game events |
 | QA | `validate`, `qa_budget`, `qa_character`, `qa_fx_premium`, `preview` | Structural and runtime validation, mobile budget, character QA, heuristic FX art-direction QA, GIF previews |
 | Characters | `rig_face`, `face_clip`, `look_at`, `lipsync`, `rig_biped`, `clip_set`, `secondary`, `squash_stretch` | Whole-face rig and 2.5D turn from layer names (clamped eyes, blinks, brows, visemes, jaw); biped rig with floor-pinned IK feet and the 11-clip character contract; physics on every strand; volume-preserving squash |
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
 | Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
-| Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
+| Export | `clean_project`, `pack_atlas`, `make_editable`, `export_runtime` | Sanitize generated rigs, then atlas/runtime or editable `.spine` through the Spine CLI |
 | Symbol from the art | `sphere_spin`, `liquid_splat`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
 
 A typical session, as Claude would run it:
