@@ -115,6 +115,19 @@ def test_explicit_import_budget_overrides_director_defaults(symbol, tmp_path):
     )
     assert res["frames_out"] <= 7
     assert max(res["image_size"]) == 96
+    assert res["director"]["explicit_budget_override"] is True
+
+
+def test_larger_texture_override_reduces_frames_to_stay_in_budget(symbol, tmp_path):
+    frames = _frames(tmp_path / "frames_big", count=30, size=360)
+    res = D.import_optimized(
+        symbol, "large_texture", frames_dir=str(frames), fps=30,
+        event="impact", target="mobile_symbol", max_size=320,
+    )
+    assert res["director"]["effective_max_size"] == 320
+    assert res["director"]["effective_max_frames"] <= 6
+    assert res["director"]["explicit_budget_override"] is False
+    assert res["frames_out"] <= 6
 
 
 def test_mcp_tools_are_registered_and_callable(symbol, tmp_path):
