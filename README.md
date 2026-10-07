@@ -44,7 +44,7 @@ check everything.
 | Bones | `add_bones`, `add_chain`, `reparent_slot` | Add bones in world coordinates. Art never moves |
 | Mesh | `rig_mesh`, `rig_volume_2p5d` | Region → contour mesh with bone-heat weights; layer centre-volume weights over an existing rig for squash/bulge/2.5D bounce |
 | Constraints | `rig_ik`, `rig_physics`, `rig_transform`, `rig_strand`, `rig_turn` | IK, Spine 4.2 physics, drivers, one-call hair/cape/tail rigs, 2.5D head turn |
-| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `volume_bounce`, `optimize_animation`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol clips, authored FX, global style profiles, sparse 2.5D bounce, adaptive key cleanup, AE sequences, custom easing and game events |
+| Motion | `juice_apply`, `fx_generate`, `fx_recipe`, `fx_style_profile`, `ae_vfx_plan`, `ae_vfx_review`, `ae_vfx_to_spine`, `volume_bounce`, `optimize_animation`, `ae_template`, `ae_fx_to_spine`, `add_keys`, `add_event` | Symbol clips, authored FX, global style profiles, AE VFX direction/self-review, optimized AE sequences, sparse 2.5D bounce, adaptive key cleanup, custom easing and game events |
 | QA | `validate`, `qa_budget`, `qa_character`, `qa_fx_premium`, `preview` | Structural and runtime validation, mobile budget, character QA, heuristic FX art-direction QA, GIF previews |
 | Characters | `rig_face`, `face_clip`, `look_at`, `lipsync`, `rig_biped`, `clip_set`, `secondary`, `squash_stretch` | Whole-face rig and 2.5D turn from layer names (clamped eyes, blinks, brows, visemes, jaw); biped rig with floor-pinned IK feet and the 11-clip character contract; physics on every strand; volume-preserving squash |
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
@@ -97,6 +97,24 @@ left untouched unless explicitly forced.
 reusable `style_profile`. Styled recipe results also return semantic `back / subject / front / lens` depth groups and
 recommended parallax strengths. `relight_slots` adds a short additive response made from the target's own art so a hit
 lights the thing it hits; `qa_fx_premium` lints lighting integration, depth, hierarchy, materials and readability.
+
+### AE VFX director
+
+For hero effects, use the director before the low-level After Effects MCP calls:
+
+```
+ae_vfx_plan brief="heavy fire punch" event=fire_hit style=realistic target=mobile_feature
+# build/render in After Effects, judge representative frames
+ae_vfx_review metrics={readability:8.5,impact:9,depth:8,lighting_integration:8.5,motion_flow:8,texture_quality:8,timing:9,clarity:8.5}
+ae_vfx_to_spine project=... name=fire_hit aep=... comp=... event=fire_hit style=realistic target=mobile_feature
+```
+
+The plan gives Claude a stable comp hierarchy (`00_CONTROLS` through `07_FINISH`), compressed impact timing,
+physical light-integration rules and a review rubric. The production importer wraps the raw `ae_fx_to_spine` bridge:
+it trims empty frames, caps frame count and texture size by target, preserves playback speed while subsampling,
+feathers comp edges, and keeps repeated `copies=` on one shared image sequence. Explicit size/frame settings still
+override the policy when a shot genuinely needs them.
+
 
 ![magic_reveal](docs/magic_reveal.gif)
 
@@ -324,7 +342,4 @@ MIT. See `LICENSE`. The original work is © 2026 Egor Fedorov; this fork is
 
 ## Claude Code skills
 
-`skills/` ships two skills for working from reference videos (install with `sh skills/install.sh`):
-`clip-breakdown` watches a clip and writes an animator's breakdown (beat sheet, timings, easing, layout, which tool
-each part needs), and `clip-to-spine` rebuilds its effects in Spine with After Effects for lightning / fire / auras /
-smoke. See [skills/README.md](skills/README.md).
+`skills/` ships three production skills (install with `sh skills/install.sh`): `clip-breakdown` watches a clip and writes an animator's breakdown; `clip-to-spine` rebuilds its effects in Spine with AE for real noise; and `ae-vfx-director` plans, self-reviews and optimizes realistic/premium/stylized/anime AE VFX before the Spine handoff. See [skills/README.md](skills/README.md).

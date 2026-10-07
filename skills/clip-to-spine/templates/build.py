@@ -13,7 +13,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from claude_spine import ae_bridge as B, atlas, fx_recipes as R, qa, spine_cli
+from claude_spine import ae_bridge as B, ae_vfx_director as D, atlas, fx_recipes as R, qa, spine_cli
 from claude_spine.ir import Bone, new_skeleton
 from claude_spine.project import Project
 
@@ -54,14 +54,19 @@ def bone(p, name, parent="root", x=0.0, y=0.0, rot=0.0, sx=1.0, sy=1.0):
 
 
 def seq(p, comp, name, anim, *, parent="root", x=0.0, y=0.0, scale=1.0, start=0.0, loop=False, until=0.0,
-        blend="", color="FFFFFFFF", hit_ae=None, hit_at=None):
-    """One AE comp as a frame sequence in animation `anim`. blend "" = from the mode (additive / normal); pass
-    blend="normal" for flames over bright or same-coloured backgrounds (additive orange on red vanishes)."""
+        blend="", color="FFFFFFFF", hit_ae=None, hit_at=None, event="impact", style="premium",
+        target="mobile_feature"):
+    """One AE comp as an optimized frame sequence in animation `anim`.
+
+    blend="" follows the comp mode; pass blend="normal" for flames over bright/same-coloured backgrounds.
+    The director trims/caps the sequence for target memory. COMPS may still request a larger texture; when it does,
+    the frame allowance falls automatically unless both size and frame count are explicitly overridden."""
     mode, max_size = COMPS[comp]
     kw = dict(hit_ae=hit_ae, hit_at=hit_at) if hit_ae is not None else dict(start=start)
-    return B.fx_to_spine(p, name, frames_dir=str(FRAMES / comp), fps=FPS, mode=mode, blend=blend, animation=anim,
-                         parent=parent, x=x, y=y, scale=scale, seq_mode="loop" if loop else "once", until=until,
-                         max_size=max_size, color=color, **kw)
+    return D.import_optimized(
+        p, name, frames_dir=str(FRAMES / comp), fps=FPS, mode=mode, blend=blend, animation=anim,
+        parent=parent, x=x, y=y, scale=scale, seq_mode="loop" if loop else "once", until=until,
+        max_size=max_size, color=color, event=event, style=style, target=target, **kw)
 
 
 # ---- one function per animation (name = the game event it plays on) ----------------------------------------------
