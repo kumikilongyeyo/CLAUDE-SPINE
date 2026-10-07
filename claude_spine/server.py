@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_templates
+from . import ae_bridge, ae_templates, ae_vfx_director
 from . import animation_opt
 from . import atlas as atlas_mod
 from . import fx as fx_mod
@@ -420,6 +420,59 @@ def fx_style_profile(style: str = "", realism: float = -1.0, metrics: dict | Non
     if not style and realism < 0 and not profile:
         return fx_style.listing()
     return {"profile": fx_style.resolve(style, realism, profile)}
+
+
+@mcp.tool()
+def ae_vfx_plan(brief: str = "", event: str = "impact", style: str = "realistic", intensity: float = 1.0,
+                fps: float = 30.0, duration: float = 0.0, target: str = "mobile_feature") -> dict:
+    """Plan a production AE effect before touching the comp.
+
+    event: impact | fire_hit | electric_hit | magic_reveal | win_burst | ambient.
+    style: stylized | premium | realistic | anime.
+    target: mobile_symbol | mobile_feature | mobile_hero | desktop_preview.
+    Returns the comp layer hierarchy, compressed impact timing, look rules, review targets and a
+    conservative AE->Spine sequence budget. Use this before issuing low-level After Effects MCP calls."""
+    return ae_vfx_director.plan(brief, event, style, intensity, fps, duration, target)
+
+
+@mcp.tool()
+def ae_vfx_review(metrics: dict[str, float], style: str = "realistic") -> dict:
+    """Self-review a rendered AE VFX pass from 0..10 measurements.
+
+    metrics: readability, impact, depth, lighting_integration, motion_flow, texture_quality, timing,
+    and clarity (or clutter, where clarity=10-clutter). Returns a weighted score and the smallest
+    useful revision list. When clarity is weak, subtraction is always recommended before adding FX."""
+    return ae_vfx_director.review(metrics, style)
+
+
+@mcp.tool()
+def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frames_dir: str = "", fps: float = 0,
+                    event: str = "impact", style: str = "realistic", target: str = "mobile_feature",
+                    intensity: float = 1.0, duration: float = 0.0, mode: str = "alpha",
+                    seq_mode: str = "once", animation: str = "", start: float = 0.0,
+                    hit_ae: float = -1.0, hit_at: float = -1.0, fit_duration: float = 0.0, until: float = 0.0,
+                    x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
+                    blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
+                    behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
+                    keep_frames: str = "", copies: list[list[float]] | None = None,
+                    feather: float = -1.0, anchor: list[float] | None = None,
+                    deform_like: list[str] | None = None) -> dict:
+    """Production AE->Spine import with automatic mobile-safe sequence budgets.
+
+    This wraps ae_fx_to_spine rather than replacing it. The director trims empty frames, keeps playback
+    speed when subsampling, caps frame count/texture size by target, feathers comp borders, and encourages
+    copies= so repeated effects share one frame set. Explicit max_size/max_frames/feather override the policy."""
+    p = _open(project)
+    res = ae_vfx_director.import_optimized(
+        p, name, event=event, style=style, target=target, intensity=intensity, duration=duration,
+        aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
+        animation=animation, start=start, hit_ae=None if hit_ae < 0 else hit_ae,
+        hit_at=None if hit_at < 0 else hit_at, fit_duration=fit_duration, until=until, x=x, y=y, scale=scale,
+        max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
+        behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
+        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies,
+        feather=feather, anchor=anchor, deform_like=deform_like)
+    return _saved(p, res)
 
 
 @mcp.tool()
