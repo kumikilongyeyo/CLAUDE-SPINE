@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_fx_memory, ae_fx_visual_match, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_fx_autofit, ae_fx_memory, ae_fx_visual_match, ae_look, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -523,6 +523,28 @@ def ae_fx_match(recipe: str, out_dir: str, candidate_frames: str = "", candidate
         background=background, candidate_mode=candidate_mode, max_frames=max_frames,
         iteration=iteration, style=style, strength=strength, color=color,
         speed=speed, canvas=canvas, tuning=tuning)
+
+
+@mcp.tool()
+def ae_fx_auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
+                   max_rounds: int = 3, timeout_seconds: float = 180.0,
+                   style: str = "premium", canvas: int = 1024, reference: str = "",
+                   background: str = "", min_improvement: float = 0.15,
+                   max_frames: int = 40) -> dict:
+    """Run the complete local AE FX matching loop on the artist's own workstation.
+
+    Requires installed AfterFX and aerender. FIRST: open a NEW EMPTY UNSAVED
+    After Effects project. This tool intentionally refuses unrelated projects.
+    It builds/editable JSX, runs it with AfterFX.exe -r, waits for explicit
+    acknowledgment after saving AEP, renders via aerender, scores against
+    reference, builds improved JSX, and repeats up to max_rounds (1..5).
+    Stops when the score is sufficiently high or improvement stalls.
+    Never modifies the reference source. Returns best actual render/AEP for
+    artist approval before optional AE-to-Spine export.
+    If AE is not installed, use ae_fx_match manually with exported frames."""
+    return ae_fx_autofit.auto_fit(recipe, out_dir, afterfx_bin,
+                                 max_rounds, timeout_seconds, style, canvas,
+                                 reference, background, min_improvement, max_frames)
 
 
 @mcp.tool()
