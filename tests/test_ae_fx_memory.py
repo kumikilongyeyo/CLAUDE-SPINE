@@ -12,6 +12,7 @@ from PIL import Image
 
 from claude_spine import ae_fx_memory as M
 from claude_spine import ae_fx_visual_match as V
+from claude_spine import ae_fx_autofit as A
 
 
 def make_footage(tmp_path, n=40, size=112):
@@ -106,7 +107,7 @@ def test_saved_fx_are_searchable_for_later_reuse(tmp_path):
 def test_mcp_tools_are_registered(tmp_path):
     from claude_spine.server import mcp
     names = {t.name for t in asyncio.run(mcp.list_tools())}
-    assert {"ae_fx_capture", "ae_fx_library", "ae_fx_remix", "ae_fx_match"} <= names
+    assert {"ae_fx_capture", "ae_fx_library", "ae_fx_remix", "ae_fx_match", "ae_fx_auto_fit"} <= names
 
 
 def _alter_candidate(reference_dir, out_dir, scale=.65, dx=-9, dark=.65):
@@ -275,3 +276,57 @@ def test_repeated_identical_render_stops_on_plateau(tmp_path):
     assert second["previous_score"] == first["score"]
     assert second["best"]["score"] == first["score"]
     assert second["measured_change"] == 0.0
+
+
+
+def test_ae_auto_fit_wrapper_guards_unrelated_open_projects(tmp_path):
+    wrapper = A._wrapper(tmp_path/"base.jsx", tmp_path/"autofit.aep",
+                         tmp_path/"done.json")
+    assert "new, empty, unsaved AE project" in wrapper
+    assert "p.numItems !== 0 || p.file" in wrapper
+    assert "$.evalFile(new File(" in wrapper
+    assert "app.project.save" in wrapper
+    assert "JSON.stringify" in wrapper
+    assert "__ACK__" not in wrapper
+    next_wrapper = A._wrapper(tmp_path/"next.jsx", tmp_path/"next.aep",
+                              tmp_path/"next.json", previous=tmp_path/"autofit.aep")
+    assert "Refusing" not in next_wrapper or "unrelated projects are protected" in next_wrapper
+    assert "new File(previous).fsName" in next_wrapper
+
+
+def test_ae_auto_fit_orchestrates_actual_render_feedback_without_ae(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    src = make_footage(tmp_path)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "auto flame")
+    monkeypatch.setattr(A, "_resolve_afterfx", lambda path="": tmp_path/"fake_afterfx.exe")
+    launches = []
+    def fake_execute(jsx, aep, ack, previous, binary, timeout_seconds):
+        launches.append({"jsx": jsx, "aep": aep, "previous": previous})
+        aep.write_text("fake AEP")
+    monkeypatch.setattr(A, "_execute", fake_execute)
+    monkeypatch.setattr(A.ae_bridge, "render_comp",
+                        lambda aep, comp, folder: SimpleNamespace(fps=24.))
+    def fake_compare(recipe, out_dir, candidate_frames, candidate_fps,
+                     reference, background, max_frames, iteration, style,
+                     canvas, strength, speed, tuning):
+        return {"score": [73, 84, 83][iteration-1],
+                "stop": False, "comparison": "composite.jpg",
+                "report": "compare.json", "next_jsx": f"auto_{iteration+1}.jsx",
+                "next_comp": f"auto_{iteration+1}",
+                "tuning": {"energy_gain": 1.15}}
+    monkeypatch.setattr(A.ae_fx_visual_match, "compare", fake_compare)
+    result = A.auto_fit(cap["recipe"], str(tmp_path/"auto"), max_rounds=5)
+    assert result["rounds"] == 3
+    assert result["best"]["score"] == 84
+    assert result["best"]["iteration"] == 2
+    assert result["stopped_early"] is True
+    assert launches[0]["previous"] is None
+    assert launches[1]["previous"] == launches[0]["aep"]
+    assert (tmp_path/"auto"/"autofit_report.json").exists()
+
+
+def test_ae_auto_fit_rejects_unbounded_execution(tmp_path):
+    with pytest.raises(ValueError, match="max_rounds"):
+        A.auto_fit("fake.json", str(tmp_path), max_rounds=0)
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        A.auto_fit("fake.json", str(tmp_path), timeout_seconds=3600)
