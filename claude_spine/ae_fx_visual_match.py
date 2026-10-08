@@ -150,6 +150,8 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         raise ValueError("candidate_mode must be alpha|black|none")
     if not 8 <= max_frames <= 120:
         raise ValueError("max_frames must be 8..120")
+    if not 0.25 <= speed <= 4.0:
+        raise ValueError("speed must be 0.25..4")
     if iteration < 1 or iteration > 500:
         raise ValueError("iteration must be 1..500")
     recipe_obj = json.loads(Path(recipe).expanduser().read_text(encoding="utf-8"))
@@ -187,7 +189,11 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         ref_mask_mode = recipe_obj["source"]["mask_mode"]
         if ref_mask_mode == "background" and bg is None:
             raise ValueError("Reference needs background=<clean_plate.png> for isolation")
-        pairs = _nearest_indices(candidate_times, ref_times)
+        # Requested speed is part of the desired effect, so compare the
+        # reference's time at t/speed against the corresponding faster/slower
+        # candidate moment, not against the original wall-clock timestamps.
+        target_times = [t / speed for t in ref_times]
+        pairs = _nearest_indices(candidate_times, target_times)
         ref_pm = [_standard_frame(p, w, h, ref_mask_mode, bg)[0] for p in ref_frames]
         cand_cache = {}
         for idx in set(pairs):
@@ -214,11 +220,11 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
 
     t_energy = [f["energy"] for f in reference_features]
     c_energy = [f["energy"] for f in render_features]
-    ref_peak_time = ref_times[int(np.argmax(t_energy))]
-    cand_peak_time = ref_times[int(np.argmax(c_energy))]
-    ref_mass_center = float(np.average(ref_times, weights=np.maximum(t_energy, 1e-8)))
-    cand_mass_center = float(np.average(ref_times, weights=np.maximum(c_energy, 1e-8)))
-    duration = max(recipe_obj["analysis"]["duration"], 1e-5)
+    ref_peak_time = target_times[int(np.argmax(t_energy))]
+    cand_peak_time = target_times[int(np.argmax(c_energy))]
+    ref_mass_center = float(np.average(target_times, weights=np.maximum(t_energy, 1e-8)))
+    cand_mass_center = float(np.average(target_times, weights=np.maximum(c_energy, 1e-8)))
+    duration = max(recipe_obj["analysis"]["duration"] / speed, 1e-5)
     # Corrective parameters are bounded and partially damped to prevent oscillation.
     energy_ratio = _weighted_ratio(t_energy, c_energy, weights, .4, 2.5)
     radius_ratio = _weighted_ratio([f["radius"] for f in reference_features],
@@ -271,7 +277,7 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     settings = {k: round(v, 5) for k,v in settings.items()}
 
     comparison = dest / f"comparison_{iteration:03d}.jpg"
-    _frame_preview(ref_pm, can_pm, ref_times, comparison)
+    _frame_preview(ref_pm, can_pm, target_times, comparison)
     factors = {"energy_ratio": round(energy_ratio, 4), "spread_ratio": round(radius_ratio, 4),
                "coverage_ratio": round(cover_ratio, 4),
                "horizontal_shift": round(shifts[0], 4), "vertical_shift": round(shifts[1], 4),
@@ -281,9 +287,12 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
                "reference_detail": round(tex_target, 4),
                "render_detail": round(tex_candidate, 4)}
 
+    next_name = f'{recipe_obj["id"]}_match_{iteration+1:03d}'
+    next_project = dest / f'{next_name}.aep' if aep else None
     matched = memory.remix(recipe, str(dest), strength=strength, style=style, color=color,
                            speed=speed, canvas=canvas, fit=settings,
-                           comp_name=f'{recipe_obj["id"]}_match_{iteration+1:03d}')
+                           save_as=str(next_project) if next_project else "",
+                           comp_name=next_name)
     best = {"iteration": iteration, "score": score,
             "candidate": aep or str(Path(candidate_frames).resolve())}
     if previous:
@@ -302,7 +311,7 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         "version": 1, "iteration": iteration, "reference": str(Path(source).resolve()),
         "candidate": aep or str(Path(candidate_frames).resolve()),
         "candidate_comp": comp or None,
-        "frames_compared": len(ref_pm), "matched_times": [round(x, 4) for x in ref_times],
+        "frames_compared": len(ref_pm), "matched_times": [round(x, 4) for x in target_times],
         "score": score, "previous_score": previous_score, "measured_change": change,
         "best": best, "stop": stop, "stop_reason": stop_reason,
         "score_note": "Diagnostic frame match score; comparison against newly rendered output is needed to verify improvement.",
@@ -310,6 +319,7 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
                    "energy": round(energy_l1, 6), "spread": round(radius_l1, 6)},
         "corrections": factors, "tuning": settings,
         "next_jsx": matched["jsx"], "next_comp": matched["comp"],
+        "next_aep": str(next_project) if next_project else None,
         "comparison": str(comparison),
         "next": ("Review the best reported candidate; no further correction required by the automatic stop criterion."
                  if stop else
