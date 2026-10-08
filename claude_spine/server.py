@@ -453,7 +453,8 @@ def ae_vfx_plan(brief: str = "", event: str = "impact", style: str = "realistic"
 
 @mcp.tool()
 def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
-                  mask_mode: str = "auto", background: str = "", max_frames: int = 96) -> dict:
+                  mask_mode: str = "auto", background: str = "", max_frames: int = 96,
+                  archive_source: bool = True) -> dict:
     """Reverse engineer a VFX reference video or PNG sequence into a persistent editable recipe.
 
     The capture stores an FX energy/timing curve, impact beats, center of motion, spread,
@@ -463,7 +464,8 @@ def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
     scene, provide background=<clean plate PNG> and mask_mode=background.
     This estimates visible behavior, not unavailable original AE/particle settings.
     Next: ae_fx_remix(recipe=returned recipe path)."""
-    return ae_fx_memory.capture(source, library_dir, name, fps, mask_mode, background, max_frames)
+    return ae_fx_memory.capture(source, library_dir, name, fps, mask_mode, background,
+                                max_frames, archive_source)
 
 
 @mcp.tool()
