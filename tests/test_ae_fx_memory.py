@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +44,8 @@ def test_capture_creates_persistent_motion_recipe_and_reference(tmp_path):
     assert recipe["analysis"]["peak_energy"] > 0
     assert recipe["analysis"]["peak_at"] > 0
     assert recipe["source"]["sampled_frames"] == 40
+    assert recipe["source"]["archived"] is True
+    assert Path(recipe["source"]["path"]).is_dir()
 
 
 def test_remix_generates_nondestructive_editable_ae_script(tmp_path):
@@ -207,3 +210,26 @@ def test_ae_work_area_can_start_late_and_generates_named_next_project(tmp_path, 
     assert out["next_aep"].endswith("nonzero_match_002.aep")
     jsx = Path(out["next_jsx"]).read_text()
     assert "app.project.save(new File(" in jsx
+
+
+def test_archived_footage_survives_original_being_removed(tmp_path):
+    original = make_footage(tmp_path)
+    candidate = tmp_path/"comparison_frames"
+    shutil.copytree(original, candidate)
+    captured = M.capture(str(original), str(tmp_path/"library"), "durable fx")
+    shutil.rmtree(original)
+    report = V.compare(captured["recipe"], str(tmp_path/"matched"),
+                       candidate_frames=str(candidate), candidate_fps=24,
+                       max_frames=40)
+    assert report["score"] > 99.9
+    assert captured["archived"] is True
+    assert Path(captured["stored_source"]).exists()
+
+
+def test_reference_archival_is_optional(tmp_path):
+    frames = make_footage(tmp_path)
+    result = M.capture(str(frames), str(tmp_path/"library"), "external",
+                       archive_source=False)
+    assert result["archived"] is False
+    assert result["stored_source"] == str(frames.resolve())
+    assert "archive_source=False" in " ".join(result["warnings"])
