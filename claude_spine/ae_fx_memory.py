@@ -327,7 +327,8 @@ def _js(value) -> str:
 
 def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
           color: str = "", speed: float = 1.0, spark_count: int = -1,
-          comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
+          comp_name: str = "", save_as: str = "", canvas: int = 1024,
+          fit: dict | None = None) -> dict:
     """Write editable JSX. Run via AE MCP ae_run_script or File > Scripts > Run Script File.
 
     A .jsx builds a reusable multi-layer composition; it is NOT a .ffx preset.
@@ -357,18 +358,42 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     factor = canvas / max(w, h)
     w, h = max(32, round(w * factor)), max(32, round(h * factor))
     col = _hex_color(color, obj["analysis"]["color"])
+    bounds = {
+        "energy_gain": (.2, 4.), "radius_gain": (.35, 3.),
+        "halo_gain": (.2, 3.), "ring_gain": (.3, 3.),
+        "offset_x": (-.45, .45), "offset_y": (-.45, .45),
+        "time_shift": (-.4, .4), "roughness": (0., 65.),
+    }
+    fit = dict(fit or {})
+    extra = set(fit) - set(bounds)
+    if extra:
+        raise ValueError(f"unknown fit parameter(s): {sorted(extra)}")
+    for key, (low, high) in bounds.items():
+        fit[key] = _clamp(float(fit.get(key, 0 if key in
+                                   ("offset_x", "offset_y", "time_shift", "roughness") else 1)),
+                          low, high)
     keys = obj["keys"]
-    time_keys = [round(_clamp(float(k["t"])) * duration, 5) for k in keys]
-    e = [_clamp(float(k["energy"])) for k in keys]
-    x = [round(_clamp(k["x"]) * w, 3) for k in keys]
-    y = [round(_clamp(k["y"]) * h, 3) for k in keys]
-    radius = [round(_clamp(k["radius"], .02, .8) * min(w, h) * (1 + (strength - 1) * .23), 3) for k in keys]
-    peak_at = float(obj["analysis"]["peak_at"]) / speed
+    time_offset = fit["time_shift"] * duration
+    time_keys = [round(max(0, _clamp(float(k["t"])) * duration + time_offset), 5) for k in keys]
+    e = [_clamp(float(k["energy"]) * fit["energy_gain"]) for k in keys]
+    x = [round(_clamp(float(k["x"]) + fit["offset_x"]) * w, 3) for k in keys]
+    y = [round(_clamp(float(k["y"]) + fit["offset_y"]) * h, 3) for k in keys]
+    radius = [round(_clamp(k["radius"], .02, .8) * min(w, h) *
+              (1 + (strength - 1) * .23) * fit["radius_gain"], 3) for k in keys]
+    peak_at = max(0., float(obj["analysis"]["peak_at"]) / speed + time_offset)
+    if len(set(time_keys)) < len(time_keys):
+        # Some negative shifts collapse early keys to zero; remove duplicates
+        # to avoid AE setValueAtTime overwrites and undefined Bezier handles.
+        last = -1.
+        for i, t in enumerate(time_keys):
+            time_keys[i] = round(max(t, last + .0001), 5)
+            last = time_keys[i]
     high = 1.0 if style in ("anime", "stylized") else 0.8
     particles = (14 if style == "anime" else 10 if style == "premium" else 7 if style == "stylized" else 5)
     particles = round(particles * strength) if spark_count < 0 else spark_count
     particles = max(0, min(80, particles))
     radius_max = max(radius)
+    duration = max(duration, time_keys[-1], peak_at + .05)
     # Native AE shapes + sparse Bezier keys. Controls remain live after generation.
     script = r"""(function(){
     app.beginUndoGroup("Rebuild reference FX");
@@ -425,12 +450,19 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
             haloScale.push([diameter*1.55,diameter*1.55]);
             ringScale.push([diameter*1.24,diameter*1.24]);
             coreOpacity.push(Math.min(100, energy[i]*__CORE_GAIN__*100));
-            haloOpacity.push(Math.min(80, Math.sqrt(energy[i])*25));
-            ringOpacity.push(Math.min(75, energy[i]*65));
+            haloOpacity.push(Math.min(80, Math.sqrt(energy[i])*25*__HALO_GAIN__));
+            ringOpacity.push(Math.min(75, energy[i]*65*__RING_GAIN__));
         }
         // The base ellipse is 100 px wide, so scale == desired diameter.
-        track(disk("02_CORE_reference_energy", [1,1,1], 0),
-              t, coreOpacity, positions, coreScale);
+        var core = disk("02_CORE_reference_energy", __RGB__, 0);
+        if (__ROUGHNESS__ > 0) {
+            try {
+                var turbulent = core.property("ADBE Effect Parade").addProperty("ADBE Turbulent Displace");
+                turbulent.property(2).setValue(__ROUGHNESS__);
+                turbulent.property(3).setValue(Math.max(8, __ROUGHNESS__ * 1.6));
+            } catch (ignoreTexture) { /* Optional AE effect; layer remains editable. */ }
+        }
+        track(core, t, coreOpacity, positions, coreScale);
         var halo = disk("05_LIGHTING_soft_halo", __RGB__, 0);
         try {
             var blur = halo.property("ADBE Effect Parade").addProperty("ADBE Gaussian Blur 2");
@@ -467,6 +499,8 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
         "__TIMES__": _js(time_keys), "__ENERGY__": _js(e),
         "__X__": _js(x), "__Y__": _js(y), "__RADII__": _js(radius),
         "__RGB__": _js(col), "__CORE_GAIN__": _js(high * strength),
+        "__HALO_GAIN__": _js(fit["halo_gain"]), "__RING_GAIN__": _js(fit["ring_gain"]),
+        "__ROUGHNESS__": _js(fit["roughness"]),
         "__COUNT__": str(particles), "__PEAK__": _js(round(peak_at, 5)),
         "__BURST__": _js(round(radius_max * (1.45 + strength * .33), 3)),
         "__SPARK_POWER__": _js(round(min(100, 45 * strength), 2)),
@@ -480,6 +514,7 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     outfile.write_text(script, encoding="utf-8")
     return {"jsx": str(outfile), "comp": name, "duration": round(duration, 4),
             "fps": fps, "canvas": [w, h], "layers": 3 + particles + 1, "spark_count": particles,
+            "fit": fit,
             "control_sliders": ["Impact Strength", "Global Scale"],
             "source_recipe": str(Path(recipe).expanduser().resolve()),
             "save_as": str(Path(save_as).expanduser().resolve()) if save_as else None,
