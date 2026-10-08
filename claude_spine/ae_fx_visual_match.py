@@ -82,10 +82,15 @@ def _mae(a: np.ndarray, b: np.ndarray) -> dict:
     union = np.clip(visibility * 3, .08, 1.)
     color = np.abs(a[..., :3] - b[..., :3]).mean(axis=2)
     alpha = np.abs(a[..., 3] - b[..., 3])
+    footprint_a = a[..., 3] > .1
+    footprint_b = b[..., 3] > .1
+    both = int(np.logical_and(footprint_a, footprint_b).sum())
+    either = int(np.logical_or(footprint_a, footprint_b).sum())
     return {
         "visual_error": float((color * union).sum() / max(union.sum(), 1e-8)),
         "alpha_error": float((alpha * union).sum() / max(union.sum(), 1e-8)),
         "mean_rgb_mae": float(color.mean()),
+        "silhouette_iou": both / either if either else 1.0,
     }
 
 
@@ -168,8 +173,9 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
             source, recipe_obj["source"]["sample_fps"], max_frames, tmp/"ref")
         if aep:
             info = ae_bridge.render_comp(aep, comp, tmp/"aerender")
+            # Compare the effect's work area from its first rendered frame.
             candidate_paths, candidate_times, effective_fps = (
-                info.frames, [(info.start + i) / info.fps for i in range(len(info.frames))], info.fps)
+                info.frames, [i / info.fps for i in range(len(info.frames))], info.fps)
         else:
             candidate_paths, candidate_times, effective_fps = _materialize(
                 candidate_frames, candidate_fps, max_frames * 3, tmp/"candidate")
@@ -207,7 +213,7 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     weights /= weights.sum()
 
     measures = [_mae(a, b) for a, b in zip(ref_pm, can_pm)]
-    metric_names = ("visual_error", "alpha_error", "mean_rgb_mae")
+    metric_names = ("visual_error", "alpha_error", "mean_rgb_mae", "silhouette_iou")
     aggregate = {n: round(float(np.average([m[n] for m in measures], weights=weights)), 6)
                  for n in metric_names}
     abs_center = float(np.average([
@@ -241,9 +247,10 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     timing_correction = _clip(timing_correction, -.3, .3)
     # Score is comparable within repeated renders of THIS reference. This is a
     # bounded diagnostic score, not proof of an exact/pixel-identical recreation.
-    total_error = (aggregate["visual_error"] * .35 + aggregate["alpha_error"] * .25
-                   + abs_center * .15 + min(energy_l1 * 2, 1.) * .12
-                   + min(radius_l1, 1.) * .13)
+    total_error = (aggregate["visual_error"] * .30 + aggregate["alpha_error"] * .20
+                   + abs_center * .12 + min(energy_l1 * 2, 1.) * .10
+                   + min(radius_l1, 1.) * .10
+                   + (1. - aggregate["silhouette_iou"]) * .18)
     score = round(_clip((1 - total_error)*100, 0, 100), 2)
     previous_path = dest / f"match_{iteration-1:03d}.json"
     previous = {}
@@ -276,6 +283,14 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     })
     settings = {k: round(v, 5) for k,v in settings.items()}
 
+    worst_ids = sorted(range(len(measures)), key=lambda i: (
+        measures[i]["visual_error"] + measures[i]["alpha_error"] +
+        1. - measures[i]["silhouette_iou"]), reverse=True)[:5]
+    worst_frames = [{"frame": i, "time": round(target_times[i], 4),
+                     "error": round(measures[i]["visual_error"], 5),
+                     "alpha_error": round(measures[i]["alpha_error"], 5),
+                     "silhouette_iou": round(measures[i]["silhouette_iou"], 5)}
+                    for i in worst_ids]
     comparison = dest / f"comparison_{iteration:03d}.jpg"
     _frame_preview(ref_pm, can_pm, target_times, comparison)
     factors = {"energy_ratio": round(energy_ratio, 4), "spread_ratio": round(radius_ratio, 4),
@@ -317,6 +332,7 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         "score_note": "Diagnostic frame match score; comparison against newly rendered output is needed to verify improvement.",
         "errors": {**aggregate, "center": round(abs_center, 6),
                    "energy": round(energy_l1, 6), "spread": round(radius_l1, 6)},
+        "worst_frames": worst_frames,
         "corrections": factors, "tuning": settings,
         "next_jsx": matched["jsx"], "next_comp": matched["comp"],
         "next_aep": str(next_project) if next_project else None,
