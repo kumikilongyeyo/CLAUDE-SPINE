@@ -16,8 +16,9 @@ electric_frame, and optionally any other) are HYBRIDS: the churning plasma / lig
     fx_recipe recipe=magic_reveal project=p.json x=0 y=0 scale=1.2   -> all seven in one 13.2 s animation
 
 Shared arguments (every recipe): `x`,`y` = the SUBJECT CENTRE in the parent bone's space; `scale` (1 = a ~720-unit canvas
-with a subject ~420 wide); `start` (seconds into the animation); `duration` (life window for window recipes, a time scale
-for the two one-shots); `color`; `intensity` (alpha gain, 0..1+); `seed`; `count`; `into` (merge into an existing
+with a subject ~420 wide); `start` (seconds into the animation); `duration` (life window for window recipes; for one-shots a time scale that stretches the WHOLE recipe, timing
+options included: crosshair `duration=2.1` with `lock=0.4` locks at 0.67 s, so divide timing options by
+duration / default to keep them on your beats); `color`; `intensity` (alpha gain, 0..1+); `seed`; `count`; `into` (merge into an existing
 animation, e.g. "win"); `parent`, `front_of`, `behind` (draw order); `name`; `options` ({recipe-specific: value}).
 Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an engine emitter.
 
@@ -30,6 +31,9 @@ Every recipe fires an event `fx_<recipe>` at its start: hook it to a sound or an
 | floor_glow | warm glow + streaky reflection under the subject | window 9.8 s |
 | fireflies | drifting motes, each with its own life and twinkle | window 8.2 s |
 | twinkles | four-point stars that pop and spin | window 5.8 s |
+| bolt_link | real lightning between point pairs: one aimed bone per link, the bolt stretched to the distance, re-striking every `rate` s with another bolt, a random mirror and flicker; flares at the ends | window |
+| crackle | electricity (`kind=electric`) or flames (`kind=fire`) flickering at points round a shape: random picture, turn and brightness per swap, dark part of the time | window |
+| surface_glow | an additive copy of YOUR slot (and `pair`, the back face) that follows its attachment keys and glows with keyed colour / alpha: red-hot metal, icy sheen, charge-up | window |
 | light_beam | tall beam: column glow + filaments (weaving ribbons) + dust + glints; style gold / ribbon / blue | loop 4 s |
 | portal | swirling disc, spiral arms, orbiting specks, comet streaks, flashes (+ AE plasma ring) | loop 6 s, hybrid |
 | electric_frame | violet underglow + sparks around a frame (+ AE lightning line) | loop 1 s, hybrid |
@@ -107,6 +111,90 @@ bounding box, so its centre is the target point), or a dict `{path, blend, scale
 - Bundles take art per member: `lock_on` -> `{"crosshair": {...}, "hit_burst": {...}}`, `magic_reveal` -> `{"<recipe>": {...}}`.
 - Art is copied into the project as `images/fx/art_<recipe>_<role>.png`; edit that file (or the source) and rebuild to update.
 
+## Realistic kit: `kit="realistic"`
+
+The procedural pictures are clean, but next to painted game art they read as placeholder. What fixed that on a
+real job was not new motion: it was swapping every recipe's pictures, through the `art=` roles, for photographic
+particles. `kit="realistic"` does that in one argument. The recipe keeps its motion, timing and colours; every art
+role you did **not** give gets a bundled CC0 picture chosen by role name.
+
+```
+fx_recipe(project=..., recipe="explosion", kit="realistic")
+fx_recipe(project=..., recipe="hit_burst", kit="realistic", art={"glow": "my_glow.png"})   # your art still wins
+fx_recipe(project=..., recipe="magic_reveal", kit="realistic")                            # bundles pass it on
+```
+
+What it maps (`fx_recipe recipe="kit"` returns the full table, with the picture every recipe gets):
+
+| roles | kit picture |
+|---|---|
+| glow, glow_soft, halo, aura, impact_glow, shine_glow, ... | `glow_s` at 0.7 of the recipe's width |
+| core, glow_core, flare, burst | `flare_01` (lens flare) |
+| flare_star, glint, sparkle; twinkles / head stars | `star_06` |
+| spark, mote, ember, flake | `star_05` |
+| rays | `star_08` · flash, hit: `star_09` · starburst, impact_star: `star_09` at 0.5 · flash_burst: `flash_s` at 0.8 |
+| ring, ring_inner, cell_glow (round, not a square cell) | `ring_s` · rune_ring's ring, centre_rune, runes: `ring_floor` |
+| light_streak, line | `trace_01` (horizontal) · vertical lines and streaks: `trace_01v` |
+| energy_trail | `trail_r` (comet, head right) · tail: `trail_up` (head at the top) |
+| swirl, swirl_a, swirl_b, comet | `twirl_02`, `twirl_02` 0.72, `twirl_03` 0.66, `twirl_01` |
+| cloud, smoke_puff, dust | `smoke_07` · smoke, mist, puff, fire (additive, tinted): `smoke_08` · ground dust ring, puff_ring: `smoke_10` |
+| flame, flame_tongue | `muzzle_02`, `flame_05` |
+| bolt (lightning_storm) | `spark_05` · bolt_link: `bolt_h5`, `bolt_h6`, `spark_07` · crackle: `spark_01..04` / `muzzle_02..05` |
+
+Left procedural on purpose: the roles that ARE the game's art (symbol, coin, reticle, mult_number, x5_label, plates,
+confetti, blocks, shards, eyes, bodies of locks), every 9-slice frame / fill, and mesh-bent strips (beams, columns,
+strands, the hold_respin counter band, saber strips). The result's `kit.roles` lists exactly which roles the kit
+filled (sub-recipes as `shine_glow` / `explosion.fire`). A sequence step can take its own `kit` (`"none"` = off).
+Any kit picture can be named directly: `art={"glow": "kit:glow_s"}` or `{"path": "kit:star_08", "scale": 0.5}`.
+
+**The haze lesson.** A photographic glow or ring is much fuller than a drawn one: its soft falloff carries far more
+light, so at the same size it turns into a pink / white haze over the subject. Retuning every effect for that does not
+scale, so the kit ships tighter variants baked once: `glow_s` = circle_05 with alpha^1.9 x 0.75 (and used at 0.7 of
+the width), `ring_s` = light_02 x 0.5, `ring_floor` = light_03 x 0.8, `flash_s` = flash04 with alpha^1.3 x 0.8. If an
+effect still blooms, lower that role's `scale` in `art=` or the recipe's `intensity`, not the picture.
+
+**Credits.** 32 pictures, 0.85 MB, in `claude_spine/fx_kit/`: Kenney Particle Pack 1.1 and Kenney Smoke Particles
+(kenney.nl), both CC0 1.0 (`fx_kit/LICENSE-kenney.txt`, `fx_kit/CREDITS.md`). Particle-pack PNGs are grey palette
+images, converted to white + alpha (alpha = brightness x alpha) so the slot colour tints them; trimmed, downsized
+premultiplied; the painted flash keeps its colour. `python -m claude_spine.fx_kit.build_kit <textures_cc0>` rebuilds
+the folder (not needed at runtime).
+
+## Realistic recipes
+
+| recipe | what | kind |
+|---|---|---|
+| bolt_link | real lightning between point pairs: one aimed bone per link, the bolt stretched to the distance, re-striking every `rate` s with another bolt, a random mirror and flicker; flares at the ends | window |
+| crackle | electricity (`kind=electric`) or flames (`kind=fire`) flickering at points round a shape: random picture, turn and brightness per swap, dark part of the time | window |
+| surface_glow | an additive copy of YOUR slot (and `pair`, the back face) that follows its attachment keys and glows with keyed colour / alpha: red-hot metal, icy sheen, charge-up | window |
+
+**bolt_link.** `points=[[x, y], ...]` are the terminals, `links=[[i, j], ...]` which to join (default a chain).
+Each link is one bone at A rotated `atan2` towards B with `scaleX = distance / 512`; its slot holds three bolt
+pictures (roles `bolt`, `bolt_2`, `bolt_3`, horizontal, left edge to right edge) and every `rate` s (0.06) a strike
+shows one of them, or nothing (`on` = 0.8 chance lit), mirrored at random (scaleY +-) with a random brightness, all
+stepped. `thick` (0.75) sets the thickness (short links are thinner on their own), `ramp` the fade-in, `ends` /
+`flare` the flickering flares at each terminal (role `glow_core`). `loop=true` strikes from 0 and repeats the first
+strike at the end: a seamless loop. With the kit the bolts are Kenney's real-lightning sprites; without it the recipe
+draws its own forked bolts. Event `fx_bolt_link`.
+
+**crackle.** Points default to a ring of `count` (6) at `radius` (120); give `points=[[x, y] or [x, y, rotation]]`
+for any shape. Electric runs along the ring, fire stands on its point (base at the bottom) and faces away from the
+centre. Every `rate` s (0.055 electric, 0.08 fire) each point swaps to one of four pictures (`spark_1..4` /
+`flame_1..4`) or nothing (`on` 0.6 / 0.85), turned by up to `spin` (35) degrees at a random brightness; flames also
+stretch. `ramp` builds it up, `loop=true` closes the cycle. Colour defaults to 9FE0FF (electric) / FFA040 (fire).
+Event `fx_crackle`.
+
+**surface_glow.** `slot=` one of YOUR slots: the recipe adds an additive twin on the same bone, drawn right after it,
+holding every attachment of that slot, and copies its attachment (and deform / sequence) keys from the animation it
+goes into (`into=`), so the glow hides when a spinning coin's face swaps away. `keys=[[t, "RRGGBB", alpha], ...]`
+(seconds from `start`, linear) drive its colour: the default is red-hot metal (dull red -> orange -> white-hot ->
+cooling); an icy sheen is `[[0, "BFE6FF", 0], [1, "D8F2FF", 0.35], [1.5, "D8F2FF", 0]]`. `pair=` glows a second slot
+(the back face) the same way; `follow=false` uses the slot's setup picture instead of its keys. Without `slot` it glows
+a stand-in disc (role `disc`) so it still shows. Event `fx_surface_glow`.
+
+**burst_flare `ring` role.** burst_flare's shock ring is now an art role: `art={"ring": ...}` (or `kit="realistic"`, which gives it `ring_s`)
+replaces the drawn ring; it is still squashed flat by its bone and tinted by `ring_color`. Without art nothing changes.
+To drop the ring entirely, keep `ring_color: "000000"` (additive black draws nothing).
+
 ## Mixing recipes into one clip (example: a gold cell that fills with haze, then a puff clears it)
 
     fx_recipe recipe=smoke_glow into=gold_cell options={width: 130, height: 350, alpha: 0.45}
@@ -125,6 +213,9 @@ licking a frame are an After Effects `fire` flipbook placed with ae_fx_to_spine 
   whole frame: add it once with ae_fx_to_spine, then clone the slot along the edges with different bone scale/rotation and a
   different sequence `index` per clone (loop phase), so the flames never move in step and the atlas holds one flipbook.
 - `electric_frame` re-rendered at any aspect (e.g. width 1024, height 160, green) gives a long energy bar.
+- `metal_sparks`: realistic metal-impact sparks (CC Particle World + Echo streaks, cooling white -> orange -> red,
+  molten droplets, contact flash), additive. `frost_creep`: a frost crust growing over a round face from its edge
+  and freezing solid, see-through (alpha from the frost density). Both below, under "Realistic AE passes".
 
 ## Exaggerated real physics (the house style)
 
@@ -599,6 +690,39 @@ member that takes them; `steps={recipe: {...}}` overrides one, `skip=[...]` drop
 - prop_idle / liquid_slosh take `cycles` to repeat the measured 0.755 s cycle inside a longer loop.
 - `examples/build_props_bundle_demo.py` renders `docs/props.gif`: an unanimated chest, one call.
 
+## Coins: `rig_coin`, `coin_spin`, and FX that ride them
+
+
+**Coins (`rig_coin`, `coin_spin`).** Rig the coin once, then key as many spins as you like into any animation:
+`coin_spin` merges into what is there (keys outside its window are kept; `replace=True` starts the animation over)
+and picks up the side the coin was left on, so a `flip` with `stop="back"` followed by another `flip` turns it back.
+The visible face swaps EXACTLY at the cos = 0 crossings, where both faces are zero wide, so the swap can never pop;
+the result's `face_swaps` lists those times (hang sparkles or a `sfx_whoosh` on them). Only the face pointing at the
+camera has an attachment; the back face shows the same picture (or `back=` art) with scaleX = −1 and x mirrored,
+which un-mirrors it while its bone's scale is negative. Faces and wall are shaded by slot colour (the face darkens as
+it turns away, the wall brightens edge-on), keyed at 60 Hz plus the exact crossing and face-on times; face-on is
+pure white, so the setup pose and the first and last loop frames match. FX ride the coin like any prop: `prop=<name>`
+(the coin bone: `prop_hit`, `prop_shatter`, `prop_charge`, … insert their carriers above it, so they never fight
+`coin_spin`'s keys) and `parent=<name>` for things that float with the coin (glows, auras, rings); `parent=<name>_f`
+for things that sit ON the face and must narrow and slide with the spin (a shine sweep, a relief shimmer, a number
+plate). Something on `<name>_f` stays drawn when the back turns toward the camera (it mirrors), so key it off between
+the `face_swaps` times or give the back its own copy on `<name>_eb`.
+
+Traps (all kept in the code):
+- Weighted vertices name bones by POSITION in the bone list: `rig_coin` adds every bone before it builds the rim mesh,
+  and later inserts go through `add_bone` / `reorder_bones`, which remap the indices. Never `sk.bones.insert(...)` by
+  hand in front of a weighted mesh.
+- Scale timelines MULTIPLY the setup scale: the face bones' setup scale is 1 and `coin_spin` keys cos θ directly; the
+  landing squash multiplies whatever scale the coin bone has, and the base stays planted by offsetting y by
+  −(1 − sy)·R·setupScaleY.
+- The face swap must be keyed at the exact crossing time (found by bisection, not on the 60 Hz grid) or one face pops
+  in or out at a visible width.
+- The rim mesh UVs stay in 0..1 (u = across the thickness, v = once round the coin; the texture is seamless), and its
+  rings are inset 0.8 px so the hidden half never fringes past the face disc. The mesh's width / height carry the
+  coin's thickness and circumference, which is how `coin_spin` reads T and R back.
+- `land` starts the coin `bob` units (default 4 radii) above its rest pose at `start`: start it at 0 or hide the coin
+  before it.
+
 ## Ice and water
 
 Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (module `fx_elements.py`). Mix them: a frozen cell is
@@ -648,6 +772,162 @@ Recipes for the parts:
 Caveats to tell the client up front: a flipbook repeats exactly (each variant costs memory); a bolt has a fixed shape
 (stretching changes its thickness); sequences follow bones but don't bend with a mesh; additive light vanishes on bright
 or same-coloured backgrounds (use normal blend for flames there); budget ~10-15 MB of GPU memory per 2048 atlas page.
+
+## Realistic AE passes: metal sparks and frost
+
+
+Sparks from a sword hitting a coin, or a hammer hitting an anvil. One frame of CC Particle World births is thrown out
+explosively. Drag slows the sparks, gravity pulls them down, and they cool from white-hot to orange to red. A second
+particle layer adds a few heavier, slower molten droplets. A tiny white-hot contact flash is gone in about 5 frames;
+keep the big light in native Spine. The result is light on black (`mode: "additive"`) and plays once. It uses only
+built-in effects and Cycore, so aerender can render it anywhere.
+
+| param | default | what |
+|---|---|---|
+| size, duration, fps | 512, 0.8, 30 | comp (tuned at 30 fps: the burst keys are frames 1 / 3 / 4) |
+| rate | 0.7 | sparks born per burst frame. 0.7 gives a few dozen; 30 gives a solid white ball |
+| velocity, gravity, drag, extra, life | 1.9, 1.6, 1.3, 1.6, 0.55 | CCPW Velocity, Gravity, Resistance, Extra (spread) and Longevity |
+| hot, cool | FFF0C8, E8500C | birth colour and death colour |
+| droplets | 0.25 | droplet birth rate as a fraction of `rate` (0 = none). Their physics is scaled from the spark values |
+| droplet_hot, droplet_cool | FFE6A0, B8280A | droplet colours |
+| echoes | 14 | streak length, as a number of 1/240 s echoes |
+| glow | 1.6 | Glow intensity on the sparks (droplets get 0.75 of it) |
+| flash | 1.0 | strength of the contact flash (0 = none) |
+| seed | 17 | the droplets use `abs(seed - 12)`, so the defaults give the tuned pair 17 / 5 |
+| center_x, center_y | 0.5, 0.5 | the contact point as fractions of the comp, y down. It moves the CCPW producer and the flash |
+
+The defaults rebuild the tuned version (coin-fx-test `coin_sparks_v6`). In AE 26 the template's frames 2, 4, 8 and 14
+were byte-identical to it.
+
+**In Spine:** import the effect once with `mode="additive"`, then add a copy for every other hit. Copies share one set
+of frames. For three hits that escalate, pass:
+`copies=[[x, y, t2, 1.3], [x, y, t3, 1.7]]` (scale 1 / 1.3 / 1.7). Add a rotation as the fifth entry to aim a spray.
+
+**Echo instead of motion blur.**
+
+Real sparks read as light trails smeared along their curved path. CC Force Motion Blur, and a long-shutter average in
+general, averaged the thin sparks until they were invisible. `ADBE Echo` on the particle layer works instead, with these
+settings:
+
+- Echo Time -1/240 s, about 14 echoes
+- Starting Intensity 1, Decay 0.86
+- Echo Operator 2 = **Maximum**
+
+This stacks earlier sub-frame positions without dimming them, so the streaks keep full brightness and follow gravity.
+Birth rate matters too: about 0.7 for the main sparks.
+
+**CC Particle World matchNames.**
+
+CCPW keeps every property flat on the effect. Producer, Physics and Particle are only labels, so set each property by
+matchName `CC Particle World-00NN`.
+
+| NN | property | notes |
+|---|---|---|
+| 0004 | Birth Rate | keyed 0 -> rate (1 frame) -> rate x 0.25 (3 frames) -> 0 (4 frames), HOLD |
+| 0005 | Longevity (sec) | |
+| 0007 / 0008 / 0009 | Producer Position X / Y / Z | world units. The default camera (distance 1, FOV 45) sees 2 tan 22.5° ≈ 0.828 across, +Y is down |
+| 0010 / 0011 / 0012 | Producer Radius X / Y / Z | 0.004 = a point of contact |
+| 0015 | Animation | 1 = Explosive |
+| 0016 | Velocity | |
+| 0018 | Gravity | |
+| 0041 | Resistance | drag |
+| 0019 / 0020 | Extra / Extra Angle | spread / 360 |
+| 0023 | Particle Type | 1 = Line (velocity-aligned), 4 = Faded Sphere |
+| 0024 / 0025 / 0026 | Birth Size / Death Size / Size Variation | |
+| 0027 | Max Opacity | |
+| 0029 / 0030 | Birth Color / Death Color | |
+| 0104 | Random Seed | |
+| 0055 / 0060 / 0061 | Grid / Horizon / Axis Box | set to 0 to hide the UI guides |
+| 0050, 0062 | groups (Grid & Guides, an unnamed end marker) | **no value: setting them throws** |
+
+**frost_creep: frost growing over a coin face (transparent).**
+
+Hoarfrost creeps over a round surface from its edge and freezes it solid. The output is transparent
+(`mode: "alpha"`) and plays once; hold the last frame for the frozen face. It is built in three parts:
+
+- **Density precomp (`_ice`):** a mottled frosted film (fractal type 1), sharp inverted Turbulent-Sharp crystal veins
+  (type 4), finer veins and ice grain, ADD-stacked. A radial "rim density" ramp makes the frost thickest at the rim.
+- **Shot layer:** Shift Channels (Take Alpha From = 5, Luminance) plus Fill in the ice colour, so thin frost is
+  see-through and the face shows under it.
+- **Growth:** a white solid with Gradient Wipe reveals the frost. Its gradient is a hidden map precomp (`_map`): a ramp
+  from the start edge plus two noises for a ragged front. Transition Completion is keyed 1 -> 0 over `grow` with an
+  ease-out, so the growth slows as it spreads.
+
+A soft glinting line rides the advancing front. It is a duplicate wipe with Find Edges, Invert, blur and Tint, and its
+alpha also comes from its luminance. An earlier version left that out and exported an opaque **black** plate. Every
+layer is circle-masked to the face.
+
+Gradient Wipe's Transition Completion and Transition Softness take values from 0 to 1, not percent. Cell Pattern's
+contrast parameter is named "Contextual Slider".
+
+| param | default | what |
+|---|---|---|
+| size | 560 | comp side |
+| radius | 262/560 | face radius as a fraction of `size` |
+| duration, fps | 1.8, 30 | |
+| grow | [0.05, 1.5] | growth start and end, in seconds |
+| from | bottom | `bottom`, `top`, `left`, `right`, or `rim` (grows inward from the whole edge) |
+| color | E2F2FF | ice colour |
+| density | 1 | strength of the frosted film |
+| veins, grain | 1, 1 | strength of the crystal veins and the ice grain |
+| front | 1 | opacity of the glint line (0 = none) |
+| seed | 0 | shifts every noise seed (0 = the tuned look) |
+
+The defaults rebuild `coin_frost_v6`; in AE 26 its frames differed from it by at most 1/255 on 0.01% of pixels (that run used a 261.99992 px radius; the default is now exactly 262).
+
+The glint's blur and Find Edges run after the mask, because AE applies masks before effects. So a faint line can
+spill a few pixels past the disc. The Spine clip trims it.
+
+**In Spine:**
+
+- **Size:** when the comp size equals the coin face size, 1 comp px = 1 unit. If they differ, set `scale` to face
+  diameter / (2 x radius x size).
+- **Parent:** parent the sequence to the **face bone**, so the frost narrows with the coin's spin.
+- **Clip:** clip it to the face disc.
+- **Back face:** put a mirrored twin (scaleX -1) on the back face bone.
+
+## AE -> Spine bridge: per-copy scale / rotation, minimum playback rate
+
+**`copies` take a scale and a rotation.**
+
+`ae_fx_to_spine`, `ae_vfx_to_spine` and `ae_bridge.fx_to_spine` accept each copy in any of these forms:
+
+- `[x, y]`
+- `[x, y, start]`
+- `[x, y, start, scale]`
+- `[x, y, start, scale, rotation]`
+- a dict with the same keys
+
+`start` can be `null` to use the original's start. `scale` multiplies that instance's size and `rotation` is in degrees;
+both are set on the copy's own bone.
+
+`res["copies"]` still lists the slot names. A new `res["copy_instances"]` gives
+`{slot, bone, x, y, start, end, scale, rotation}` for each copy. `ae_bridge.copy_sequence` takes `scale=` and
+`rotation=`, and `ae_bridge.copy_instance` returns the dict.
+
+Bad entries raise before anything is rendered or written. That covers a wrong length, a scale of 0 or less, and a
+dict without x or y.
+
+**`min_fps`: subsampling never drops below a minimum playback rate.**
+
+`ae_vfx_to_spine` / `ae_vfx_director.import_optimized` take `min_fps`, default 12. The director's frame budget used to
+subsample a 16-frame 24 fps fire-aura loop down to 6 frames, and the flames played at a choppy 8 fps.
+`max_frames x max_size²` is now a pixel budget, and `ae_bridge.frame_budget` meets it like this:
+
+- **loop / pingpong:** the texture shrinks first, down to `min_size` (default: half the `max_size` side). After that,
+  frames drop, but never below `min_fps`. If both floors are hit, the texture keeps shrinking and `budget_note` says
+  so. The fire-aura case now keeps all 16 frames at 24 fps, at 314 px.
+- **once:** frames drop first, as before, but only down to `min_fps`. The texture takes the rest.
+- A comp already slower than `min_fps` is never subsampled.
+
+Exceptions to the default:
+
+- When the caller gives **both** `max_size` and `max_frames`, that explicit budget is honoured exactly unless
+  `min_fps` is also passed.
+- `min_fps=0` turns the floor off.
+
+`ae_fx_to_spine` also takes `min_fps`, but it defaults to 0 there, so its old behaviour is unchanged. Imports now
+report `playback_fps`, and the director's report adds `min_fps` and `playback_fps`.
 
 ## Hybrids: Spine recipe + After Effects part
 
@@ -709,6 +989,38 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
 - With After Effects: bake what Spine cannot do (volumetric smoke, fire) with `ae_template` + `ae_fx_to_spine`, keep
   the glow/ring/particle layer here, and merge both into one clip with `into=`.
 
+## One asset, a whole FX set (the skull-coin job)
+
+From one flat coin face (`coin.psd`) to a 360 depth test and five FX sequences (land -> anticipation spin -> glowing
+crosshair -> three hits -> the coin breaks; five coins linked by lightning that merge; frost; fire; portal + lightning),
+then a realism pass. What carried over:
+
+1. `import_psd` -> `rig_coin depth=medium` -> one `coin_spin` per beat (land, spin_up, slow_down, loop). Keep every beat
+   time in ONE layout (a JSON next to the build) and build the FX from it, so motion and FX never drift apart.
+2. Probe before you place: a recipe's result carries its moments (`shatter_at`, `hit_at`, `lock_at`, `charged_at`,
+   `frozen_at`, `hide_at`, `landings`). Apply it once into a scratch copy, read them, then move the coin's beats onto
+   them (the shatter landed on the third hit only after reading `shatter_at`).
+3. Ship one skeleton per animation. A combined review skeleton of six FX animations reached ~1,050 slots and ~1,200
+   bones, and every bone updates every frame whatever animation plays. Keep the combined file for review only.
+4. Preview with a FIXED camera per animation. The default view is the union of all bounds, so a full-screen flash or a
+   coin falling from above zooms the subject down to a dot.
+5. Realism ladder: procedural recipes -> `kit="realistic"` (photographic CC0 pictures through every art role, the
+   haze-tuned glow and ring) -> After Effects passes for the hero moments (`metal_sparks` for hits, `frost_creep` on the
+   face, `fire_aura` round the rim). Replace what can only ever look drawn instead of re-skinning it: zig-zag line
+   electricity -> `bolt_link` / `crackle`, a charge-meter column -> `surface_glow` (the coin's own face glowing
+   red-hot), a square ice block -> the AE crystal, a drawn ray shine -> the AE god-ray reveal.
+6. Things that sit ON a spinning face: parent to `<coin>_f` (they narrow with the spin), clip them to the face disc (a
+   clipping polygon on the face bone), give the back face a mirrored twin on `<coin>_eb` (scaleX -1) and show each one
+   only while its face points at the camera (stepped alpha from the face-swap keys).
+7. A flame aura round an object: the `fire_aura` template's flame band starts at r = 120 px of its 768 comp; scale it to
+   0.82 R / 120 so the band starts just inside the rim, draw it BEHIND the coin (only the tongues show), add a 35 %
+   additive copy in front so the heat wraps the edge, and key its bone's scaleX to the coin's silhouette
+   |cos| + (T / 2R)|sin| so it hugs the edge-on coin. Its base band is dark: fade the aura out before the coin it
+   hides behind disappears (a burn-away) or a black disc shows.
+8. Escalating hits from one sequence: `copies=[[x, y, t2, 1.3], [x, y, t3, 1.7]]`.
+9. Judge every pass over the thing it sits on (frost over the coin face, sparks added onto the game background), on
+   contact sheets of chosen times, before and after Spine. Each failure in this job was invisible on black.
+
 ## How these were made (do the same for a new clip)
 
 1. Pull a contact sheet of ~16 evenly spaced frames from the reference (AVFoundation or ffmpeg). Look at WHEN each element
@@ -724,6 +1036,16 @@ Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 2
 
 ## Traps (each one cost an iteration)
 
+- A one-shot's `duration` stretches every timing option with it (see Use). The crosshair locked late and vanished
+  before the third hit until lock / hit were divided by duration / 1.25.
+- Photographic glows and rings carry far more light than drawn ones: at the drawn size they blow into a pink / white
+  haze over the subject. Use the kit's tuned `glow_s` / `ring_s` (or scale the role down), never more intensity.
+- `coin_fountain` refuses a duration shorter than its slowest coin needs to land, settle and fade: lower `height` or
+  lengthen the window.
+- `prop_freeze`'s film is a box: on a round face clip it to the disc, or use `frost_creep` on the face bone.
+- AE: a long shutter (CC Force Motion Blur) averages thin sparks to nothing; Echo with the Maximum operator keeps them.
+  Any helper layer of an alpha comp (Find Edges glints) must take its alpha from its luminance or it exports an opaque
+  black plate. CC Particle World's Birth Rate is per frame: 0.7 is a burst, 30 a solid white ball.
 - Spine translate keys are OFFSETS from the setup pose, scale keys MULTIPLY it; bone x/y are in the PARENT's space.
   `add_bones` takes world coordinates; recipes append `Bone` objects with local ones. Don't mix them up.
 - A squashed (iso) ring: put the squash on a parent bone's scaleY and rotate the child. Rotating inside the squashed space

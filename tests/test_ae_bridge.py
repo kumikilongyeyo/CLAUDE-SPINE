@@ -186,6 +186,67 @@ def test_tool_is_registered_and_validates(symbol, tmp_path):
     assert "ae_fx_to_spine" in {t.name for t in asyncio.run(mcp.list_tools())}
 
 
+def test_copies_take_scale_and_rotation_and_keep_the_old_forms(symbol, tmp_path):
+    d = blob_frames(tmp_path / "fr", n=8)
+    res = ae_bridge.fx_to_spine(symbol, "hits", frames_dir=str(d), fps=24, mode="additive", start=0.1,
+                                copies=[[5, 6], [7, 8, 0.5], [0, 0, 0.9, 1.3], [0, 0, None, 1.7, 45],
+                                        {"x": 1, "y": 2, "start": 1.2, "scale": 2}])
+    assert len(res["copies"]) == 5 and all(isinstance(c, str) for c in res["copies"])   # slot names, as before
+    inst = res["copy_instances"]
+    assert [c["slot"] for c in inst] == res["copies"]
+    bones = {b.name: b for b in symbol.data.bones}
+    for c in inst:
+        b = bones[c["bone"]]
+        assert next(s.bone for s in symbol.data.slots if s.name == c["slot"]) == c["bone"]
+        assert (b.x, b.y, b.scaleX, b.scaleY, b.rotation) == (c["x"], c["y"], c["scale"], c["scale"], c["rotation"])
+    assert [(c["start"], c["scale"], c["rotation"]) for c in inst] == [
+        (0.1, 1.0, 0.0), (0.5, 1.0, 0.0), (0.9, 1.3, 0.0), (0.1, 1.7, 45.0), (1.2, 2.0, 0.0)]
+    assert len(list((symbol.images_dir / "ae").glob("hits_*.png"))) == res["frames_out"], "one shared frame set"
+    an = symbol.data.animations[res["animation"]]
+    assert an.slots[inst[2]["slot"]]["attachment"][1].time == pytest.approx(0.9)
+    assert ae_bridge.copy_sequence(symbol, res, x=1, y=1, scale=1.5) in {s.name for s in symbol.data.slots}
+
+
+def test_bad_copies_fail_before_anything_is_written(symbol, tmp_path):
+    d = blob_frames(tmp_path / "fr", n=6)
+    for bad in ([1], [1, 2, 0, 1, 0, 9], [0, 0, 0, -1], {"x": 0}):
+        with pytest.raises(ValueError, match="copy"):
+            ae_bridge.fx_to_spine(symbol, "bad", frames_dir=str(d), fps=24, copies=[bad])
+    assert not list((symbol.images_dir / "ae").glob("bad_*.png")) if (symbol.images_dir / "ae").exists() else True
+
+
+def test_frame_budget_never_drops_below_min_fps():
+    fb = ae_bridge.frame_budget
+    # the old behaviour without min_fps: a 16-frame 24 fps loop squeezed into 6 frames plays at 8 fps
+    assert fb(16, 24, 512, 512, max_size=512, max_frames=6, seq_mode="loop")["step"] == 3
+    # loop: the texture shrinks first and every frame stays (same pixel budget: 6 x 512^2)
+    b = fb(16, 24, 512, 512, max_size=512, max_frames=6, seq_mode="loop", min_fps=12)
+    assert b["step"] == 1 and 256 <= b["size"][0] < 512
+    assert 16 * b["size"][0] ** 2 <= 6 * 512 ** 2 + 16 * 1024
+    # loop past the texture floor: frames go next, but never below 12 fps
+    b = fb(48, 24, 512, 512, max_size=512, max_frames=6, seq_mode="loop", min_fps=12)
+    assert b["step"] == 2 and b["size"] == (256, 256) and not b["note"]          # half size, 12 fps: both floors met
+    b = fb(96, 24, 512, 512, max_size=512, max_frames=6, seq_mode="loop", min_fps=12)
+    assert b["step"] == 2 and b["size"][0] < 256 and b["note"]                    # past both: the texture gives
+    # one-shot: frames go first (texture untouched while that fits), but only down to min_fps
+    b = fb(24, 30, 320, 320, max_size=320, max_frames=12, seq_mode="once", min_fps=12)
+    assert b == {"step": 2, "size": (320, 320), "note": ""}
+    b = fb(24, 30, 320, 320, max_size=320, max_frames=6, seq_mode="once", min_fps=12)
+    assert b["step"] == 2 and b["size"][0] < 320 and 12 * b["size"][0] ** 2 <= 6 * 320 ** 2 + 12 * 640
+    # a comp already slower than min_fps is never subsampled
+    assert fb(20, 10, 64, 64, max_frames=5, seq_mode="loop", min_fps=12)["step"] == 1
+    # inside the budget nothing changes
+    assert fb(6, 24, 100, 50, max_size=64, max_frames=10, min_fps=12) == {"step": 1, "size": (64, 32), "note": ""}
+
+
+def test_import_reports_the_playback_rate(symbol, tmp_path):
+    d = blob_frames(tmp_path / "fr", n=18, lead=1, trail=1)
+    res = ae_bridge.fx_to_spine(symbol, "loopy", frames_dir=str(d), fps=24, seq_mode="loop", max_frames=4,
+                                max_size=40, min_fps=12)
+    assert res["playback_fps"] >= 12 and res["step"] <= 2
+    assert res["delay"] == pytest.approx(res["step"] / 24, abs=1e-5)
+
+
 @needs_node
 def test_the_runtime_loads_and_plays_the_sequence(symbol, tmp_path):
     d = blob_frames(tmp_path / "fr", n=8)

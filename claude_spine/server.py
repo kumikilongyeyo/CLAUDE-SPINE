@@ -349,7 +349,8 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
               parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
               options: dict | None = None, art: dict | None = None, tier: str = "", style: str = "",
               realism: float = -1.0, style_profile: dict | None = None, relight_slots: list[str] | None = None,
-              relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0) -> dict:
+              relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0,
+              kit: str = "") -> dict:
     """Authored FX layers lifted from real reference clips: lotus set (rune_ring, burst_flare, rim_wisps, bloom_aura,
     floor_glow, fireflies, twinkles, plus magic_reveal = all seven timed like the clip, 13.2 s), light_beam (style
     gold | ribbon | blue), crosshair / hit_burst / lock_on (reticle locks on, fires, impact), cell_glow (resizable
@@ -377,6 +378,15 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     "file.psd#Layer" | {path, blend, scale, slice, px, anchor}}; the roles of each recipe are in the listing
     (e.g. crosshair: reticle). For lock_on / magic_reveal key it by member: {"crosshair": {"reticle": ...}}.
 
+    kit = "realistic": every art role you did NOT give gets a bundled photographic CC0 picture chosen by role name
+    (real smoke, real lightning, lens flares, smoke rings, a painted flash; Kenney, CC0), so the procedural look
+    becomes realistic in one argument; game-art roles (symbol, coin, reticle, plates, confetti), 9-slice frames and
+    mesh strips stay procedural. Bundles pass it to every member. The result's kit.roles lists what it filled;
+    recipe="kit" returns the role -> picture table; art={role: "kit:<picture>"} names a kit picture directly.
+    Realistic recipes: bolt_link (real lightning re-striking between point pairs), crackle (electricity or flames
+    flickering round a shape) and surface_glow (an additive copy of YOUR slot that glows red-hot / icy / charged and
+    follows its attachment keys).
+
     tier = small | medium | big | mega | epic: one recipe covers every win size (scale, counts, one-shot time and the
     recipe's own tier overrides; see the listing's `tiers`).
 
@@ -393,14 +403,19 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     if recipe == "guide":
         from .fx_recipes_guide import GUIDE
         return {"guide": GUIDE}
+    if recipe == "kit":
+        from . import fx_kit
+        return {"kit": fx_kit.table({n: d.get("roles", {}) for n, d in fx_recipes.RECIPES.items()})}
     if not recipe:
-        return {"recipes": fx_recipes.list_recipes(), "next": 'fx_recipe recipe="guide" for the full guide'}
+        from . import fx_kit
+        return {"recipes": fx_recipes.list_recipes(), "kits": fx_kit.KITS,
+                "next": 'fx_recipe recipe="guide" for the full guide; recipe="kit" for the kit role table'}
     if not project:
         raise ValueError("project is required to add a recipe")
     p = _open(project)
     res = fx_recipes.apply(p, recipe, x, y, scale, start, duration, color, intensity, seed, into, parent, front_of,
                            behind, count, name, options, art, tier, style, realism, style_profile,
-                           relight_slots, relight_color, relight_strength, relight_duration)
+                           relight_slots, relight_color, relight_strength, relight_duration, kit)
     return _saved(p, res)
 
 
@@ -454,14 +469,18 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
                     x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                     blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                     behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                    keep_frames: str = "", copies: list[list[float]] | None = None,
+                    keep_frames: str = "", copies: list[list[float | None]] | None = None,
                     feather: float = -1.0, anchor: list[float] | None = None,
-                    deform_like: list[str] | None = None) -> dict:
+                    deform_like: list[str] | None = None, min_fps: float = -1.0) -> dict:
     """Production AE->Spine import with automatic mobile-safe sequence budgets.
 
     This wraps ae_fx_to_spine rather than replacing it. The director trims empty frames, keeps playback
     speed when subsampling, caps frame count/texture size by target, feathers comp borders, and encourages
-    copies= so repeated effects share one frame set. Explicit max_size/max_frames/feather override the policy."""
+    copies= so repeated effects share one frame set (copies=[[x, y, start, scale, rotation], ...] as in
+    ae_fx_to_spine). Explicit max_size/max_frames/feather override the policy.
+    min_fps (default 12; 0 = off; with an explicit max_size AND max_frames it is off unless given): subsampling never
+    drops below this playback rate. Loops/pingpongs shrink the texture first, then frames; one-shots drop frames
+    first, down to min_fps, then shrink the texture, so a 16-frame 24 fps fire loop stays smooth."""
     p = _open(project)
     res = ae_vfx_director.import_optimized(
         p, name, event=event, style=style, target=target, intensity=intensity, duration=duration,
@@ -471,7 +490,7 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies,
-        feather=feather, anchor=anchor, deform_like=deform_like)
+        feather=feather, anchor=anchor, deform_like=deform_like, min_fps=None if min_fps < 0 else min_fps)
     return _saved(p, res)
 
 
@@ -491,9 +510,9 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
                    x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                    blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                    behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                   keep_frames: str = "", copies: list[list[float]] | None = None,
+                   keep_frames: str = "", copies: list[list[float | None]] | None = None,
                    feather: float = 0.0, anchor: list[float] | None = None,
-                   deform_like: list[str] | None = None) -> dict:
+                   deform_like: list[str] | None = None, min_fps: float = 0.0) -> dict:
     """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
 
     Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
@@ -509,8 +528,12 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     frame; longest side in px), scale = game units per comp pixel, fade = fade-out seconds.
     animation= merges into an existing animation, otherwise ae_<name> is created. Leading and trailing empty
     frames are trimmed. Frames land in images/ae/<name>_NN.png; an event ae_<name> fires at the start.
-    copies=[[x, y], [x, y, start], ...] plays more instances that SHARE the frames (one set in the atlas): glitter in
-    every cell of a cluster, a crackle on every scatter.
+    copies=[[x, y], [x, y, start], [x, y, start, scale, rotation], ...] plays more instances that SHARE the frames
+    (one set in the atlas): glitter in every cell of a cluster, a crackle on every scatter, sparks on three hits at
+    escalating sizes ([[0, 0, 0.4, 1.3], [0, 0, 0.8, 1.7]]). start null = the original's; scale multiplies that
+    instance's size, rotation in degrees. The result keeps copies = their slot names and adds copy_instances
+    ({slot, bone, x, y, start, end, scale, rotation} each).
+    min_fps (0 = off): never subsample below this playback rate (see ae_vfx_to_spine).
     anchor=[fx, fy]: the comp point (fractions, y down) that lands on x, y (an off-centre lens-flare source);
     feather (0..0.5): fade the frames to nothing toward their border (a halo the comp edge would cut square);
     deform_like=[slots]: the sequence becomes a grid mesh whose weights are copied from those slots' meshes, so
@@ -523,7 +546,7 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies, feather=feather,
-        anchor=anchor, deform_like=deform_like)
+        anchor=anchor, deform_like=deform_like, min_fps=min_fps)
     return _saved(p, res)
 
 
@@ -535,8 +558,9 @@ def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -
     shockwave, sparkle, relief_shimmer (light wave over a picture, traced by its relief or a depth map),
     fire, fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic
     sparks), splash, surface_sweep (the art's own colours brightened in a soft band bent round the volume: a
-    shine that sits ON the surface), lens_flare (optical flare with a ghost chain), and the rest the listing
-    shows. params override the defaults (comp= names the comp; save_as= saves the open AE project to that .aep
+    shine that sits ON the surface), lens_flare (optical flare with a ghost chain), metal_sparks (realistic
+    metal-impact sparks, CC Particle World + Echo streaks, additive), frost_creep (frost growing over a coin face
+    from its rim and freezing solid, transparent, parent it to the face bone), and the rest the listing shows. params override the defaults (comp= names the comp; save_as= saves the open AE project to that .aep
     right after, which aerender needs, then reopens the artist's own project if it was saved and clean). With no
     AE MCP connected, ask the artist to run the script via File > Scripts > Run Script File (AfterFX.exe -r may
     never reach an open AE), then confirm the comps with ae_check.
@@ -695,6 +719,7 @@ from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sa
 from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check, edit_slots, clone_art, art_twin, hue_cycle
 from . import tools_sugar  # noqa: E402,F401   sugar_splat_ae, sugar_splat_to_spine
 from . import tools_library  # noqa: E402,F401   ae_library, ae_library_textures, ae_library_to_spine
+from . import tools_coin  # noqa: E402,F401   rig_coin, coin_spin
 
 
 def main() -> None:

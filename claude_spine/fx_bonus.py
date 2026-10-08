@@ -232,6 +232,8 @@ def _sub(c: Ctx, recipe: str, u0: float, x: float = 0.0, y: float = 0.0, scale: 
         c.last_slot = sc.last_slot
     for role, tex in sc.art_used.items():
         c.art_used[f"{recipe}.{role}"] = tex
+    for role, pic in sc.kit_used.items():
+        c.kit_used[f"{recipe}.{role}"] = pic
     return res, sc
 
 

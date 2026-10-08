@@ -148,6 +148,8 @@ def _sub(c: Ctx, recipe: str, u0: float, dur: float, x: float = 0.0, y: float = 
     c.sub_bones = getattr(c, "sub_bones", 0) + res["bones"]
     for k, v in res.get("art", {}).items():
         c.art_used[pfx + k] = v
+    for k, v in res.get("kit", {}).get("roles", {}).items():
+        c.kit_used[pfx + k] = v
     seen, keep = set(), []
     for e in c.ab.a.events:                    # a sub-recipe can fire its own event twice on one tick
         key = (round(e.time, 4), e.name)

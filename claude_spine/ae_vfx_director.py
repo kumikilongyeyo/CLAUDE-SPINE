@@ -7,7 +7,7 @@ rendered results, and chooses conservative frame/texture budgets for Spine.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Optional
 
 from . import ae_bridge
 from .project import Project
@@ -99,6 +99,10 @@ EVENTS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Subsampling never takes a sequence below this playback rate (8 fps flames read as a slideshow): the frame budget is
+# met by a smaller texture instead (loops: texture first; one-shots: frames first, but not below this rate).
+MIN_FPS = 12.0
+
 HANDOFF_PROFILES: dict[str, dict[str, Any]] = {
     "mobile_symbol": {
         "max_size": 192, "base_frames": 16, "hard_frames": 20, "export_fps": 20,
@@ -178,6 +182,7 @@ def handoff_policy(target: str = "mobile_feature", event: str = "impact", style:
         "raw_rgba_upper_mb": round(raw_mb, 2),
         "budget_rgba_mb": profile["budget_rgba_mb"],
         "budget_limited": max_frames < requested_frames,
+        "min_fps": MIN_FPS,
         "reuse_frames_for_copies": True,
         "preserve_world_size_when_downscaled": True,
         "notes": [
@@ -186,6 +191,8 @@ def handoff_policy(target: str = "mobile_feature", event: str = "impact", style:
             "Reuse one imported sequence with copies= for repeated instances.",
             "Keep simple glows/rings/shake native Spine unless the effect needs real noise or refraction.",
             "If memory is high, reduce texture size before removing the core impact frames.",
+            f"Never subsample below {MIN_FPS:g} fps: loops shrink the texture first, one-shots drop frames only "
+            f"down to that rate (max_frames x max_size is treated as a memory budget).",
         ],
     }
 
@@ -335,9 +342,18 @@ def review(metrics: dict[str, float], style: str = "realistic") -> dict[str, Any
 
 def import_optimized(project: Project, name: str, *, event: str = "impact", style: str = "realistic",
                      target: str = "mobile_feature", intensity: float = 1.0, duration: float = 0.0,
-                     max_size: int = 0, max_frames: int = 0, feather: float = -1.0, **kwargs: Any) -> dict[str, Any]:
-    """AE -> Spine using director defaults, while preserving explicit caller overrides."""
+                     max_size: int = 0, max_frames: int = 0, feather: float = -1.0,
+                     min_fps: Optional[float] = None, **kwargs: Any) -> dict[str, Any]:
+    """AE -> Spine using director defaults, while preserving explicit caller overrides.
+
+    min_fps (default MIN_FPS = 12; 0 = off): the playback-rate floor. The frame budget (max_frames x max_size) is met
+    without subsampling below it: a loop / pingpong shrinks its texture first and drops frames only after that, a
+    one-shot drops frames first but stops at min_fps and shrinks the texture for the rest. When the caller gives BOTH
+    max_size and max_frames (an explicit budget) they are honoured exactly unless min_fps is also given."""
     policy = handoff_policy(target, event, style, intensity, duration)
+    explicit = bool(max_size and max_frames)
+    if min_fps is None:
+        min_fps = 0.0 if explicit else MIN_FPS
     effective_size = max_size or policy["max_size"]
     effective_frames = max_frames or policy["max_frames"]
     if max_size and not max_frames:
@@ -347,6 +363,7 @@ def import_optimized(project: Project, name: str, *, event: str = "impact", styl
     kwargs["max_size"] = effective_size
     kwargs["max_frames"] = effective_frames
     kwargs["feather"] = policy["feather"] if feather < 0 else feather
+    kwargs["min_fps"] = min_fps
     result = ae_bridge.fx_to_spine(project, name, **kwargs)
     result["director"] = {
         "event": event,
@@ -355,7 +372,9 @@ def import_optimized(project: Project, name: str, *, event: str = "impact", styl
         "policy": policy,
         "effective_max_size": effective_size,
         "effective_max_frames": effective_frames,
-        "explicit_budget_override": bool(max_size and max_frames),
+        "explicit_budget_override": explicit,
+        "min_fps": min_fps,
+        "playback_fps": result.get("playback_fps"),
         "optimized": True,
     }
     return result

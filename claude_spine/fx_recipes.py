@@ -39,7 +39,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .fx import tex_glow, tex_ring, tex_spark, _rgba
-from . import fx_style
+from . import fx_kit, fx_style
 from .ir import Bone, MeshAttachment, RegionAttachment, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
@@ -470,16 +470,17 @@ WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
 
 # ------------------------------------------------------------------ custom art
 def load_art(spec: Any) -> tuple[Image.Image, dict]:
-    """spec: "path.png", "path.psd#Layer name" (or "path.psd#Group/Layer"), or {"path": ..., blend, scale, slice, px, anchor}.
+    """spec: "path.png", "path.psd#Layer name" (or "path.psd#Group/Layer"), "kit:<picture>" (a bundled fx_kit picture),
+    or {"path": ..., blend, scale, slice, px, anchor}.
     Returns (RGBA image, options). A PSD layer is cut at its own bounding box, so its centre is the target point."""
     import os
     opts: dict = {}
     if isinstance(spec, dict):
-        opts = {k: v for k, v in spec.items() if k != "path"}
+        opts = {k: v for k, v in spec.items() if k not in ("path", "_kit")}
         spec = spec.get("path")
     if not spec:
         raise ValueError("art entry needs a path")
-    path = os.path.expanduser(str(spec))
+    path = os.path.expanduser(fx_kit.resolve_path(str(spec)))
     if "#" in path and path.split("#", 1)[0].lower().endswith(".psd"):
         file, layer_name = path.split("#", 1)
         from psd_tools import PSDImage
@@ -576,6 +577,7 @@ class Ctx:
         self.art = art or {}
         self._art_cache: dict[str, dict] = {}
         self.art_used: dict[str, str] = {}
+        self.kit_used: dict[str, str] = {}
         self.recipe = recipe
         self.t0, self.k, self.I, self.seed, self.S = start, k, intensity, seed, scale
         self.anim = into or f"fx_{name or recipe}"
@@ -610,11 +612,26 @@ class Ctx:
         if not role or role not in self.art:
             return None
         if role not in self._art_cache:
-            im, opts = load_art(self.art[role])
-            name = f"fx/art_{self.recipe}_{role}"
-            self.p.write_image(name, im)
+            spec = self.art[role]
+            pic = spec.get("_kit") if isinstance(spec, dict) else None
+            src = spec.get("path") if isinstance(spec, dict) else spec
+            named = str(src).strip()[4:].strip() if str(src).startswith("kit:") else None
+            im, opts = load_art(spec)
+            if pic or named:                      # a kit picture: one shared texture per picture, whatever the recipe
+                name = f"fx/kit_{pic or named}"
+                try:
+                    self.p.image(name)
+                except FileNotFoundError:
+                    self.p.write_image(name, im)
+                if pic:
+                    self.kit_used[role] = pic
+                else:
+                    self.art_used[role] = name
+            else:
+                name = f"fx/art_{self.recipe}_{role}"
+                self.p.write_image(name, im)
+                self.art_used[role] = name
             self._art_cache[role] = dict(tex=name, size=im.size, **opts)
-            self.art_used[role] = name
         return self._art_cache[role]
 
     def slot(self, bone: str, tex: str, width: float, color: str = "FFFFFFFF", ox: float = 0.0, oy: float = 0.0,
@@ -856,7 +873,7 @@ def burst_flare(c: Ctx, P: dict) -> dict:
     grp = c.bone("flare", c.group, 0, 62)
     b_h, b_v = c.bone("h", grp), c.bone("v", grp, rot=90)
     b_core, b_ring = c.bone("core", grp), c.bone("ring", grp, sy=0.42)
-    s_ring = c.slot(b_ring, "fx/ring", 420)
+    s_ring = c.slot(b_ring, "fx/ring", 420, role="ring")
     s_h = c.slot(b_h, tname, 680, make=mk, role="flare")
     s_v = c.slot(b_v, tname, 330, make=mk, role="flare")
     s_core = c.slot(b_core, "fx/glow", 280)
@@ -2051,7 +2068,8 @@ REVEAL_LENGTH = 13.2
 # art roles: which picture of each recipe the user can replace with their own (art={role: "file.png" | "file.psd#Layer" | {...}})
 ROLES: dict[str, dict[str, str]] = {
     "rune_ring": {"ring": "the ring (outer; also the inner ring unless ring_inner is given); centred, square", "ring_inner": "the inner counter-rotating ring"},
-    "burst_flare": {"flare": "the streak (horizontal; the vertical one is the same picture turned); centred, wide"},
+    "burst_flare": {"flare": "the streak (horizontal; the vertical one is the same picture turned); centred, wide",
+                    "ring": "the shock ring (squashed flat by its bone), round, centred; ring_color tints it"},
     "rim_wisps": {"wisp": "one tuft; its BASE on the left edge, fraying to the right"},
     "bloom_aura": {"beam": "the light column; BASE at the bottom, tall"},
     "floor_glow": {"reflect": "the reflection; TOP edge at the subject, fading downward"},
@@ -2083,7 +2101,7 @@ for _n, _d in ROLES.items():
 
 SHARED = ("x", "y", "scale", "start", "duration", "color", "intensity", "seed", "into", "parent", "front_of", "behind",
           "count", "name", "art", "tier", "style", "realism", "style_profile", "relight_slots", "relight_color",
-          "relight_strength", "relight_duration")
+          "relight_strength", "relight_duration", "kit")
 
 
 def list_recipes() -> dict:
@@ -2145,6 +2163,9 @@ TIERS: dict[str, dict[str, float]] = {
     "epic": dict(scale=1.5, count=2.6, intensity=1.0, time=1.4),
 }
 
+# the kit of the apply() call in progress: a bundle's members (nested apply calls) inherit it
+_KIT: list[str] = []
+
 # bundles (recipes made of recipes) register here: name -> fn(project, **apply kwargs) and a listing entry
 BUNDLES: dict[str, Callable[..., dict]] = {}
 BUNDLE_INFO: dict[str, dict] = {}
@@ -2173,14 +2194,27 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
           parent: str = "root", front_of: str = "", behind: str = "", count: int = 0, name: str = "",
           options: dict | None = None, art: dict | None = None, tier: str = "", style: str = "",
           realism: float = -1.0, style_profile: dict | None = None, relight_slots: list[str] | None = None,
-          relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0) -> dict:
+          relight_color: str = "", relight_strength: float = 0.0, relight_duration: float = 0.0,
+          kit: str = "") -> dict:
     """Add one recipe (or a bundle) to the project. Does not save. ``art`` swaps the recipe's pictures for the
     user's own (see ``ROLES``); for the bundles it is keyed by member recipe. ``tier`` (small | medium | big | mega |
     epic) scales the recipe for a win size (see TIERS).
 
+    ``kit`` = "realistic" fills every art role the caller did not supply with a bundled photographic CC0 picture
+    chosen by role name (``fx_kit``); a bundle passes it to every member (a sequence step may set its own, "none" =
+    off). The result's ``kit`` lists the roles that came from it.
+
     ``style`` is stylized | premium | realistic; ``realism`` 0..1 interpolates stylized -> realistic when style
     is omitted. ``style_profile`` deep-merges custom tuning over that profile. ``relight_slots`` adds a short,
     cheap additive response using the subject's own art, so impacts illuminate the thing they hit."""
+    if kit:                                       # members of a bundle (nested apply calls) inherit it
+        kw = {k: v for k, v in locals().items() if k not in ("kit", "project", "recipe")}
+        _KIT.append(fx_kit.check(kit))
+        try:
+            return apply(project, recipe, **kw)
+        finally:
+            _KIT.pop()
+    kit_now = _KIT[-1] if _KIT else ""
     if recipe in BUNDLES:
         fn = BUNDLES[recipe]
         kw = dict(x=x, y=y, scale=scale, start=start, duration=duration, color=color, intensity=intensity, seed=seed,
@@ -2215,10 +2249,13 @@ def apply(project: Project, recipe: str, x: float = 0, y: float = 0, scale: floa
         raise ValueError(f"unknown art role(s) {bad} for {recipe!r}; valid: {sorted(d.get('roles', {}))}")
     # one-shots retime through k; window recipes take the window length directly
     k = (P["duration"] / d["duration"]) if d["kind"] == "one-shot" else 1.0
+    art, _ = fx_kit.fill(kit_now, recipe, d.get("roles", {}), art)
     c = Ctx(project, recipe, x, y, scale, start, k, intensity, seed, into, parent, front_of, behind, name, art=art)
     res = d["fn"](c, P)
     if c.art_used:
         res["art"] = dict(c.art_used)
+    if kit_now:
+        res["kit"] = {"name": kit_now, "roles": dict(c.kit_used)}
     if style_info:
         res["style"] = style_info
         res["depth_parallax"] = dict(style_info.get("depth", {}))
@@ -2327,3 +2364,4 @@ from . import fx_props_collect  # noqa: E402,F401   prop_absorb, prop_overflow, 
 from . import fx_props_life  # noqa: E402,F401   prop_bob, prop_blink, prop_breathe_heavy, prop_hover_spin, prop_dangle, prop_sway_wind
 from . import fx_props_elements  # noqa: E402,F401   flame_wick, liquid_bubble, prop_drip, prop_steam, prop_electric, prop_freeze, prop_dissolve, smoke_wisp
 from . import fx_props_bundles  # noqa: E402,F401   bonus_chest_reveal, collect_into_prop, pinata_style_break, magic_vessel
+from . import fx_real  # noqa: E402,F401   bolt_link, crackle, surface_glow

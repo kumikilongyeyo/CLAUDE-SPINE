@@ -177,3 +177,31 @@ When performance is too high, optimize in this order:
 6. only then simplify the core effect
 
 Never destroy the main impact silhouette just to save a few frames.
+
+## 9. Lessons from real passes (skull-coin job: sparks, frost, fire aura)
+
+Judge every pass against the thing it sits on, not on black: frost composited over the actual coin face, sparks
+added (premultiplied) onto the game background. Six rounds were needed for sparks and frost; each failure below was
+only visible that way.
+
+- **"Realistic" means real material, not more glow.** Drawn starbursts, cartoon puff lobes, zig-zag line electricity,
+  blob fireballs and square blocks read as placeholders. Replace them with photographic / volumetric pictures
+  (fx_recipe `kit="realistic"`) or a rendered AE pass; keep the recipe's motion.
+- **Sparks:** CC Particle World Line particles + **Echo** (operator Maximum, -1/240 s, ~14 echoes) make long
+  gravity-curved streaks at full brightness. A long shutter (CC Force Motion Blur) averages thin sparks to nothing.
+  Birth rate is per frame and huge: ~0.7 for a burst; 30 renders a solid white ball. Template: `metal_sparks`.
+- **Frost / anything that must sit ON art:** build a greyscale DENSITY, then Shift Channels (alpha from luminance) +
+  Fill, so thin frost is see-through; an opaque frost plate hides the art. Any helper layer (Find Edges glints) must
+  get its alpha the same way or it exports an opaque black plate. Template: `frost_creep`; in Spine parent it to the
+  face bone (it narrows with the spin), clip it to the face disc, add a mirrored twin on the back face.
+- **Auras round an object:** the `fire_aura` template's flame band starts at r = 120 px of a 768 comp; scale it so
+  the band starts just inside the object's edge and draw it BEHIND the object (only the tongues show), plus a faint
+  additive copy in front. Its base band is dark: fade it out before the object it hides behind disappears.
+- **Hold loops at a playable rate.** Never subsample a looping flipbook below ~12 fps to meet a frame budget;
+  shrink the texture first (import_optimized min_fps).
+- **AE scripting:** CC Particle World properties are flat (set by matchName `CC Particle World-00NN`; 0050/0062 are
+  groups); Gradient Wipe completion/softness are 0..1; Cell Pattern's contrast is "Contextual Slider"; scripts run
+  through the MCP must `return` a string; AE caches renders by comp NAME (new name per attempt); the first
+  saveFrameToPng after switching comps can be stale (throw one away).
+- **Repeated hits:** one rendered sequence, played as copies with their own scale / rotation (copies=[[x, y, start,
+  scale, rotation], ...]) escalates three impacts without three frame sets.

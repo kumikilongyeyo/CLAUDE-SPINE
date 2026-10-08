@@ -118,16 +118,49 @@ def test_explicit_import_budget_overrides_director_defaults(symbol, tmp_path):
     assert res["director"]["explicit_budget_override"] is True
 
 
-def test_larger_texture_override_reduces_frames_to_stay_in_budget(symbol, tmp_path):
+def test_larger_texture_override_stays_in_budget_without_dropping_below_min_fps(symbol, tmp_path):
     frames = _frames(tmp_path / "frames_big", count=30, size=360)
     res = D.import_optimized(
         symbol, "large_texture", frames_dir=str(frames), fps=30,
         event="impact", target="mobile_symbol", max_size=320,
     )
+    budget = res["director"]["effective_max_frames"]
     assert res["director"]["effective_max_size"] == 320
-    assert res["director"]["effective_max_frames"] <= 6
+    assert budget <= 6
     assert res["director"]["explicit_budget_override"] is False
-    assert res["frames_out"] <= 6
+    # a one-shot drops frames, but only down to 12 fps (every 2nd frame at 30 fps), then the texture pays the rest
+    assert res["step"] == 2 and res["playback_fps"] >= D.MIN_FPS
+    w, h = res["image_size"]
+    assert max(w, h) < 320 and res["frames_out"] * w * h <= budget * 320 * 320 * 1.02
+    # min_fps=0 restores the plain frame cap
+    off = D.import_optimized(symbol, "large_texture_off", frames_dir=str(frames), fps=30, event="impact",
+                             target="mobile_symbol", max_size=320, min_fps=0)
+    assert off["frames_out"] <= 6 and max(off["image_size"]) == 320
+
+
+def test_loops_keep_their_frame_rate_and_shrink_the_texture(symbol, tmp_path):
+    # the fire-aura case: a 16-frame 24 fps loop, a 512 px texture whose budget holds only 6 frames
+    frames = _frames(tmp_path / "loop", count=16, size=512)
+    res = D.import_optimized(symbol, "aura", frames_dir=str(frames), fps=24, seq_mode="loop", event="fire_hit",
+                             target="mobile_feature", max_size=512, trim=False)
+    assert res["director"]["effective_max_frames"] <= 6
+    assert res["frames_out"] == 16 and res["step"] == 1 and res["playback_fps"] == pytest.approx(24)
+    assert 256 <= max(res["image_size"]) < 512                     # texture first, not below half size here
+    assert res["director"]["min_fps"] == D.MIN_FPS
+    # pingpong follows the same rule; an explicit min_fps raises the floor
+    pp = D.import_optimized(symbol, "aura_pp", frames_dir=str(frames), fps=24, seq_mode="pingpong",
+                            event="fire_hit", max_size=512, trim=False, min_fps=24)
+    assert pp["step"] == 1 and pp["frames_out"] == 16
+
+
+def test_long_loop_shrinks_the_texture_before_dropping_frames(symbol, tmp_path):
+    frames = _frames(tmp_path / "long", count=48, size=256)
+    res = D.import_optimized(symbol, "long_loop", frames_dir=str(frames), fps=24, seq_mode="loop",
+                             event="fire_hit", target="mobile_feature", max_size=256, max_frames=0, trim=False)
+    budget = res["director"]["effective_max_frames"]
+    assert res["frames_out"] == 48 > budget and res["step"] == 1 and res["playback_fps"] == pytest.approx(24)
+    assert 128 <= max(res["image_size"]) < 256
+    assert res["frames_out"] * max(res["image_size"]) ** 2 <= budget * 256 * 256 * 1.02
 
 
 def test_mcp_tools_are_registered_and_callable(symbol, tmp_path):

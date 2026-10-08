@@ -189,6 +189,53 @@ def active_range(pms: list[np.ndarray], mode: str) -> tuple[int, int]:
 
 
 # ----------------------------------------------------------------- the bridge
+def frame_budget(n: int, fps: float, w: int, h: int, *, max_size: int = 0, max_frames: int = 0,
+                 seq_mode: str = "once", min_fps: float = 0.0, min_size: int = 0) -> dict:
+    """How ``n`` active frames of ``w`` x ``h`` at ``fps`` fit ``max_frames`` / ``max_size``: ``{step, size, note}``.
+
+    min_fps = 0: every Nth frame until it fits max_frames, texture capped at max_size (the plain behaviour).
+    min_fps > 0: max_frames x max_size^2 is a pixel BUDGET and the playback rate never falls below min_fps:
+    * loop / pingpong (a choppy cycle shows on every repeat): shrink the texture first, down to min_size (default half
+      of the max_size side), then drop frames, but only down to min_fps; past both, the texture shrinks further;
+    * once (an impact survives dropped frames): drop frames first, but only down to min_fps, then shrink the texture.
+    """
+    tw0, th0 = w, h
+    if max_size and max(w, h) > max_size:
+        k = max_size / max(w, h)
+        tw0, th0 = max(1, round(w * k)), max(1, round(h * k))
+    if not max_frames or n <= max_frames:
+        return {"step": 1, "size": (tw0, th0), "note": ""}
+    if min_fps <= 0:
+        return {"step": math.ceil(n / max_frames), "size": (tw0, th0), "note": ""}
+    long0 = max(tw0, th0)
+    max_step = max(1, math.floor(fps / min_fps + 1e-9))
+    floor_s = min(1.0, (min_size or long0 / 2) / long0)
+    note = ""
+
+    def fit(frames: int) -> float:            # texture scale that puts `frames` frames inside the budget
+        return min(1.0, math.sqrt(max_frames / frames))
+
+    if seq_mode in ("loop", "pingpong"):
+        step, s = 1, fit(n)
+        if s < floor_s:
+            for st in range(2, max_step + 1):
+                if fit(math.ceil(n / st)) >= floor_s:
+                    step, s = st, fit(math.ceil(n / st))
+                    break
+            else:
+                step = max_step
+                s = fit(math.ceil(n / step))
+                note = (f"kept {fps / step:.3g} fps (min_fps {min_fps:g}): the texture went below min_size to stay in "
+                        f"the budget; raise max_frames or lower min_fps for a sharper loop")
+    else:
+        step = min(math.ceil(n / max_frames), max_step)
+        s = fit(math.ceil(n / step))
+        if step < math.ceil(n / max_frames):
+            note = f"kept {fps / step:.3g} fps (min_fps {min_fps:g}): more frames at a smaller texture"
+    size = (max(1, round(tw0 * s)), max(1, round(th0 * s)))
+    return {"step": step, "size": size, "note": note}
+
+
 def import_sequence(project: Project, name: str, frames: list[str | Path], fps: float, *, mode: str = "alpha",
                     seq_mode: str = "once", animation: str = "", start: float = 0.0, hit_ae: float | None = None,
                     hit_at: float | None = None, fit_duration: float = 0.0, until: float = 0.0, x: float = 0,
@@ -196,11 +243,14 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
                     color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                     behind: str = "", fade: float = 0.0, trim: bool = True, first_frame_time: float = 0.0,
                     manifest_extra: dict | None = None, feather: float = 0.0, anchor=None,
-                    deform_like: list[str] | None = None) -> dict:
+                    deform_like: list[str] | None = None, min_fps: float = 0.0, min_size: int = 0) -> dict:
     """Frames on disk -> sprites in ``images/ae/`` -> a sequence attachment on a new slot, keyed in
     ``animation`` (default ``ae_<name>``; an existing one is merged into).
 
-    ``first_frame_time``: comp time (s) of ``frames[0]`` (its frame number / fps), used with ``hit_ae``."""
+    ``first_frame_time``: comp time (s) of ``frames[0]`` (its frame number / fps), used with ``hit_ae``.
+    ``min_fps`` (0 = off): never subsample below this playback rate; ``max_frames`` x ``max_size`` is then a memory
+    budget that loops meet by shrinking the texture first (down to ``min_size``, default half of ``max_size``) and
+    one-shots by dropping frames first (see ``frame_budget``)."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
     if seq_mode not in SEQ_MODES:
@@ -217,14 +267,10 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
 
     lo, hi = active_range(pms, mode) if trim else (0, len(pms) - 1)
     keep = list(range(lo, hi + 1))
-    step = 1
-    if max_frames and len(keep) > max_frames:
-        step = math.ceil(len(keep) / max_frames)
-        keep = keep[::step]
-    tw, th = w, h
-    if max_size and max(w, h) > max_size:
-        k = max_size / max(w, h)
-        tw, th = max(1, round(w * k)), max(1, round(h * k))
+    budget = frame_budget(len(keep), fps, w, h, max_size=max_size, max_frames=max_frames, seq_mode=seq_mode,
+                          min_fps=min_fps, min_size=min_size)
+    step, (tw, th) = budget["step"], budget["size"]
+    keep = keep[::step]
 
     digits = max(2, len(str(len(keep) - 1)))
     img_dir = project.images_dir / "ae"
@@ -300,25 +346,38 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
     return {"name": name, "animation": anim, "slot": slot.name, "bone": gname, "event": f"ae_{name}",
             "frames_in": len(frames), "frames_out": n_out, "trimmed": [lo, hi], "step": step,
             "image_size": [tw, th], "source_size": [w, h], "fps": fps, "delay": round(delay, 5),
+            "playback_fps": round(1 / delay, 3), **({"budget_note": budget["note"]} if budget["note"] else {}),
             "start": round(t0, 4), "end": round(t_off, 4), "sequence_seconds": round(dur, 4),
             "blend": bl, "mode": mode, "seq_mode": seq_mode, **(manifest_extra or {})}
 
 
 def copy_sequence(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
-                  until: float = 0.0, parent: str | None = None) -> str:
+                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0) -> str:
     """Another instance of an imported sequence (``res`` = the import's result) on a new slot that SHARES its frames:
     the atlas holds one set of images however many copies play (glitter in every cell of a cluster, sparks on every
     coin). x, y in ``parent``'s space (default: the original's parent); start defaults to the original's, until to the
-    original's end for loops. Returns the new slot."""
+    original's end for loops. scale multiplies this instance's size and rotation (degrees) turns it, both on the copy's
+    own bone (escalating hits from one frame set: scale 1 / 1.3 / 1.7). Returns the new slot (``copy_instance`` returns
+    the slot, bone and placement)."""
+    return copy_instance(project, res, x=x, y=y, start=start, until=until, parent=parent, scale=scale,
+                         rotation=rotation)["slot"]
+
+
+def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
+                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0) -> dict:
+    """``copy_sequence`` returning ``{slot, bone, x, y, start, end, scale, rotation}``."""
     sk = project.data
     src = next(s for s in sk.slots if s.name == res["slot"])
     src_bone = next(b for b in sk.bones if b.name == res["bone"])
     parent = parent or src_bone.parent
     if parent not in {b.name for b in sk.bones}:
         raise ValueError(f"no bone named {parent!r} to parent the sequence copy to")
+    if not scale or scale <= 0:
+        raise ValueError(f"copy scale must be positive, not {scale!r}")
     t0 = res["start"] if start is None else start
     bn = sk.unique_name(res["bone"])
-    sk.bones.append(Bone(name=bn, parent=parent, x=x, y=y, length=0, color="FF9E00FF"))
+    sk.bones.append(Bone(name=bn, parent=parent, x=x, y=y, rotation=rotation, scaleX=scale, scaleY=scale, length=0,
+                         color="FF9E00FF"))
     slot = Slot(name=sk.unique_name(bn, "slot"), bone=bn, color=src.color, blend=src.blend)
     sk.add_slot(slot, after=res["slot"])
     sk.set_attachment(slot.name, "fx", sk.attachment(res["slot"], "fx").model_copy(deep=True))
@@ -332,7 +391,27 @@ def copy_sequence(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0
         pts.insert(0, (0.0, None))
     ab.slot_attachment(slot.name, pts)
     ab.sequence(slot.name, "fx", [(t0, res["seq_mode"], 0, res["delay"])])
-    return slot.name
+    return {"slot": slot.name, "bone": bn, "x": x, "y": y, "start": round(t0, 4), "end": round(end, 4),
+            "scale": scale, "rotation": rotation}
+
+
+def parse_copy(cp) -> dict:
+    """One ``copies`` entry: [x, y], [x, y, start], [x, y, start, scale] or [x, y, start, scale, rotation]
+    (start may be null = the original's start), or a dict with those keys."""
+    if isinstance(cp, dict):
+        unknown = set(cp) - {"x", "y", "start", "scale", "rotation"}
+        if unknown or "x" not in cp or "y" not in cp:
+            raise ValueError(f"copy {cp!r}: give x, y and optionally start, scale, rotation")
+        cp = [cp["x"], cp["y"], cp.get("start"), cp.get("scale"), cp.get("rotation")]
+    cp = list(cp)
+    if not 2 <= len(cp) <= 5:
+        raise ValueError(f"copy {cp!r}: use [x, y], [x, y, start], [x, y, start, scale] or [x, y, start, scale, rotation]")
+    cp += [None] * (5 - len(cp))
+    x, y, start, scale, rot = cp
+    if scale is not None and float(scale) <= 0:
+        raise ValueError(f"copy {cp[:5]!r}: scale must be positive")
+    return {"x": float(x), "y": float(y), "start": None if start is None else float(start),
+            "scale": 1.0 if scale is None else float(scale), "rotation": 0.0 if rot is None else float(rot)}
 
 
 def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", frames_dir: str = "",
@@ -341,6 +420,7 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
     """Render (or read) the frames and import them. Either ``aep`` + ``comp`` (rendered with aerender) or
     ``frames_dir`` + ``fps`` (frames already on disk: TIFF premultiplied, or PNG straight RGBA / light-on-black
     RGB)."""
+    placed = [parse_copy(cp) for cp in copies or []]       # a bad entry fails before anything is rendered or written
     tmp = None
     try:
         if aep:
@@ -367,10 +447,10 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
             raise ValueError("give aep + comp, or frames_dir + fps")
         res = import_sequence(project, name, frames, fps_v, first_frame_time=first_time, **kw)
         res["source"] = src
-        if copies:                          # [[x, y], [x, y, start], ...]: more instances sharing the same frames
-            res["copies"] = [copy_sequence(project, res, x=float(cp[0]), y=float(cp[1]),
-                                           start=float(cp[2]) if len(cp) > 2 else None, until=kw.get("until", 0.0))
-                             for cp in copies]
+        if placed:   # [[x, y], [x, y, start], [x, y, start, scale, rotation], ...]: more instances sharing the frames
+            inst = [copy_instance(project, res, until=kw.get("until", 0.0), **c) for c in placed]
+            res["copies"] = [c["slot"] for c in inst]          # slot names, as before
+            res["copy_instances"] = inst                        # slot + bone + placement of each copy
         return res
     finally:
         if tmp is not None:

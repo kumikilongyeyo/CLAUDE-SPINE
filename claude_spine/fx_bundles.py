@@ -22,7 +22,7 @@ from .timeline import AnimBuilder
 
 STEP_KEYS = {"recipe", "start", "dx", "dy", "scale", "duration", "color", "intensity", "seed", "count", "name", "options",
              "art", "tier", "parent", "front_of", "behind", "style", "realism", "style_profile", "relight_slots",
-             "relight_color", "relight_strength", "relight_duration"}
+             "relight_color", "relight_strength", "relight_duration", "kit"}
 
 
 def anim_end(project: Project, anim: str) -> float:
