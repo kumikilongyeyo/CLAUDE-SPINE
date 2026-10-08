@@ -24,7 +24,8 @@ def _wrapper(jsx: Path, aep: Path, ack: Path, previous: Path | None = None) -> s
     function signal(ok, detail) {
         f.encoding = "UTF-8";
         if (!f.open("w")) throw new Error("Cannot create AE acknowledgment file");
-        f.write(JSON.stringify({ok:ok, detail:String(detail)}));
+        f.writeln(ok ? "OK" : "ERROR");
+        f.writeln(detail);
         f.close();
     }
     try {
@@ -39,7 +40,8 @@ def _wrapper(jsx: Path, aep: Path, ack: Path, previous: Path | None = None) -> s
         app.project.save(new File(__PROJECT__));
         signal(true, "Saved");
     } catch (e) {
-        signal(false, e.toString() + (e.line ? " at line " + e.line : ""));
+        signal(false, (e.message ? e.message : "Unknown ExtendScript error") +
+               (e.line ? " at line " + e.line : ""));
     }
 })();"""
     for key, value in {
@@ -75,12 +77,14 @@ def _execute(jsx: str, aep: Path, ack: Path, previous: Path | None,
     while time.monotonic() < until:
         if ack.exists():
             try:
-                state = json.loads(ack.read_text(encoding="utf-8"))
+                status = ack.read_text(encoding="utf-8").splitlines()
+                if not status:
+                    raise ValueError("empty AE acknowledgement")
             except (OSError, ValueError):
                 time.sleep(.3)
                 continue
-            if not state.get("ok"):
-                raise RuntimeError("AE refused the script: " + str(state.get("detail")))
+            if status[0] != "OK":
+                raise RuntimeError("AE refused the script: " + " ".join(status[1:]))
             if not aep.is_file():
                 raise RuntimeError("AE signaled success without saving its project")
             return
