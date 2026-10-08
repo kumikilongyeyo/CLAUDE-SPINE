@@ -126,7 +126,7 @@ the random Advanced Lightning arcs.
 ### Reference-footage FX memory (new)
 
 Turn a video or PNG sequence into a reusable **editable FX recipe** rather than
-pasting a flattened movie on top of every future symbol. The three MCP tools work
+pasting a flattened movie on top of every future symbol. The four MCP tools work
 with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
 
 ```text
@@ -145,8 +145,34 @@ ae_fx_remix recipe="./FX_LIBRARY/heavy_punch/recipe.json" out_dir="./AE_scripts"
 # 3. Run the returned .jsx with After Effects MCP's ae_run_script.
 # The native AE comp has editable core/halo/ring/spark layers and live controls.
 # 4. Review: ae_quick_look. Finish/grade using existing ae_material_fx / ae_vfx_review.
-# 5. Deliver: ae_vfx_to_spine project=... name=heavy_punch aep=... comp=...
+# 5. Visual match after rendering the AE comp (frames or saved AE project).
+ae_fx_match recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
+  out_dir="./FX_LIBRARY/heavy_punch/matches" \
+  aep="./AE_projects/heavy_punch.aep" comp="heavy_punch_anime" \
+  iteration=1 style="anime"
+# Or: candidate_frames="./AE_rendered_frames" candidate_fps=24
+# Read the JSON score and the reference/AE/difference comparison JPG.
+# Run the returned next_jsx in AE; render the returned next_comp.
+# Call ae_fx_match again with iteration=2 and tuning=<previous result.tuning>.
+# Repeat while real measured visual error meaningfully improves.
+
+# 6. Final review/grade -> ae_vfx_to_spine project=... name=heavy_punch aep=... comp=...
 ```
+
+**Automatic visual feedback:** `ae_fx_match` aligns the rebuilt comp's actual render to
+the source footage by timestamps, scores alpha/visual difference, center,
+energy, spread, and detail, and writes a side-by-side error image plus
+`match_NNN.json`. It automatically calculates damped corrections for the
+editable AE layers (core brightness, spread, halo/ring balance, XY, peak
+timing and native turbulence detail) and generates the next revision.
+The MCP client still needs to execute the returned JSX inside After Effects
+and render the next version; the system never claims its adjustment improved
+quality until the new render is compared. If you are using an AE MCP agent,
+have it call `ae_fx_match` after each render and pass its returned `tuning`
+to the next round. Stop when the measured error stops improving or the
+result satisfies art direction. For color remixes supply `color` consistently
+across rounds. Original footage must still be accessible (or set
+`reference=<new location>`).
 
 The memory folder holds `recipe.json` (timing, luminous intensity, size, center,
 dominant color, impact beats and reduced Bezier-ready keys) and `reference.jpg`
