@@ -395,24 +395,47 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
         "energy_gain": (.2, 4.), "radius_gain": (.35, 3.),
         "halo_gain": (.2, 3.), "ring_gain": (.3, 3.),
         "offset_x": (-.45, .45), "offset_y": (-.45, .45),
-        "time_shift": (-.4, .4), "roughness": (0., 65.),
+        "time_shift": (-.4, .4), "roughness": (0., 65.), "timeline": (0., 1.),
     }
     fit = dict(fit or {})
     extra = set(fit) - set(bounds)
     if extra:
         raise ValueError(f"unknown fit parameter(s): {sorted(extra)}")
+    timeline = fit.pop("timeline", None)
     for key, (low, high) in bounds.items():
+        if key == "timeline":
+            continue
         fit[key] = _clamp(float(fit.get(key, 0 if key in
                                    ("offset_x", "offset_y", "time_shift", "roughness") else 1)),
                           low, high)
     keys = obj["keys"]
+    if timeline is None:
+        timeline = [{"energy": 1., "radius": 1., "dx": 0., "dy": 0.} for _ in keys]
+    if not isinstance(timeline, list) or len(timeline) != len(keys):
+        raise ValueError("fit timeline must be a list matching the recipe key count")
+    if any(not isinstance(v, dict) or
+           set(v) - {"energy", "radius", "dx", "dy"} for v in timeline):
+        raise ValueError("fit timeline entries must contain only energy/radius/dx/dy")
+    local = []
+    for entry in timeline:
+        local.append({
+            "energy": _clamp(float(entry.get("energy", 1)), .25, 4),
+            "radius": _clamp(float(entry.get("radius", 1)), .4, 2.5),
+            "dx": _clamp(float(entry.get("dx", 0)), -.35, .35),
+            "dy": _clamp(float(entry.get("dy", 0)), -.35, .35),
+        })
+    fit["timeline"] = local
     time_offset = fit["time_shift"] * duration
     time_keys = [round(max(0, _clamp(float(k["t"])) * duration + time_offset), 5) for k in keys]
-    e = [_clamp(float(k["energy"]) * fit["energy_gain"]) for k in keys]
-    x = [round(_clamp(float(k["x"]) + fit["offset_x"]) * w, 3) for k in keys]
-    y = [round(_clamp(float(k["y"]) + fit["offset_y"]) * h, 3) for k in keys]
+    e = [_clamp(float(k["energy"]) * fit["energy_gain"] * local[i]["energy"])
+         for i, k in enumerate(keys)]
+    x = [round(_clamp(float(k["x"]) + fit["offset_x"] + local[i]["dx"]) * w, 3)
+         for i, k in enumerate(keys)]
+    y = [round(_clamp(float(k["y"]) + fit["offset_y"] + local[i]["dy"]) * h, 3)
+         for i, k in enumerate(keys)]
     radius = [round(_clamp(k["radius"], .02, .8) * min(w, h) *
-              (1 + (strength - 1) * .23) * fit["radius_gain"], 3) for k in keys]
+              (1 + (strength - 1) * .23) * fit["radius_gain"] * local[i]["radius"], 3)
+              for i, k in enumerate(keys)]
     peak_at = max(0., float(obj["analysis"]["peak_at"]) / speed + time_offset)
     if len(set(time_keys)) < len(time_keys):
         # Some negative shifts collapse early keys to zero; remove duplicates
