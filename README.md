@@ -123,6 +123,115 @@ the random Advanced Lightning arcs.
 
 ![ae_library](docs/ae_library.jpg)
 
+### Reference-footage FX memory (new)
+
+Turn a video or PNG sequence into a reusable **editable FX recipe** rather than
+pasting a flattened movie on top of every future symbol. The four MCP tools work
+with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
+
+```text
+# 1. Learn the behavior from real footage. The source is archived by default.
+ae_fx_capture source="./references/heavy_punch.mp4" library_dir="./FX_LIBRARY" name="heavy_punch" archive_source=True
+# For a rendered sequence: source="./frames" fps=24
+# For FX on top of a scene: background="./clean_plate.png" mask_mode="background"
+
+# Find any stored preset later: ae_fx_library library_dir="./FX_LIBRARY" query="punch"
+
+# 2. Rebuild the core and make a radically stronger or recolored variant.
+ae_fx_remix recipe="./FX_LIBRARY/heavy_punch/recipe.json" out_dir="./AE_scripts" \
+  style="anime" strength=2.4 color="#FF4828" speed=1.4 canvas=1024 \
+  save_as="./AE_projects/heavy_punch.aep"
+
+# 3. Run the returned .jsx with After Effects MCP's ae_run_script.
+# The native AE comp has editable core/halo/ring/spark layers and live controls.
+# 4. Review: ae_quick_look. Finish/grade using existing ae_material_fx / ae_vfx_review.
+# 5. Visual match after rendering the AE comp (frames or saved AE project).
+ae_fx_match recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
+  out_dir="./FX_LIBRARY/heavy_punch/matches" \
+  aep="./AE_projects/heavy_punch.aep" comp="heavy_punch_anime" \
+  iteration=1 style="anime"
+# Or: candidate_frames="./AE_rendered_frames" candidate_fps=24
+# Read the JSON score and the reference/AE/difference comparison JPG.
+# Run the returned next_jsx in AE; render the returned next_comp.
+# Call ae_fx_match again with iteration=2 and tuning=<previous result.tuning>.
+# Repeat while real measured visual error meaningfully improves.
+
+# 6. Final review/grade -> ae_vfx_to_spine project=... name=heavy_punch aep=... comp=...
+```
+
+**Optional local auto-run (Windows AE workstation):** Open a new EMPTY UNSAVED
+After Effects project first; keep AE running. Set `AFTERFX_BIN` to the absolute
+path of your installed `AfterFX.exe` or supply `afterfx_bin` explicitly, then:
+
+```text
+ae_fx_auto_fit recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
+  out_dir="./FX_LIBRARY/heavy_punch/autofit" \
+  afterfx_bin="C:/Program Files/Adobe/Adobe After Effects 2026/Support Files/AfterFX.exe" \
+  max_rounds=3 style="premium" canvas=1024
+```
+
+The executable path above is an **example**, not a guaranteed installation path.
+Enable **Allow Scripts To Write Files And Access Network** in AE's
+Scripting & Expressions preferences so the runner can save its project and
+completion signal. It uses Adobe's supported AfterFX `-r` script execution and the existing
+`aerender` sequence exporter. Each round waits for an AE-written completion
+signal, renders the saved composition, scores the REAL render, generates an
+improved comp and repeats until the score plateaus or its round limit is hit.
+It stores every version and reports the best-scoring AEP/comp. The tool refuses
+a nonempty/saved unrelated AE project instead of writing over your current
+artwork. No hosted system can run your local After Effects unless the tool
+server itself is running on the AE workstation. Actual AE renders and
+human art-direction review are required before calling a result finished.
+
+**Automatic visual feedback:** `ae_fx_match` aligns the rebuilt comp's actual render to
+the source footage by timestamps, scores alpha/visual difference, center,
+energy, spread, and detail, and writes a side-by-side error image plus
+`match_NNN.json`. It automatically calculates damped corrections for the
+editable AE layers (core brightness, spread, halo/ring balance, XY, peak
+timing and native turbulence detail), checks silhouette overlap, tracks
+the best measured iteration, and generates the next revision. The report
+also identifies the worst-matching frames. New iterations from saved .aep
+projects get their own auto-save .aep path so they do not overwrite the previous
+candidate.
+The MCP client still needs to execute the returned JSX inside After Effects
+and render the next version; the system never claims its adjustment improved
+quality until the new render is compared. If you are using an AE MCP agent,
+have it call `ae_fx_match` after each render and pass its returned `tuning`
+to the next round. Stop when the measured error stops improving or the
+result satisfies art direction. For color remixes supply `color` consistently
+across rounds. Original footage must still be accessible (or set
+`reference=<new location>`).
+
+The memory folder holds `recipe.json` (timing, luminous intensity, size, center,
+dominant color, impact beats and reduced Bezier-ready keys) and `reference.jpg`
+(four sampled key frames) plus an archived reference clip or sampled frame
+sequence. Reuse or remix the same recipe as often as needed. The original
+footage can be moved after capturing because a reference copy is stored
+by default (`archive_source=True`). Video archiving has a 250 MB safety cap;
+larger videos stay linked externally with a warning. Use
+`archive_source=False` when you do not want the original copied.
+`strength=0.25..3` changes punch/coverage/sparks; `speed=0.25..4` retimes;
+`style` changes procedural accents; `color`, `spark_count`, and `canvas`
+override the generated variation. Use **Impact Strength** and **Global Scale**
+sliders to modify it after creation in AE.
+
+The generated `.jsx` creates a native, multi-layer AE composition, which is
+stored in an `.aep` library project after running it in After Effects. An
+`.ffx` animation preset is a **single-layer property preset**, not a complete
+multi-layer reconstruction: select relevant properties on one layer in AE and
+choose **Animation > Save Animation Preset** if that format is required.
+
+**Important limitations:** Video is a visual reference, not the original editable
+project. The system estimates timing, brightness, location, growth and color;
+it cannot uniquely infer the original emitter count, turbulence settings, 3D
+geometry, masking or materials. A frame similarity score is a diagnostic,
+not proof of matching texture, visual quality, gameplay readability or impact. Realistic smoke, fluid simulation, surface
+relighting and scene occlusion require additional authored passes. Feed isolated
+alpha footage for best results; video needs local `ffmpeg`. Black-key is
+supported, but loses darker smoke; for footage with a background, use a clean
+plate. Missing background isolation produces an explicit warning, not a false
+claim of accurate extraction.
+
 ### AE VFX director
 
 For hero effects, use the director before the low-level After Effects MCP calls:

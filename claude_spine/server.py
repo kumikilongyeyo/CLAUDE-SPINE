@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_fx_autofit, ae_fx_memory, ae_fx_visual_match, ae_look, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -449,6 +449,102 @@ def ae_vfx_plan(brief: str = "", event: str = "impact", style: str = "realistic"
     Returns the comp layer hierarchy, compressed impact timing, look rules, review targets and a
     conservative AE->Spine sequence budget. Use this before issuing low-level After Effects MCP calls."""
     return ae_vfx_director.plan(brief, event, style, intensity, fps, duration, target)
+
+
+@mcp.tool()
+def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
+                  mask_mode: str = "auto", background: str = "", max_frames: int = 96,
+                  archive_source: bool = True) -> dict:
+    """Reverse engineer a VFX reference video or PNG sequence into a persistent editable recipe.
+
+    The capture stores an FX energy/timing curve, impact beats, center of motion, spread,
+    dominant colors and reference contact sheet under library_dir/<name>/.
+    Source = video (ffmpeg installed) or image-sequence folder (supply fps).
+    mask_mode = auto|alpha|black|green|background|none. For footage shot over a
+    scene, provide background=<clean plate PNG> and mask_mode=background.
+    This estimates visible behavior, not unavailable original AE/particle settings.
+    Next: ae_fx_remix(recipe=returned recipe path)."""
+    return ae_fx_memory.capture(source, library_dir, name, fps, mask_mode, background,
+                                max_frames, archive_source)
+
+
+@mcp.tool()
+def ae_fx_library(library_dir: str, query: str = "") -> dict:
+    """Search saved reference-footage FX recipes by name or event family.
+
+    Returns reusable recipe paths, reference thumbnails, duration and captured behavior.
+    These recipes can be passed directly to ae_fx_remix to make new color/style/
+    high-impact variations at any time."""
+    return ae_fx_memory.library(library_dir, query)
+
+
+@mcp.tool()
+def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
+                color: str = "", speed: float = 1.0, spark_count: int = -1,
+                comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
+    """Build a reusable editable native AE FX composition from a captured reference recipe.
+
+    strength 0.25..3 boosts impact, scale and particle energy; style = stylized,
+    premium, realistic, anime; color = #RRGGBB; speed 0.25..4 retimes the keyframes;
+    spark_count >= 0 overrides the automatic count. Returns a .jsx script that builds
+    live keyframed core, halo, ring and spark layers with Impact Strength and
+    Global Scale controls. Run using AE MCP ae_run_script. Optional save_as=.aep
+    saves the created project. A multi-layer AE comp is a reusable library asset;
+    a single-layer .ffx can be saved inside AE via Animation > Save Animation Preset.
+    This is a first-pass procedural rebuild, not an exact inverse render."""
+    return ae_fx_memory.remix(recipe, out_dir, strength, style, color, speed,
+                              spark_count, comp_name, save_as, canvas)
+
+
+@mcp.tool()
+def ae_fx_match(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps: float = 0.0,
+                aep: str = "", comp: str = "", reference: str = "", background: str = "",
+                candidate_mode: str = "alpha", max_frames: int = 40,
+                iteration: int = 1, style: str = "premium",
+                strength: float = 1.0, color: str = "", speed: float = 1.0,
+                canvas: int = 1024, tuning: dict | None = None) -> dict:
+    """Compare the actual rendered AE effect with its captured reference, then AUTO-CORRECT
+    the next editable After Effects build. Re-run after every AE render for a genuine feedback loop.
+
+    Use candidate_frames (sequence + candidate_fps), OR saved .aep + comp
+    (rendered with aerender). Reference footage path comes from ae_fx_capture's
+    recipe; reference= overrides it if moved. background= clean plate for
+    original composite footage; candidate_mode=alpha|black|none.
+
+    Reports frame-matched image/alpha/energy/size/position/timing/texture error,
+    writes comparison JPG and JSON, calculates damped corrections and produces
+    the next .jsx automatically. Pass the returned tuning to the NEXT call
+    after running/rendering the new JSX. Stop based on measured scores and
+    art direction, NOT on unverified predicted improvements.
+    Original reference is never altered. Native AE source layers stay editable."""
+    return ae_fx_visual_match.compare(
+        recipe=recipe, out_dir=out_dir, candidate_frames=candidate_frames,
+        candidate_fps=candidate_fps, aep=aep, comp=comp, reference=reference,
+        background=background, candidate_mode=candidate_mode, max_frames=max_frames,
+        iteration=iteration, style=style, strength=strength, color=color,
+        speed=speed, canvas=canvas, tuning=tuning)
+
+
+@mcp.tool()
+def ae_fx_auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
+                   max_rounds: int = 3, timeout_seconds: float = 180.0,
+                   style: str = "premium", canvas: int = 1024, reference: str = "",
+                   background: str = "", min_improvement: float = 0.15,
+                   max_frames: int = 40) -> dict:
+    """Run the complete local AE FX matching loop on the artist's own workstation.
+
+    Requires installed AfterFX and aerender. FIRST: open a NEW EMPTY UNSAVED
+    After Effects project. This tool intentionally refuses unrelated projects.
+    It builds/editable JSX, runs it with AfterFX.exe -r, waits for explicit
+    acknowledgment after saving AEP, renders via aerender, scores against
+    reference, builds improved JSX, and repeats up to max_rounds (1..5).
+    Stops when the score is sufficiently high or improvement stalls.
+    Never modifies the reference source. Returns best actual render/AEP for
+    artist approval before optional AE-to-Spine export.
+    If AE is not installed, use ae_fx_match manually with exported frames."""
+    return ae_fx_autofit.auto_fit(recipe, out_dir, afterfx_bin,
+                                 max_rounds, timeout_seconds, style, canvas,
+                                 reference, background, min_improvement, max_frames)
 
 
 @mcp.tool()
