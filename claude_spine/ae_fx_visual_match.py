@@ -233,6 +233,12 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     texture_delta = _clip((tex_target - tex_candidate) * 18., -25, 30)
     timing_correction = (ref_mass_center - cand_mass_center) / duration
     timing_correction = _clip(timing_correction, -.3, .3)
+    # Score is comparable within repeated renders of THIS reference. This is a
+    # bounded diagnostic score, not proof of an exact/pixel-identical recreation.
+    total_error = (aggregate["visual_error"] * .35 + aggregate["alpha_error"] * .25
+                   + abs_center * .15 + min(energy_l1 * 2, 1.) * .12
+                   + min(radius_l1, 1.) * .13)
+    score = round(_clip((1 - total_error)*100, 0, 100), 2)
     previous_path = dest / f"match_{iteration-1:03d}.json"
     previous = {}
     if iteration > 1 and previous_path.exists():
@@ -264,12 +270,6 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     })
     settings = {k: round(v, 5) for k,v in settings.items()}
 
-    # Score is comparable within repeated renders of THIS reference. This is a
-    # bounded diagnostic score, not proof of an exact/pixel-identical recreation.
-    total_error = (aggregate["visual_error"] * .35 + aggregate["alpha_error"] * .25
-                   + abs_center * .15 + min(energy_l1 * 2, 1.) * .12
-                   + min(radius_l1, 1.) * .13)
-    score = round(_clip((1 - total_error)*100, 0, 100), 2)
     comparison = dest / f"comparison_{iteration:03d}.jpg"
     _frame_preview(ref_pm, can_pm, ref_times, comparison)
     factors = {"energy_ratio": round(energy_ratio, 4), "spread_ratio": round(radius_ratio, 4),
