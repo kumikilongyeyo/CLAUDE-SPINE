@@ -21,6 +21,8 @@ import numpy as np
 LUM = np.array([0.2126, 0.7152, 0.0722], np.float32)
 SAMPLE = 400_000                 # pixels used for the fit (a deterministic stride over all frames)
 GRADES = ((10.0, "good"), (14.0, "fair"))          # mean error thresholds; above the last one: "poor"
+WARM = (0.06, 0.17)             # tint hues (orange .. yellow) whose dark end is turned toward red
+WARM_SHIFT = 0.045
 COLOURLESS = 0.15               # chroma of the light/dark midpoint below which an effect counts as colourless
 GRADE_NOTES = {
     "good": "two colours reproduce it; recolour freely with tint / per-copy tints",
@@ -116,4 +118,9 @@ def recolour(light: np.ndarray, dark: np.ndarray, tint: str) -> tuple[np.ndarray
     ref = max(hl, key=lambda h: h[2] * (1 - abs(2 * h[1] - 1)))          # the more colourful end leads
     dh = want[0] - ref[0]
     out = [np.array(colorsys.hls_to_rgb((h + dh) % 1.0, l, s), np.float32) for h, l, s in hl]
+    if WARM[0] <= want[0] <= WARM[1]:
+        # dim orange / yellow light reads as brown (olive) on a dark screen; dim warm light in nature runs toward
+        # red (embers, a gold glow's skirt): turn the dark end toward red and keep it bright
+        h, l, s_ = colorsys.rgb_to_hls(*map(float, out[1]))
+        out[1] = np.array(colorsys.hls_to_rgb(max(0.0, h - WARM_SHIFT), max(l, 0.5), 1.0), np.float32)
     return out[0], out[1]

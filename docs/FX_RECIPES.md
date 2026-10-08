@@ -1001,6 +1001,54 @@ When a template's result line says `"tintable":true`, import it that way. Extend
 `long`, `int`, `char`... is a SyntaxError in After Effects although `node --check` accepts it. A test now scans every
 template for that.
 
+**`relight_from_fx`: the light on the subject, measured instead of hand-keyed.**
+
+    relight_from_fx project=p.json animation=magic_reveal sources=["ae_c0_aura", "ae_c0_smoke*", "ae_flash*"]
+                    subjects=["c0_front", "c0_back"] strength=0.26 floor=0.04 norm=<the idle's norm>
+
+The animation is played in the spine-core runtime. In every frame, each draw of a source slot adds:
+
+- its real on-screen area (bone scale, sequence frame and clipping included),
+- times its opacity,
+- times the mean light of the exact texture region it shows,
+- in the colour it is drawn in (two-colour tint included).
+
+Additive twins of the subject slots follow their attachment keys, such as a coin's face swap, and are keyed to that
+light's brightness and colour. On the coin, the face breathes violet with the aura, takes the colour of the orbit
+rings, and goes white on the spectrum flash. Every key is measured. Pass one animation's returned `norm` to the next
+(idle, then reveal) so the same aura lights the subject equally in both. `hits` returns the times of the sharpest
+light rises, for shakes and sounds.
+
+**`optimize_draw_order`: fewer draw calls, same pixels.** Two slots may swap places when both are additive (light
+adds, and addition does not depend on order), or when they never overlap on screen in any frame where both are drawn
+(checked on the runtime's vertices). A move is kept only if the real calls go down: runs of blend mode and atlas page
+among the slots actually drawn, summed over every frame. The tool tries the plain atlas packing and the grouped one
+(`pack_atlas group_sequences=true`, each frame sequence kept on one page), keeps the better, and names it. It renders
+sample frames before and after and refuses any change of more than 2/255.
+
+Measured on the coin magic pass (calls mean / max, 0/255 change):
+
+| Animation | Before | After | Packing |
+|---|---|---|---|
+| idle | 7.1 / 9 | 6.35 / 8 | plain |
+| reveal | 8.7 / 14 | 7.6 / 10 | plain |
+| three coins | 11.1 / 13 | 5.1 / 7 | grouped |
+
+Grouping is not always better: it raised the one-coin idle, which is why both packings are tried. `qa_budget`'s
+static count (every slot visible at once) stays pessimistic, so trust the runtime count.
+
+**`orbit_ribbons`: effects that wrap around the subject.** Flowing ribbons orbit on tilted rings, and AE renders
+`<comp>_back` and `<comp>_front` separately. Import the back half behind the subject and the front half in front of
+it (`front_of`): the near arcs cross the face and the far arcs pass behind, so the effect reads as 3D. The ring
+radius must clear the subject, so the split points sit beside it.
+
+**Warm tints:** dim orange or yellow light reads as brown on a dark screen. Tints between orange and yellow now turn
+their dark end toward red and keep it bright, and the gold coin's aura reads amber.
+
+**`magic_smoke texture=`** (`kit:smoke_07` or a path) screens photographed smoke puffs into the noise. It was
+measured on the luminous smoke, and is NOT a win there: at `texture_mix` 0.7 the wisps blur into a blob, and at
+0.35 it looks the same as no texture. It stays off by default.
+
 **`ae_quick_look`: judge the four key frames before importing.**
 
     ae_quick_look aep=x.aep comp=frost_v3 mode=alpha art=coin_face.png

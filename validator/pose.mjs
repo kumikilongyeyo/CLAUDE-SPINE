@@ -116,6 +116,7 @@ function frameDraws(t, animName) {
       draws.push({
         slot: slot.data.name,
         page: region && region.page ? region.page.name : null,
+        region: region && region.name ? region.name : null,
         blend: ["normal", "additive", "multiply", "screen"][slot.data.blendMode],
         color: [sc.r * slc.r * color.r, sc.g * slc.g * color.g, sc.b * slc.b * color.b, a],
         ...(slot.darkColor ? { dark: [slot.darkColor.r, slot.darkColor.g, slot.darkColor.b] } : {}),

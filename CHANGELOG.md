@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Realistic AE -> Spine, round three, tested on the coin magic pass:
+  - `relight_from_fx` (`claude_spine/relight.py`): the light on the subject is measured from the FX in the runtime: each source draw's real area x opacity x the mean light of the texture region it shows, in its drawn colour (two-colour tint included). Additive twins of the subject follow its attachment keys and are keyed to that light's brightness and colour. Carry `norm` between animations. `hits` gives the light's sharpest rises. The runtime dump now names each draw's texture region.
+  - `optimize_draw_order` (`claude_spine/draw_order.py`): moves slots only past neighbours they commute with (both additive, or never overlapping on screen while both are drawn) and only when the real per-frame calls go down. It tries plain and grouped packing and keeps the better. It renders before and after and refuses any change over 2/255. Coin pass: reveal 8.7 -> 7.6 mean calls (max 14 -> 10), three coins 11.1 -> 5.1 (max 13 -> 7), 0/255.
+  - `pack_atlas group_sequences` / `atlas.pack(group=True)`: each frame sequence goes on the first page that takes all of it.
+  - AE template `orbit_ribbons`: rings of flowing energy rendered as back and front halves that wrap round the subject; out-of-step rings are time-remapped so they loop.
+  - Warm tints (orange to yellow) turn their dark end toward red and keep it bright: no brown gold.
+  - `magic_smoke texture=` (`kit:<picture>` resolves to the bundled CC0 kit for any template): photo smoke puffs in the noise; measured, not a win on the luminous smoke, so it is off by default.
+  - 9 new tests.
+
 - Faster, lighter AE -> Spine, each idea measured on the fx1008 and skull-coin renders first:
   - `tintable` on `ae_fx_to_spine` / `ae_vfx_to_spine` (`claude_spine/ae_tint.py`): frames stored grey, coloured by the slot's light + dark colour (Spine two-colour tint), fitted (alpha-weighted principal axis) so the default look matches the render. `tint="RRGGBB"` turns the pair to that hue keeping a white core, `"light/dark"` sets both, and copies take their own (`{"x", "y", "tint"}`), so one frame set plays red, green and purple electricity. White additive light (lightning) ramps on brightness instead, so a tint colours its glow and keeps the core white. The result grades the fit: good for lightning, electricity, frost, ice and smoke (mean error 4-10/255), fair for cooling sparks (they recolour pale), poor for fire and gold glows (18-23). Through the runtime the tinted electric star differs from the plain import by mean 1.4/255; Spine 4.2.43 imports it with zero repairs.
   - `ae_quick_look` (`claude_spine/ae_look.py`): the director's four judge frames on one contact sheet, on dark and over the real art / background, with the energy curve. Hit / build / loop are told apart by the curve's shape; the impact is the frame with the most white-hot area (the flash, not the later spread). Returns `hit_ae` for the import.

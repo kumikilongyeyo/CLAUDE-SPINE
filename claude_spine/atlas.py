@@ -137,8 +137,12 @@ def referenced_images(project: Project) -> list[str]:
 
 def pack(project: Project, out_dir: str | Path | None = None, name: str | None = None,
          max_size: int = 2048, padding: int = 2, strip: bool = True, pma: bool = True,
-         scale: float = 1.0) -> dict:
-    """Pack every referenced image into ``<name>.atlas`` + page PNGs."""
+         scale: float = 1.0, group: bool = False) -> dict:
+    """Pack every referenced image into ``<name>.atlas`` + page PNGs.
+
+    group=True keeps each frame sequence (images that differ only by a trailing number) on as few pages as possible:
+    a whole sequence goes onto the first page it fits on, else a page of its own. Mixed packing scatters a sequence
+    over every page, and the runtime then switches texture (a new draw call) from frame to frame."""
     out = Path(out_dir) if out_dir else project.root
     out.mkdir(parents=True, exist_ok=True)
     name = name or project.name
@@ -180,18 +184,49 @@ def pack(project: Project, out_dir: str | Path | None = None, name: str | None =
     items.sort(key=lambda t: (-max(t[1].size), -t[1].width * t[1].height))
     pages: list[_MaxRects] = []
     placed: list[Placed] = []
-    for n, im, left, top, ow, oh in items:
+
+    def put(item, pi=None):
+        n, im, left, top, ow, oh = item
         w, h = im.width + padding, im.height + padding
         pos = None
-        for pi, pg in enumerate(pages):
-            pos = pg.insert(w, h)
+        for k in ([pi] if pi is not None else range(len(pages))):
+            pos = pages[k].insert(w, h)
             if pos:
+                pi = k
                 break
         if pos is None:
             pages.append(_MaxRects(max_size - padding, max_size - padding))
             pi = len(pages) - 1
             pos = pages[pi].insert(w, h)
         placed.append(Placed(n, pi, pos[0] + padding, pos[1] + padding, im.width, im.height, left, top, ow, oh))
+
+    if group:
+        import copy
+        import re
+        groups: dict[str, list] = {}
+        for it in items:
+            groups.setdefault(re.sub(r"_?\d+$", "", it[0]), []).append(it)
+        for g in sorted(groups.values(), key=lambda g: -sum(i[1].width * i[1].height for i in g)):
+            for k in range(len(pages)):                 # the first page that takes the WHOLE sequence
+                trial = copy.deepcopy(pages[k])
+                if all(trial.insert(i[1].width + padding, i[1].height + padding) for i in g):
+                    for i in g:
+                        put(i, k)
+                    break
+            else:                                       # none: start a fresh page for it (spilling if it must)
+                start = len(pages)
+                pages.append(_MaxRects(max_size - padding, max_size - padding))
+                for i in g:
+                    for k in range(start, len(pages)):
+                        if copy.deepcopy(pages[k]).insert(i[1].width + padding, i[1].height + padding):
+                            put(i, k)
+                            break
+                    else:
+                        pages.append(_MaxRects(max_size - padding, max_size - padding))
+                        put(i, len(pages) - 1)
+    else:
+        for it in items:
+            put(it)
 
     lookup = {it[0]: it[1] for it in items}
     lines: list[str] = []

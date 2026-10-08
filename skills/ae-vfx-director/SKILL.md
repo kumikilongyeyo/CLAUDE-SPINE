@@ -172,11 +172,19 @@ Do not bake cheap things into AE just because AE can do them. Keep simple glow p
 
 After the effect is imported:
 
+0. light the subject with relight_from_fx (sources = the FX slots, globs allowed; subjects = the art it sits on).
+   Never hand-key a face glow: the measured light follows every flare, pulse and frame. Carry `norm` from the idle
+   into the one-shots so the aura lights the subject equally in both.
 1. run structural validation
 2. run qa_budget for the target
 3. run qa_fx_premium when subject slots exist
 4. preview the actual game animation
 5. run optimize_animation on dense Spine timelines only after the full clip is assembled
+6. run optimize_draw_order last, and export with the pack_atlas group_sequences value it names. It never changes a
+   pixel; trust its runtime call count over qa_budget's static one.
+
+For an effect that should wrap round the subject (orbiting energy, rings), use orbit_ribbons: import `<comp>_back`
+behind the subject and `<comp>_front` in front of it.
 
 AE sequences are frame animation; optimize_animation is for Spine animation keys, not for throwing away AE sprite frames. Use the director handoff budget for the sequence itself.
 

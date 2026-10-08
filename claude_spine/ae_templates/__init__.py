@@ -69,6 +69,12 @@ def build_script(name: str, params: dict | None = None, out_dir: str | Path | No
     if unknown:
         raise ValueError(f"template {name!r} has no parameter(s) {unknown}; it takes {sorted(meta['params'])}")
     merged = {**meta["params"], **given}
+    for k, v in list(merged.items()):   # "kit:<picture>" = a bundled CC0 picture from claude_spine/fx_kit/
+        if isinstance(v, str) and v.startswith("kit:"):
+            pic = HERE.parent / "fx_kit" / (v[4:] + ("" if v.endswith(".png") else ".png"))
+            if not pic.exists():
+                raise ValueError(f"{k}={v!r}: no kit picture {pic.name}; see claude_spine/fx_kit/")
+            merged[k] = str(pic)
     body = (HERE / f"{name}.jsx").read_text(encoding="utf-8")
     # "uses": other templates this one builds on, inlined as AEFX.T_<name>(P) (returns that template's JSON line)
     # with their defaults as AEFX.D_<name>, so a composite template reuses them instead of copying their code

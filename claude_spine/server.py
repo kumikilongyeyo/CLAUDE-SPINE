@@ -17,7 +17,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_look, ae_templates, ae_vfx_director
+from . import ae_bridge, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
 from . import fx as fx_mod
@@ -570,6 +571,41 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
 
 
 @mcp.tool()
+def relight_from_fx(project: str, animation: str, sources: list[str], subjects: list[str], strength: float = 0.6,
+                    floor: float = 0.0, gamma: float = 1.0, norm: float = 0.0, fps: float = 30,
+                    name: str = "relight", saturation: float = 1.0) -> dict:
+    """Light the subject with the effect, measured instead of hand-keyed (the director's first realism rule).
+
+    Plays `animation` in the spine-core runtime; every frame, each draw of the `sources` slots (names or globs such
+    as "ae_flash*") adds its displayed area x opacity x the mean light of the exact texture region shown (a
+    sequence's current frame), in the colour it is drawn (two-colour tint included). Additive twins of `subjects`
+    (e.g. a coin's front and back faces; they follow the subject's attachment keys) are keyed to that light:
+    alpha = clamp(floor + strength * (E / norm) ** gamma), colour = the light's colour (violet under a violet aura,
+    white on a spectrum flash). norm=0 uses this animation's peak; pass the returned norm of one animation to the
+    next (idle -> reveal) so the same aura lights the subject equally and only the flash goes beyond. Returns the
+    twins, norm, the peak and `hits` (times of the sharpest light rises, for shakes or sounds)."""
+    p = _open(project)
+    return _saved(p, relight_mod.relight(p, animation, sources, subjects, strength, floor, gamma, norm, fps, name,
+                                         saturation))
+
+
+@mcp.tool()
+def optimize_draw_order(project: str, animations: list[str] | None = None, fps: float = 15, apply: bool = True,
+                        group_pages: bool | None = None) -> dict:
+    """Fewer draw calls, same picture. Regroups the draw order, moving a slot only past neighbours it commutes
+    with: both additive (light adds), or never overlapping on screen in any frame where both are drawn (checked on
+    the runtime's vertices). Keeps a move only when the REAL calls (runs of blend mode + atlas page among the
+    slots drawn, every frame of every animation) go down; clipping ranges stay put; skeletons with draw-order keys
+    are left alone. group_pages None tries the plain atlas packing and the grouped one (sequences kept on one
+    page) and keeps the better: export with pack_atlas group_sequences=<pack_atlas_group_sequences>. Renders
+    sample frames before and after and refuses the change if any pixel moves by more than 2/255. On the coin
+    magic pass: reveal 8.0 -> 6.75 mean calls (max 12 -> 8), three-coin loop 10.5 -> 5.1 (max 12 -> 7), 0/255."""
+    p = _open(project)
+    res = draw_order.optimize(p, animations, fps, apply, group_pages=group_pages)
+    return _saved(p, res) if res.get("applied") else res
+
+
+@mcp.tool()
 def ae_quick_look(aep: str = "", comp: str = "", frames_dir: str = "", fps: float = 0, mode: str = "alpha",
                   art: str = "", art_scale: float = 1.0, art_offset: list[float] | None = None,
                   art_in_front: bool = False, background: str = "", out: str = "", tile: int = 260,
@@ -719,13 +755,16 @@ def preview(project: str, animations: list[str] | None = None, out_dir: str = ""
 # ---------------------------------------------------------------------- export
 @mcp.tool()
 def pack_atlas(project: str, out_dir: str = "", name: str = "", max_size: int = 2048, scale: float = 1.0,
-               pma: bool = True, strip_whitespace: bool = True) -> dict:
+               pma: bool = True, strip_whitespace: bool = True, group_sequences: bool = False) -> dict:
     """Pack every image the skeleton references (sequence frames included)
     into a Spine 4.x .atlas + pages. Copies the skeleton JSON next to it, so
-    out_dir is a ready runtime folder."""
+    out_dir is a ready runtime folder. group_sequences=True keeps each frame
+    sequence on as few pages as possible (a sequence spread over pages switches
+    texture, one more draw call, from frame to frame); optimize_draw_order
+    measures with this packing."""
     p = _open(project)
     out = Path(out_dir) if out_dir else p.root / "export"
-    res = atlas_mod.pack(p, out, name or p.name, max_size, 2, strip_whitespace, pma, scale)
+    res = atlas_mod.pack(p, out, name or p.name, max_size, 2, strip_whitespace, pma, scale, group=group_sequences)
     js = out / f"{name or p.name}.json"
     data = p.data.model_copy(deep=True)
     if scale != 1.0:

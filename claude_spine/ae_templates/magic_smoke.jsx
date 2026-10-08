@@ -1,4 +1,4 @@
-/*TEMPLATE {"name":"magic_smoke","doc":"Magical smoke rising from a source and curling: ribbons of swirling smoke (swirly fractal noise streaming up at `rise` px/s) laced with thin glowing threads (faster), torn into curls by a two-scale turbulent displacement and rocked by a convection twirl, dense near the source and thinning to nothing as it climbs, with motes drifting up inside it. Built in grey and coloured once. luminous=true (default): glowing magic smoke, black -> color -> light, additive on black (mode=\"additive\"). luminous=false: see-through smoke, alpha = density, colour = a two-colour tint shadow -> light (mode=\"alpha\"). Both are two-tone: import with tintable=True and one frame set plays in any colour. Loops exactly (rendered twice as long and crossfaded).","params":{"width":448,"height":640,"duration":2.5,"fps":24,"luminous":true,"color":"7A2CFF","light":"F2E6FF","shadow":"2A0A60","rise":85,"scale":150,"threads":0.8,"curl":70,"fine_curl":28,"swirl":22,"spread":0.3,"height_fade":0.95,"density":1.0,"glow":0.9,"motes":16,"seed":5}} */
+/*TEMPLATE {"name":"magic_smoke","doc":"Magical smoke rising from a source and curling: ribbons of swirling smoke (swirly fractal noise streaming up at `rise` px/s) laced with thin glowing threads (faster), torn into curls by a two-scale turbulent displacement and rocked by a convection twirl, dense near the source and thinning to nothing as it climbs, with motes drifting up inside it. Built in grey and coloured once. luminous=true (default): glowing magic smoke, black -> color -> light, additive on black (mode=\"additive\"). luminous=false: see-through smoke, alpha = density, colour = a two-colour tint shadow -> light (mode=\"alpha\"). Both are two-tone: import with tintable=True and one frame set plays in any colour. Loops exactly (rendered twice as long and crossfaded). texture = a photographed smoke picture (\"kit:smoke_07\", kit:smoke_08 / kit:smoke_10 are bundled CC0 Kenney puffs, or a file path): `puffs` copies of it drift up the plume turning and growing, screened into the noise at `texture_mix`, so the body carries real smoke material, then curled with everything else.","params":{"width":448,"height":640,"duration":2.5,"fps":24,"luminous":true,"color":"7A2CFF","light":"F2E6FF","shadow":"2A0A60","rise":85,"scale":150,"threads":0.8,"curl":70,"fine_curl":28,"swirl":22,"spread":0.3,"height_fade":0.95,"density":1.0,"glow":0.9,"motes":16,"texture":"","puffs":10,"texture_mix":0.7,"puff_size":0.55,"seed":5}} */
 var W = P.width, H = P.height, D = P.duration, name = P.comp || "magic_smoke";
 var DD = 2 * D, base = [W / 2, H * 0.92];
 var src = AEFX.comp(name + "_src", W, H, P.fps, DD);
@@ -17,6 +17,22 @@ function noise(nm, type, sw, sh, contrast, bright, riseK, op, seedK) {
 }
 noise("ribbons", 13, P.scale * 0.7, P.scale * 1.6, 150, -32, 1.0, 100, 0);          // Swirly, stretched upward
 noise("threads", 20, P.scale * 0.6, P.scale * 1.2, 180, -24, 1.6, 100 * P.threads, 9);   // Threads: fine glowing strands
+if (P.texture) {                     // real smoke material: photographed puffs drifting up inside the noise (exact loop)
+  var tex = AEFX.imp(P.texture), trnd = AEFX.rng(P.seed * 31 + 7);
+  for (var pi = 0; pi < P.puffs; pi++) {
+    var pl = src.layers.add(tex); pl.name = "puff" + pi;
+    pl.blendingMode = BlendingMode.SCREEN;
+    var k0 = (W * P.puff_size) / Math.max(tex.width, tex.height) * 100 * (0.7 + 0.6 * trnd());
+    var ph = trnd(), x0 = W / 2 + (trnd() * 2 - 1) * W * P.spread * 0.5, rot0 = trnd() * 360, spin = (trnd() * 2 - 1) * 90;
+    // position / scale / rotation / opacity all run on t = (time / D + ph) % 1: whole cycles per loop
+    var head = "var D = " + D + ", ph = " + ph.toFixed(4) + ", t = ((time / D) + ph) % 1; ";
+    pl.position.expression = head + "[" + x0.toFixed(1) + " + " + (W * 0.06).toFixed(1) + " * Math.sin(2 * Math.PI * (t + ph)), " +
+      (H * 0.95).toFixed(1) + " - " + (H * 0.8).toFixed(1) + " * t]";
+    pl.scale.expression = head + "var s = " + k0.toFixed(2) + " * (0.6 + 0.9 * t); [s, s]";
+    pl.rotation.expression = head + rot0.toFixed(1) + " + " + spin.toFixed(1) + " * t";
+    pl.opacity.expression = head + "100 * " + P.texture_mix + " * Math.sin(Math.PI * t)";
+  }
+}
 // the plume: dense at the source, a soft column, thinning to nothing as it climbs and fading in above the source
 // (a tall ellipse sitting ON the source was tried: with the linear top and bottom fades it reads as a box)
 var col = src.layers.addSolid([1, 1, 1], "plume", W, H, 1);
