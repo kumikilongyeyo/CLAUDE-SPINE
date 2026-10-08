@@ -26,6 +26,7 @@ def _clip(value: float, lo: float, hi: float) -> float:
 def _materialize(source: str, fps: float, limit: int, tmp: Path):
     if not source:
         raise ValueError("Missing reference source (or rendered candidate frames)")
+    tmp.mkdir(parents=True, exist_ok=True)
     return memory._frames(Path(source).expanduser().resolve(), fps, limit, tmp)
 
 
