@@ -272,7 +272,8 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
         chosen = list(beats["beats"].values())[:4]
         for pos, i in enumerate(chosen):
             with Image.open(paths[i]) as fr:
-                im.paste(fr.convert("RGB"), (pos * size[0], 0))
+                im.paste(fr.convert("RGB").resize(tuple(size), Image.Resampling.BILINEAR),
+                         (pos * size[0], 0))
         sheet = target / "reference.jpg"
         im.save(sheet, quality=88)
     return {"recipe": str(dest), "reference": str(sheet), "event": family,
@@ -296,7 +297,7 @@ def _js(value) -> str:
 
 def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
           color: str = "", speed: float = 1.0, spark_count: int = -1,
-          comp_name: str = "", save_as: str = "") -> dict:
+          comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
     """Write editable JSX. Run via AE MCP ae_run_script or File > Scripts > Run Script File.
 
     A .jsx builds a reusable multi-layer composition; it is NOT a .ffx preset.
@@ -312,6 +313,8 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
         raise ValueError("Malformed FX reference recipe")
     if not out_dir:
         raise ValueError("out_dir is required")
+    if canvas < 128 or canvas > 4096:
+        raise ValueError("canvas must be 128..4096")
     path = Path(out_dir).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
     name = _slug(comp_name or (obj["id"] + "_" + style))
@@ -319,7 +322,8 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     sample_fps = float(obj["source"]["sample_fps"])
     fps = min(60, max(12, round(sample_fps)))
     w, h = obj["source"]["preview_size"]
-    w, h = max(128, int(w)), max(128, int(h))
+    factor = canvas / max(w, h)
+    w, h = max(32, round(w * factor)), max(32, round(h * factor))
     col = _hex_color(color, obj["analysis"]["color"])
     keys = obj["keys"]
     time_keys = [round(_clamp(float(k["t"])) * duration, 5) for k in keys]
@@ -334,7 +338,7 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     particles = max(0, min(80, particles))
     radius_max = max(radius)
     # Native AE shapes + sparse Bezier keys. Controls remain live after generation.
-    script = String = r"""(function(){
+    script = r"""(function(){
     app.beginUndoGroup("Rebuild reference FX");
     try {
         if (!app.project) app.newProject();
@@ -439,7 +443,7 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     outfile = path / (name + ".jsx")
     outfile.write_text(script, encoding="utf-8")
     return {"jsx": str(outfile), "comp": name, "duration": round(duration, 4),
-            "fps": fps, "layers": 3 + particles + 1, "spark_count": particles,
+            "fps": fps, "canvas": [w, h], "layers": 3 + particles + 1, "spark_count": particles,
             "control_sliders": ["Impact Strength", "Global Scale"],
             "source_recipe": str(Path(recipe).expanduser().resolve()),
             "save_as": str(Path(save_as).expanduser().resolve()) if save_as else None,
