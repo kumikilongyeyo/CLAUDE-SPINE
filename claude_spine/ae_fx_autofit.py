@@ -83,7 +83,7 @@ def _execute(jsx: str, aep: Path, ack: Path, previous: Path | None,
             except (OSError, ValueError):
                 time.sleep(.3)
                 continue
-            if status[0] != "OK":
+            if status[0].lstrip("\ufeff").strip() != "OK":
                 raise RuntimeError("AE refused the script: " + " ".join(status[1:]))
             if not aep.is_file():
                 raise RuntimeError("AE signaled success without saving its project")
@@ -113,6 +113,7 @@ def auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
     if not 0 <= min_improvement <= 15:
         raise ValueError("min_improvement must be 0..15")
     binary = _resolve_afterfx(afterfx_bin)
+    ae_bridge.find_aerender()  # Fail before modifying an AE project when rendering is unavailable.
     dest = Path(out_dir).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
     current = ae_fx_memory.remix(recipe, str(dest), style=style, canvas=canvas,
