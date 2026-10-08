@@ -56,7 +56,7 @@ def test_remix_generates_nondestructive_editable_ae_script(tmp_path):
     assert "02_CORE_reference_energy" in js
     assert "04_DISTORTION_rebuild_ring" in js
     assert "03_SECONDARY_spark_" in js
-    assert "0.13333333333333333" in js or "[0.133333" not in js  # no fixed length assumption
+    assert "KeyframeInterpolationType.BEZIER" in js
     assert "app.project.save(" in js
     assert "__COMP__" not in js and "__PEAK__" not in js
     assert out["layers"] == 25  # 3 visual layers, 21 sparks, one control
