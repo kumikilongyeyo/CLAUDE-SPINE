@@ -300,6 +300,7 @@ def test_ae_auto_fit_orchestrates_actual_render_feedback_without_ae(tmp_path, mo
     src = make_footage(tmp_path)
     cap = M.capture(str(src), str(tmp_path/"fx"), "auto flame")
     monkeypatch.setattr(A, "_resolve_afterfx", lambda path="": tmp_path/"fake_afterfx.exe")
+    monkeypatch.setattr(A.ae_bridge, "find_aerender", lambda: tmp_path/"fake_aerender.exe")
     launches = []
     def fake_execute(jsx, aep, ack, previous, binary, timeout_seconds):
         launches.append({"jsx": jsx, "aep": aep, "previous": previous})
