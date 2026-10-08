@@ -150,7 +150,8 @@ def test_orbit_ribbons_and_smoke_texture_templates(tmp_path):
     assert '"back":"' in src and '"front":"' in src and "ADBE Polar Coordinates" in src and "ADBE Tritone" in src
     assert "Time Remapping" in src                                         # out-of-step rings still loop
     sm = ae_templates.build_script("magic_smoke", {"texture": "kit:smoke_07"}, tmp_path)
-    assert sm["params"]["texture"].endswith("fx_kit/smoke_07.png")
+    from pathlib import Path
+    assert Path(sm["params"]["texture"]).parts[-2:] == ("fx_kit", "smoke_07.png")      # any OS's separators
     with pytest.raises(ValueError, match="no kit picture"):
         ae_templates.build_script("magic_smoke", {"texture": "kit:nope"}, tmp_path)
 
