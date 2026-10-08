@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Melted-sugar splat (`claude_spine/fx_sugar_splat.py`, MCP tools `sugar_splat_ae` and `sugar_splat_to_spine` in `tools_sugar.py`), from a candy-bomb symbol whose splat had to read as hot melted sugar: a physical liquid burst simulated on air drag and gravity (centre globs, uneven-speed globs dragging syrup ligaments, tearing into drops with teardrop tails, then into falling droplets; stretched along the velocity with the area kept), written as an After Effects script (shape layer per drop, per-colour precomp finished as metaballs: Turbulent Displace -> Fast Box Blur -> Levels on alpha; `<comp>_flat` + `<comp>_bevel`; refuses an unsaved project, builds and saves its own, reopens the artist's; `CLAUDE_ERR sugar:` comps on problems), a wet-sugar gloss pass on the rendered frames, and the import through the AE VFX Director (`mirror=` for a second variation from one frame set). A no-AE preview runs the same metaball maths. AE scripting traps baked in: Levels takes 0..1 from a script, no line breaks inside script strings. `docs/sugar_splat.gif`. 11 new tests, including the script run against a mock of the AE object model in Node.
+
 - AE VFX director (`claude_spine/ae_vfx_director.py`, MCP tools `ae_vfx_plan`, `ae_vfx_review`, `ae_vfx_to_spine`): deterministic realistic/premium/stylized/anime effect planning, clean AE comp hierarchy, compressed impact timing, physical relighting rules, anti-clutter self-review and mobile-aware AE -> Spine import budgets. The optimized importer keeps the raw bridge available, but defaults to trimmed sequences, target-specific texture/frame caps, edge feathering and shared frames for `copies=`. New `ae-vfx-director` Claude skill and tests.
 
 

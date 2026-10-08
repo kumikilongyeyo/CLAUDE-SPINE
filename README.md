@@ -50,7 +50,7 @@ check everything.
 | Animals | `gait`, `rig_quadruped`, `rig_serpent`, `rig_flier`, `attach_rig`, `rig_creature` | Footfall-table locomotion with planted feet; one-call quadrupeds; swimming and flying chains; snap-on ears, tails, wings, horns, digitigrade legs, mermaid tails, snake hair, fur and glow whose clips merge into any host; slime, golem, ghost, tentacle beast, dragon, insect, plant monster and mimic |
 | Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
 | Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
-| Symbol from the art | `sphere_spin`, `liquid_splat`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
+| Symbol from the art | `sphere_spin`, `liquid_splat`, `sugar_splat_ae`, `sugar_splat_to_spine`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a physically simulated melted-sugar splat made gooey in After Effects; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
 
 A typical session, as Claude would run it:
 
@@ -150,6 +150,18 @@ Some symbols are best animated from the artist's own pixels rather than procedur
   implode with a star, a zoom-blurred smear, a ring of liquid flying out with a hollow centre, ribbons that thin and
   shrink away together, drips raining off, rays and a lens streak. Each piece gets a radial bone, so stretch and squash
   act along its flight. `prefix` + `offset` clone the kit for one splat per symbol in a column.
+- `sugar_splat_ae` + `sugar_splat_to_spine`: a melted-sugar splat that is *physical*: it goes out, then gets smaller
+  by breaking up (never by pieces shrinking in place). Python simulates the liquid on air drag and gravity (centre
+  globs that swell and drain, globs at uneven speeds dragging syrup ligaments, tearing into drops with teardrop tails,
+  tearing again into droplets that fall) and writes an After Effects script: one shape layer per drop, one precomp
+  per candy colour finished as metaballs (Turbulent Displace, Fast Box Blur, Levels on alpha), so close drops melt
+  into gooey necks that pinch off. The script builds its own project (it refuses an unsaved one and reopens it after);
+  `sugar_splat_to_spine` renders `<comp>_flat` with aerender, adds a wet-sugar gloss (dome height from the alpha,
+  specular + sheen, translucent core, darker rim; AE's CC Glass washed the colours out) and lands it on the burst
+  through the AE VFX Director's importer; `mirror=` gives a second variation from one frame set. A preview of the
+  same metaball maths renders without AE, so the motion is tuned before each AE run.
+
+  ![sugar_splat](docs/sugar_splat.gif)
 - `shake` is the violent, growing shake before a burst. After Effects adds the light: the `lens_flare` template (an
   optical ghost chain; land its off-centre source with `ae_fx_to_spine anchor=` and `feather=`) and `surface_sweep`
   (a shine that sits on the surface: the art's own colours brightened in a band bent round the volume; play it with
