@@ -282,6 +282,36 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
             "next": "ae_fx_remix recipe=<recipe path> out_dir=<output folder> strength=1.8 style=anime"}
 
 
+
+def library(library_dir: str, query: str = "") -> dict:
+    """Browse captured FX signatures without needing to remember recipe paths."""
+    root = Path(library_dir).expanduser().resolve()
+    if not root.is_dir():
+        return {"library_dir": str(root), "count": 0, "presets": []}
+    found = []
+    needle = query.casefold().strip()
+    for path in sorted(root.glob("*/recipe.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if data.get("schema") != FORM:
+            continue
+        info = data.get("analysis", {})
+        name = str(data.get("name", path.parent.name))
+        if needle and needle not in (name + " " + data.get("id", "")
+                                    + " " + info.get("suggested_event", "")).casefold():
+            continue
+        found.append({
+            "name": name, "id": data.get("id"), "recipe": str(path),
+            "reference": str(path.parent / "reference.jpg"),
+            "kind": info.get("kind"), "event": info.get("suggested_event"),
+            "duration": info.get("duration"), "color": info.get("color"),
+            "signature": data.get("signature"), "warnings": data.get("warnings", []),
+        })
+    return {"library_dir": str(root), "count": len(found), "presets": found}
+
+
 def _hex_color(color: str, fallback: list[float]) -> list[float]:
     if not color:
         return fallback
