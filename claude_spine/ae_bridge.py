@@ -98,26 +98,31 @@ def render_comp(aep: str | Path, comp: str, out_dir: str | Path, start: int | No
     if not aep.exists():
         raise FileNotFoundError(f"project not found: {aep}")
     out = Path(out_dir)
-    if out.exists():
-        shutil.rmtree(out)
-    out.mkdir(parents=True)
     cmd = [str(find_aerender()), "-project", str(aep), "-comp", comp, "-OMtemplate", template,
            "-output", str(out / "f_[#####]")]
     if start is not None:
         cmd += ["-s", str(start)]
     if end is not None:
         cmd += ["-e", str(end)]
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    log = p.stdout + "\n" + p.stderr
-    errors = [ln for ln in log.splitlines() if re.search(r"aerender\s+error", ln, re.I)]
-    if p.returncode != 0 or errors:
-        raise RuntimeError("aerender failed:\n" + ("\n".join(errors) or log[-1500:])[:1500])
-    frames = sorted(out.glob("f_*.*"))
-    if not frames:
-        raise RuntimeError(f"aerender wrote no frames for comp {comp!r}\n{log[-1500:]}")
-    info = parse_render_log(log)
-    if not info["fps"]:
-        raise RuntimeError("could not read the comp's frame rate from aerender's log")
+    # aerender launched right after another one finished sometimes renders every frame but prints a log without
+    # the comp's settings (seen on AE 26.5, back-to-back renders); the frame rate is read from that log, so retry
+    for attempt in range(3):
+        if out.exists():
+            shutil.rmtree(out)
+        out.mkdir(parents=True)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        log = p.stdout + "\n" + p.stderr
+        errors = [ln for ln in log.splitlines() if re.search(r"aerender\s+error", ln, re.I)]
+        if p.returncode != 0 or errors:
+            raise RuntimeError("aerender failed:\n" + ("\n".join(errors) or log[-1500:])[:1500])
+        frames = sorted(out.glob("f_*.*"))
+        if not frames:
+            raise RuntimeError(f"aerender wrote no frames for comp {comp!r}\n{log[-1500:]}")
+        info = parse_render_log(log)
+        if info["fps"]:
+            break
+    else:
+        raise RuntimeError("could not read the comp's frame rate from aerender's log (3 attempts)\n" + log[-800:])
     first = start if start is not None else (info["start"] or 0)
     return RenderInfo(info["fps"], info["width"] or 0, info["height"] or 0, first, first + len(frames) - 1, frames)
 

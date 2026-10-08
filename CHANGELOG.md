@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `render_comp` retries aerender (up to 3 runs) when its log comes back without the comp's settings: back-to-back renders on AE 26.5 sometimes write every frame but print no frame rate, which failed `ae_quick_look` and the imports. Found building six glow states on the coin. 1 test.
 - Realistic AE -> Spine, round three, tested on the coin magic pass:
   - `relight_from_fx` (`claude_spine/relight.py`): the light on the subject is measured from the FX in the runtime: each source draw's real area x opacity x the mean light of the texture region it shows, in its drawn colour (two-colour tint included). Additive twins of the subject follow its attachment keys and are keyed to that light's brightness and colour. Carry `norm` between animations. `hits` gives the light's sharpest rises. The runtime dump now names each draw's texture region.
   - `optimize_draw_order` (`claude_spine/draw_order.py`): moves slots only past neighbours they commute with (both additive, or never overlapping on screen while both are drawn) and only when the real per-frame calls go down. It tries plain and grouped packing and keeps the better. It renders before and after and refuses any change over 2/255. Coin pass: reveal 8.7 -> 7.6 mean calls (max 14 -> 10), three coins 11.1 -> 5.1 (max 13 -> 7), 0/255.

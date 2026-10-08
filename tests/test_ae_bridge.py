@@ -1,6 +1,7 @@
 """The After Effects -> Spine bridge, tested on synthetic frames (no AE needed) plus an optional live render."""
 import os
 import struct
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -265,3 +266,25 @@ def test_live_render_through_aerender(symbol, tmp_path):
                                 comp=os.environ.get("AE_TEST_COMP", "fire_arc"), mode="alpha", max_size=256)
     assert res["frames_out"] > 1 and res["source"]["comp_fps"] > 0
     assert (symbol.images_dir / "ae" / "live_00.png").exists()
+
+
+def test_render_retries_when_the_log_lacks_the_comp_settings(tmp_path, monkeypatch):
+    """aerender run back-to-back sometimes renders every frame but prints no comp settings (AE 26.5): retry."""
+    import subprocess
+    from types import SimpleNamespace
+    aep = tmp_path / "x.aep"
+    aep.write_bytes(b"x")
+    monkeypatch.setattr(ae_bridge, "find_aerender", lambda: "aerender")
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        out = Path(cmd[cmd.index("-output") + 1]).parent
+        for i in range(3):
+            (out / f"f_{i:05d}.tif").write_bytes(b"")
+        good = len(calls) > 1
+        log = "PROGRESS:  Size: 64 x 32\nPROGRESS:  Start: 00000\nPROGRESS:  End: 00002\nPROGRESS:  Frame Rate: 24.00 (comp)" if good else "aerender version 26.5x89"
+        return SimpleNamespace(returncode=0, stdout=log, stderr="")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    info = ae_bridge.render_comp(aep, "c", tmp_path / "out")
+    assert len(calls) == 2 and info.fps == 24 and len(info.frames) == 3
