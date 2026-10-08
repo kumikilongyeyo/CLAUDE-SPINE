@@ -130,8 +130,8 @@ pasting a flattened movie on top of every future symbol. The four MCP tools work
 with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
 
 ```text
-# 1. Learn the behavior from real footage.
-ae_fx_capture source="./references/heavy_punch.mp4" library_dir="./FX_LIBRARY" name="heavy_punch"
+# 1. Learn the behavior from real footage. The source is archived by default.
+ae_fx_capture source="./references/heavy_punch.mp4" library_dir="./FX_LIBRARY" name="heavy_punch" archive_source=True
 # For a rendered sequence: source="./frames" fps=24
 # For FX on top of a scene: background="./clean_plate.png" mask_mode="background"
 
@@ -164,7 +164,11 @@ the source footage by timestamps, scores alpha/visual difference, center,
 energy, spread, and detail, and writes a side-by-side error image plus
 `match_NNN.json`. It automatically calculates damped corrections for the
 editable AE layers (core brightness, spread, halo/ring balance, XY, peak
-timing and native turbulence detail) and generates the next revision.
+timing and native turbulence detail), checks silhouette overlap, tracks
+the best measured iteration, and generates the next revision. The report
+also identifies the worst-matching frames. New iterations from saved .aep
+projects get their own auto-save .aep path so they do not overwrite the previous
+candidate.
 The MCP client still needs to execute the returned JSX inside After Effects
 and render the next version; the system never claims its adjustment improved
 quality until the new render is compared. If you are using an AE MCP agent,
@@ -176,7 +180,12 @@ across rounds. Original footage must still be accessible (or set
 
 The memory folder holds `recipe.json` (timing, luminous intensity, size, center,
 dominant color, impact beats and reduced Bezier-ready keys) and `reference.jpg`
-(four sampled key frames). Reuse or remix the same recipe as often as needed.
+(four sampled key frames) plus an archived reference clip or sampled frame
+sequence. Reuse or remix the same recipe as often as needed. The original
+footage can be moved after capturing because a reference copy is stored
+by default (`archive_source=True`). Video archiving has a 250 MB safety cap;
+larger videos stay linked externally with a warning. Use
+`archive_source=False` when you do not want the original copied.
 `strength=0.25..3` changes punch/coverage/sparks; `speed=0.25..4` retimes;
 `style` changes procedural accents; `color`, `spark_count`, and `canvas`
 override the generated variation. Use **Impact Strength** and **Global Scale**
@@ -191,7 +200,8 @@ choose **Animation > Save Animation Preset** if that format is required.
 **Important limitations:** Video is a visual reference, not the original editable
 project. The system estimates timing, brightness, location, growth and color;
 it cannot uniquely infer the original emitter count, turbulence settings, 3D
-geometry, masking or materials. Realistic smoke, fluid simulation, surface
+geometry, masking or materials. A frame similarity score is a diagnostic,
+not proof of matching texture, visual quality, gameplay readability or impact. Realistic smoke, fluid simulation, surface
 relighting and scene occlusion require additional authored passes. Feed isolated
 alpha footage for best results; video needs local `ffmpeg`. Black-key is
 supported, but loses darker smoke; for footage with a background, use a clean
