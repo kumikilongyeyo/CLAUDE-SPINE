@@ -283,6 +283,57 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     })
     settings = {k: round(v, 5) for k,v in settings.items()}
 
+    # Global gains match the overall envelope. These finer corrections work
+    # per keyframe, and are *residual* to the global adjustment, so they do not
+    # amplify the same brightness / radius error twice.
+    original_keys = recipe_obj["keys"]
+    incoming = (tuning or {}).get("timeline")
+    if not isinstance(incoming, list) or len(incoming) != len(original_keys):
+        incoming = [{} for _ in original_keys]
+    temporal = np.asarray(ref_times, dtype=float)
+    width = max(duration * .09, duration / max(1, len(ref_times)-1) * 1.5)
+    offsets = {
+        "energy": [], "radius": [], "dx": [], "dy": [],
+    }
+    for idx, key in enumerate(original_keys):
+        center_t = _clip(float(key["t"]), 0., 1.) * duration
+        window = np.exp(-.5 * ((temporal - center_t) / width)**2)
+        window *= np.asarray([max(feat["energy"], 0.00001)
+                              for feat in reference_features])
+        if window.sum() < 1e-10:
+            window = np.ones_like(temporal)
+        window /= window.sum()
+        ref_energy_local = float(np.dot(window, t_energy))
+        gen_energy_local = float(np.dot(window, c_energy))
+        ref_radius_local = float(np.dot(window,
+                                       [f["radius"] for f in reference_features]))
+        gen_radius_local = float(np.dot(window,
+                                       [f["radius"] for f in render_features]))
+        dx = float(np.dot(window, [t["x"]-r["x"] for t,r in
+                                  zip(reference_features, render_features)]))
+        dy = float(np.dot(window, [t["y"]-r["y"] for t,r in
+                                  zip(reference_features, render_features)]))
+        entry = incoming[idx] if isinstance(incoming[idx], dict) else {}
+        ratio_energy = _safe_ratio(ref_energy_local, gen_energy_local, .4, 2.5) / energy_ratio
+        ratio_radius = _safe_ratio(ref_radius_local, gen_radius_local, .6, 1.9) / radius_ratio
+        offsets["energy"].append(_clip(float(entry.get("energy", 1.)) *
+                                       ratio_energy**(damp*.55), .25, 4.))
+        offsets["radius"].append(_clip(float(entry.get("radius", 1.)) *
+                                       ratio_radius**(damp*.55), .4, 2.5))
+        offsets["dx"].append(_clip(float(entry.get("dx", 0.)) +
+                                   (dx-shifts[0])*damp*.55, -.35, .35))
+        offsets["dy"].append(_clip(float(entry.get("dy", 0.)) +
+                                   (dy-shifts[1])*damp*.55, -.35, .35))
+    # Smooth corrections over adjacent keys to avoid sharp temporal flicker.
+    softened = {}
+    for name, series in offsets.items():
+        padded = np.pad(np.asarray(series), (1, 1), mode="edge")
+        softened[name] = .25*padded[:-2] + .5*padded[1:-1] + .25*padded[2:]
+    settings["timeline"] = [
+        {name: round(float(softened[name][i]), 5) for name in offsets}
+        for i in range(len(original_keys))
+    ]
+
     worst_ids = sorted(range(len(measures)), key=lambda i: (
         measures[i]["visual_error"] + measures[i]["alpha_error"] +
         1. - measures[i]["silhouette_iou"]), reverse=True)[:5]
