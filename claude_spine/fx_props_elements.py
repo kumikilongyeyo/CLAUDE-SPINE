@@ -920,6 +920,19 @@ def prop_freeze(c: Ctx, P: dict) -> dict:
 
 
 # ====================================================================== prop_dissolve
+def _own_art(sk, prop: str, under: list[str]) -> list[str]:
+    """The prop's own layers among `under`: slots with no FX group (fx_* / ae_* bone) between them and the prop bone."""
+    parent = {b.name: b.parent for b in sk.bones}
+    out = []
+    for n in under:
+        b = sk.slot(n).bone
+        while b and b != prop and not b.startswith(("fx_", "ae_")):
+            b = parent.get(b)
+        if b == prop:
+            out.append(n)
+    return out
+
+
 def prop_dissolve(c: Ctx, P: dict) -> dict:
     """The prop burns away: a glowing edge (white-hot core over an orange band and a heat glow, its line wavering) sweeps
     across the prop's box, embers lift off it on buoyancy and cool as they rise. With `prop` (or `slots`) a clipping
@@ -946,7 +959,8 @@ def prop_dissolve(c: Ctx, P: dict) -> dict:
         under = [s.name for s in sk.slots if s.bone in _descendants(sk, str(P["prop"]))]
         if not under:
             raise ValueError(f"no slots hang from {P['prop']!r} to dissolve")
-        layers = [under[0], under[-1]]
+        own = _own_art(sk, str(P["prop"]), under) or under    # FX of earlier recipes on the prop are not its art
+        layers = [own[0], own[-1]]
     hide_at = float(P["hide_at"]) if P["hide_at"] is not None else (1.0 if layers else 0.5)
     e = lambda t: smooth(t, t0, t1)  # noqa: E731     the edge's progress 0..1 (eases in and out)
     edge_y = lambda t: -ext / 2 - m + (ext + 2 * m) * e(t)  # noqa: E731
@@ -1026,8 +1040,18 @@ def prop_dissolve(c: Ctx, P: dict) -> dict:
         hw = wid / 2 + 2 * m
         verts = [-hw, 0.0, hw, 0.0, hw, ext + 4 * m, -hw, ext + 4 * m]
         sk.set_attachment(name, "fx", ClippingAttachment(end=last, vertexCount=4, vertices=[round(v, 2) for v in verts]))
-        c.ab.slot_attachment(name, [(0.0, "fx")])
+        c.show([name], 0.0, None)                     # off before `start`: the wipe bone sits at its setup pose until then
         res.update(clip_slot=name, clipped=[first, last])
+        if P["hide_art"]:                             # nothing must survive the sweep (a rim mesh past the box, the wavering edge)
+            span = names[names.index(first):names.index(last) + 1]
+            if not P["slots"]:                        # with a prop: only its own art, other recipes' FX keep their keys
+                span = _own_art(sk, str(P["prop"]), span) or span
+            for s in span:
+                had = c.ab.a.slots.get(s, {}).get("attachment", [])
+                if not had and sk.slot(s).attachment is None:
+                    continue                          # never shown in this animation
+                c.ab.slot_attachment(s, [(k.time, k.name) for k in had if k.time < c.T(t1)] + [(c.T(t1), None)])
+            res.update(art_hidden=span, art_hidden_at=c.T(t1))
     c.ab.event(c.T(t_hide), "prop_dissolve_hide")
     hint = dict(template=None,
                 note="no AE template does a dissolve; build this comp by hand and bring it in with ae_fx_to_spine (mode alpha, "
@@ -1152,13 +1176,15 @@ RECIPES.update({
     "prop_dissolve": dict(
         fn=prop_dissolve, duration=2.0, kind="one-shot", color="FF7A1C", count=26,
         summary="The prop burns / dissolves away: a glowing wavering edge sweeps across its box, embers lift off and cool as "
-                "they rise. With prop / slots a clipping mask riding the edge wipes its layers for real (colours untouched); "
+                "they rise. With prop / slots a clipping mask riding the edge wipes its layers for real (colours untouched, keyed off "
+                "at the sweep end; the mask acts from `start` on and ends at the prop's own last layer); "
                 "event prop_dissolve_hide (sweep end with a clip, else mid-sweep under a flash). ae_hint = the AE dissolve comp.",
         anchor="Prop centre; box relative to it.",
         options=_o(box=(BOX, "[x, y, w, h] the prop's box"), direction=("up", "up | down | left | right: the way the edge moves"),
                    prop=("", "the prop's bone: clip every slot under it"), slots=(None, "[first, last] slots to clip instead"),
                    sweep=([0.15, 1.45], "[start, end] seconds of the sweep"),
                    hide_at=(None, "fraction of the sweep for prop_dissolve_hide (default 1 with a clip, 0.5 without)"),
+                   hide_art=(True, "with a clip: key the clipped layers off at the sweep end (no sliver survives)"),
                    color2=("FFD36A", "hot ember colour"))),
     "smoke_wisp": dict(
         fn=smoke_wisp, duration=4.0, kind="loop", color="CFC8D6", count=12, normal_blend=True,

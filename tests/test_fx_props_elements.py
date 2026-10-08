@@ -349,6 +349,74 @@ def test_dissolve_without_a_prop_hides_mid_sweep_under_a_flash(proj):
         R.apply(proj, "prop_dissolve", name="bad", options={"direction": "sideways"})
 
 
+def _dissolve_after_a_charge(art, start=0.6):
+    """A recipe whose group hangs from the prop and draws after its art, then a dissolve with a lead-in."""
+    AnimBuilder(art.data, "burn").bone("root", "rotate", [(0, 0), (3.0, 0)], "linear")
+    el = R.apply(art, "prop_electric", into="burn", parent="prop", front_of="cap", duration=3.0)
+    names = [s.name for s in art.data.slots]
+    assert names.index(el["slots"][0]) > names.index("cap"), "the earlier FX hangs from the prop, drawn after its art"
+    ds = R.apply(art, "prop_dissolve", into="burn", start=start, options={"prop": "prop", "box": [10, 20, 160, 240]})
+    return el, ds
+
+
+def test_dissolve_with_a_lead_in_clips_only_the_props_own_art(art):
+    el, ds = _dissolve_after_a_charge(art)
+    a = art.data.animations["burn"]
+    clip = art.data.attachment(ds["clip_slot"], "fx")
+    assert clip.end == "cap", "the clip ends at the prop's last layer, not at a later recipe's FX under the prop"
+    assert ds["clipped"] == ["body", "cap"]
+    keys = [(k.time, k.name) for k in a.slots[ds["clip_slot"]]["attachment"]]
+    assert keys == [(0.0, None), (0.6, "fx")], "the clip is off until the recipe starts (its wipe bone is unkeyed)"
+    wipe = art.data.slot(ds["clip_slot"]).bone
+    assert min(k.time for k in a.bones[wipe]["translate"]) == pytest.approx(0.6)
+    t1 = ds["sweep"][1]
+    assert ds["art_hidden"] == ["body", "label", "cap"] and ds["art_hidden_at"] == pytest.approx(t1)
+    for n in ("body", "label", "cap"):
+        assert [(k.time, k.name) for k in a.slots[n]["attachment"]] == [(pytest.approx(t1), None)]
+    assert not any("attachment" in a.slots.get(s, {}) and a.slots[s]["attachment"][-1].name is None
+                   and a.slots[s]["attachment"][-1].time == pytest.approx(t1) for s in el["slots"]), "other FX keep their keys"
+    assert qa.validate(art.data)["ok"]
+
+
+def test_dissolve_keeps_earlier_attachment_keys_and_can_leave_the_art(art):
+    AnimBuilder(art.data, "swap").slot_attachment("label", [(0.0, "label"), (0.3, None), (0.5, "label"), (1.9, None)])
+    ds = R.apply(art, "prop_dissolve", into="swap", options={"prop": "prop"})
+    t1 = ds["sweep"][1]
+    keys = [(k.time, k.name) for k in art.data.animations["swap"].slots["label"]["attachment"]]
+    assert keys == [(0.0, "label"), (0.3, None), (0.5, "label"), (pytest.approx(t1), None)], "keys after the sweep end go"
+    ds2 = R.apply(art, "prop_dissolve", name="keep", options={"prop": "prop", "hide_art": False})
+    assert "art_hidden" not in ds2 and "body" not in art.data.animations[ds2["animation"]].slots
+
+
+def _area(d):
+    v, tri = d["v"], d["tri"]
+    return sum(abs((v[2 * j] - v[2 * i]) * (v[2 * k + 1] - v[2 * i + 1]) - (v[2 * k] - v[2 * i]) * (v[2 * j + 1] - v[2 * i + 1])) / 2
+               for i, j, k in zip(tri[::3], tri[1::3], tri[2::3]))
+
+
+@needs_node
+def test_dissolve_lead_in_and_later_fx_render_unclipped_in_the_runtime(art):
+    el, ds = _dissolve_after_a_charge(art)
+    art.save()
+    d = runtime.run(art, animations=["burn"], fps=30, geometry=True)
+    assert d["ok"] and not d.get("problems"), d.get("problems")
+    full = 64 * 64
+    t0, t1 = ds["sweep"]
+    cut = clipped_fx = 0
+    for f in d["animations"]["burn"]["frames"]:
+        draws = {x["slot"]: x for x in f["draws"]}
+        if f["t"] < 0.6:                                # the lead-in: the whole prop, untouched
+            seen = {n: round(_area(draws[n])) if n in draws else 0 for n in ("body", "label", "cap")}
+            assert all(v == pytest.approx(full, rel=1e-3) for v in seen.values()), (f["t"], seen)
+        if f["t"] > t1 + 1e-3:                          # after the sweep: nothing of it is left
+            assert not {"body", "label", "cap"} & set(draws), f["t"]
+        if t0 + 0.2 < f["t"] < t1 - 0.2 and "body" in draws:
+            cut += _area(draws["body"]) < full * 0.98
+        clipped_fx += sum(len(draws[s]["v"]) != 8 for s in el["slots"] if s in draws)   # a clipped quad is re-triangulated
+    assert cut > 5, "the sweep still wipes the prop"
+    assert clipped_fx == 0, "FX drawn after the prop are never clipped"
+
+
 # ---------------------------------------------------------------- smoke_wisp
 def test_smoke_wisp_curls_up_widens_and_loops(proj):
     res = R.apply(proj, "smoke_wisp", options={"at": [0, -50]})
