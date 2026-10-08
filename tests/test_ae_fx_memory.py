@@ -9,6 +9,7 @@ import pytest
 from PIL import Image
 
 from claude_spine import ae_fx_memory as M
+from claude_spine import ae_fx_visual_match as V
 
 
 def make_footage(tmp_path, n=40, size=112):
@@ -101,4 +102,78 @@ def test_saved_fx_are_searchable_for_later_reuse(tmp_path):
 def test_mcp_tools_are_registered(tmp_path):
     from claude_spine.server import mcp
     names = {t.name for t in asyncio.run(mcp.list_tools())}
-    assert {"ae_fx_capture", "ae_fx_library", "ae_fx_remix"} <= names
+    assert {"ae_fx_capture", "ae_fx_library", "ae_fx_remix", "ae_fx_match"} <= names
+
+
+def _alter_candidate(reference_dir, out_dir, scale=.65, dx=-9, dark=.65):
+    out_dir.mkdir()
+    for path in sorted(reference_dir.glob("*.png")):
+        rgba = np.asarray(Image.open(path).convert("RGBA"), dtype=np.uint8)
+        h, w = rgba.shape[:2]
+        result = np.zeros_like(rgba)
+        xs = np.arange(w)
+        ys = np.arange(h)
+        xx, yy = np.meshgrid(xs, ys)
+        # Map destination to source around the center; compact and shift left.
+        ux = np.round((xx - w/2 - dx)/scale + w/2).astype(int)
+        uy = np.round((yy - h/2)/scale + h/2).astype(int)
+        valid = (ux >= 0) & (ux < w) & (uy >= 0) & (uy < h)
+        result[valid] = rgba[uy[valid], ux[valid]]
+        result[..., :3] = np.round(result[..., :3].astype(np.float32)*dark).astype(np.uint8)
+        Image.fromarray(result).save(out_dir/path.name)
+    return out_dir
+
+
+def test_frame_compare_is_exact_for_identical_source_and_writes_report(tmp_path):
+    src = make_footage(tmp_path)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "known punch")
+    report = V.compare(cap["recipe"], str(tmp_path/"review"),
+                       candidate_frames=str(src), candidate_fps=24, max_frames=20)
+    assert report["score"] > 99.9
+    assert report["frames_compared"] == 20
+    assert report["errors"]["visual_error"] < 0.001
+    assert (tmp_path/"review"/"comparison_001.jpg").is_file()
+    assert (tmp_path/"review"/"match_001.json").is_file()
+    jsx = (tmp_path/"review"/"known_punch_match_002.jsx").read_text()
+    assert "Turbulent Displace" in jsx
+    assert "00_FX_CONTROLS" in jsx
+    assert all(k in report["tuning"] for k in
+               ("energy_gain","radius_gain","offset_x","time_shift","roughness"))
+
+
+def test_frame_compare_detects_differences_and_creates_corrected_next_build(tmp_path):
+    src = make_footage(tmp_path)
+    candidate = _alter_candidate(src, tmp_path/"bad", scale=.62, dx=-11, dark=.47)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "fist impact")
+    out = V.compare(cap["recipe"], str(tmp_path/"review"),
+                    candidate_frames=str(candidate), candidate_fps=24, max_frames=35,
+                    style="anime", strength=1.5, canvas=1024)
+    assert out["score"] < 99
+    assert out["errors"]["visual_error"] > .01
+    assert out["tuning"]["radius_gain"] > 1.0
+    assert out["tuning"]["offset_x"] > 0
+    assert out["tuning"]["energy_gain"] > 1.0
+    assert Path(out["next_jsx"]).is_file()
+    js = Path(out["next_jsx"]).read_text()
+    assert "__RING_GAIN__" not in js
+    assert "Math.sqrt(energy[i])*25*" in js
+    again = V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(candidate),
+                      candidate_fps=24, iteration=2, tuning=out["tuning"], max_frames=35)
+    assert again["tuning"]["radius_gain"] > out["tuning"]["radius_gain"]
+    assert Path(again["comparison"]).is_file()
+
+
+def test_compare_rejects_missing_render_and_composite_without_plate(tmp_path):
+    ref = make_footage(tmp_path)
+    cap = M.capture(str(ref), str(tmp_path/"fx"), "punch")
+    with pytest.raises(ValueError, match="exactly one"):
+        V.compare(cap["recipe"], str(tmp_path/"review"))
+    with pytest.raises(ValueError, match="candidate_fps"):
+        V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(ref))
+    with pytest.raises(ValueError, match="comp"):
+        V.compare(cap["recipe"], str(tmp_path/"review"), aep="fake.aep")
+    with pytest.raises(ValueError, match="candidate_mode"):
+        V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(ref),
+                  candidate_fps=24, candidate_mode="arbitrary")
+    with pytest.raises(ValueError, match="unknown fit"):
+        M.remix(cap["recipe"], str(tmp_path/"review"), fit={"bad_key": 10})
