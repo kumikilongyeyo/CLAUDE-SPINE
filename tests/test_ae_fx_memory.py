@@ -141,6 +141,7 @@ def test_frame_compare_is_exact_for_identical_source_and_writes_report(tmp_path)
     jsx = (tmp_path/"review"/"known_punch_match_002.jsx").read_text()
     assert "Turbulent Displace" in jsx
     assert "00_FX_CONTROLS" in jsx
+    assert len(report["tuning"]["timeline"]) == len(json.loads(Path(cap["recipe"]).read_text())["keys"])
     assert all(k in report["tuning"] for k in
                ("energy_gain","radius_gain","offset_x","time_shift","roughness"))
 
@@ -233,3 +234,44 @@ def test_reference_archival_is_optional(tmp_path):
     assert result["archived"] is False
     assert result["stored_source"] == str(frames.resolve())
     assert "archive_source=False" in " ".join(result["warnings"])
+
+
+
+def test_keyframe_local_matching_handles_late_impact_drop(tmp_path):
+    src = make_footage(tmp_path, n=44)
+    bad = tmp_path / "late_decay"
+    bad.mkdir()
+    paths = sorted(src.glob("*.png"))
+    for i, frame in enumerate(paths):
+        pixels = np.asarray(Image.open(frame).convert("RGBA"), dtype=np.uint8).copy()
+        # Late half is intentionally much darker. Earlier frames are untouched.
+        if i > len(paths)//2:
+            pixels[..., :3] = np.round(pixels[..., :3]*0.35).astype(np.uint8)
+        Image.fromarray(pixels).save(bad / frame.name)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "slow tail")
+    res = V.compare(cap["recipe"], str(tmp_path/"review"),
+                    candidate_frames=str(bad), candidate_fps=24,
+                    max_frames=44, style="premium")
+    timeline = res["tuning"]["timeline"]
+    assert len(timeline) >= 5
+    assert any(abs(v["energy"] - 1.) > .005 for v in timeline)
+    assert all(.25 <= k["energy"] <= 4.0 for k in timeline)
+    assert all(-.35 <= k["dx"] <= .35 for k in timeline)
+    jsx = Path(res["next_jsx"]).read_text()
+    assert "__ENERGY__" not in jsx
+    assert "global" not in jsx.lower() or "Global Scale" in jsx
+
+
+def test_repeated_identical_render_stops_on_plateau(tmp_path):
+    src = make_footage(tmp_path)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "perfect")
+    first = V.compare(cap["recipe"], str(tmp_path/"review"),
+                      candidate_frames=str(src), candidate_fps=24, max_frames=20)
+    second = V.compare(cap["recipe"], str(tmp_path/"review"),
+                       candidate_frames=str(src), candidate_fps=24,
+                       max_frames=20, iteration=2, tuning=first["tuning"])
+    assert first["stop"] is True
+    assert second["stop"] is True
+    assert second["previous_score"] == first["score"]
+    assert second["best"]["score"] == first["score"]
+    assert second["measured_change"] == 0.0
