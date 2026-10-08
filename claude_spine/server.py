@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_fx_memory, ae_look, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -449,6 +449,39 @@ def ae_vfx_plan(brief: str = "", event: str = "impact", style: str = "realistic"
     Returns the comp layer hierarchy, compressed impact timing, look rules, review targets and a
     conservative AE->Spine sequence budget. Use this before issuing low-level After Effects MCP calls."""
     return ae_vfx_director.plan(brief, event, style, intensity, fps, duration, target)
+
+
+@mcp.tool()
+def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
+                  mask_mode: str = "auto", background: str = "", max_frames: int = 96) -> dict:
+    """Reverse engineer a VFX reference video or PNG sequence into a persistent editable recipe.
+
+    The capture stores an FX energy/timing curve, impact beats, center of motion, spread,
+    dominant colors and reference contact sheet under library_dir/<name>/.
+    Source = video (ffmpeg installed) or image-sequence folder (supply fps).
+    mask_mode = auto|alpha|black|green|background|none. For footage shot over a
+    scene, provide background=<clean plate PNG> and mask_mode=background.
+    This estimates visible behavior, not unavailable original AE/particle settings.
+    Next: ae_fx_remix(recipe=returned recipe path)."""
+    return ae_fx_memory.capture(source, library_dir, name, fps, mask_mode, background, max_frames)
+
+
+@mcp.tool()
+def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
+                color: str = "", speed: float = 1.0, spark_count: int = -1,
+                comp_name: str = "", save_as: str = "") -> dict:
+    """Build a reusable editable native AE FX composition from a captured reference recipe.
+
+    strength 0.25..3 boosts impact, scale and particle energy; style = stylized,
+    premium, realistic, anime; color = #RRGGBB; speed 0.25..4 retimes the keyframes;
+    spark_count >= 0 overrides the automatic count. Returns a .jsx script that builds
+    live keyframed core, halo, ring and spark layers with Impact Strength and
+    Global Scale controls. Run using AE MCP ae_run_script. Optional save_as=.aep
+    saves the created project. A multi-layer AE comp is a reusable library asset;
+    a single-layer .ffx can be saved inside AE via Animation > Save Animation Preset.
+    This is a first-pass procedural rebuild, not an exact inverse render."""
+    return ae_fx_memory.remix(recipe, out_dir, strength, style, color, speed,
+                              spark_count, comp_name, save_as)
 
 
 @mcp.tool()
