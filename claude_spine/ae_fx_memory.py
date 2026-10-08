@@ -186,7 +186,8 @@ def _compact(samples: list[dict], must: set[int], tolerance: float = 0.038) -> l
 
 
 def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
-            mask_mode: str = "auto", background: str = "", max_frames: int = 96) -> dict:
+            mask_mode: str = "auto", background: str = "", max_frames: int = 96,
+            archive_source: bool = True) -> dict:
     """Capture the VFX motion signature into a versioned, reusable JSON recipe.
 
     PNG/TIFF/JPEG sequence directories need fps. Videos need ffmpeg. For composite
@@ -261,6 +262,37 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
             "warnings": warnings,
             "limitations": "Reverse engineered timing, color, size and motion; source particle emitters, depth and effect-stack parameters cannot be recovered reliably from flattened footage.",
         }
+        # Store an independent reference for later comparisons. Without this,
+        # simply moving the original video would break the iterative FX memory.
+        preset["source"]["original_path"] = str(src)
+        preset["source"]["archived"] = False
+        if archive_source:
+            if src.is_dir():
+                archived = target / "source_frames"
+                if src != archived:
+                    archived.mkdir(parents=True, exist_ok=True)
+                    for old in archived.glob("ref_*"):
+                        if old.is_file():
+                            old.unlink()
+                    for i, path in enumerate(paths):
+                        shutil.copy2(path, archived / f"ref_{i:06d}{path.suffix.lower()}")
+                preset["source"]["path"] = str(archived)
+                # Sampled input frames are uniformly represented on the new
+                # timeline; original nonuniform source indices are not needed
+                # to keep their first/last timing aligned.
+                new_fps = (len(paths) - 1) / max(times[-1], 1e-6)
+                preset["source"]["sample_fps"] = round(new_fps, 5)
+                preset["source"]["archived"] = True
+            elif src.stat().st_size <= 250 * 1024 * 1024:
+                archived = target / ("reference_clip" + src.suffix.lower())
+                if archived != src:
+                    shutil.copy2(src, archived)
+                preset["source"]["path"] = str(archived)
+                preset["source"]["archived"] = True
+            else:
+                warnings.append("Video is over 250 MB; original reference remains external and must be kept accessible.")
+        else:
+            warnings.append("archive_source=False: comparison needs the original footage to remain accessible.")
         dest = target / "recipe.json"
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target,
                                          prefix=".capture-", suffix=".json", delete=False) as handle:
@@ -278,7 +310,8 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
         im.save(sheet, quality=88)
     return {"recipe": str(dest), "reference": str(sheet), "event": family,
             "beats": preset["analysis"]["beats"], "keys": len(preset["keys"]),
-            "mask_mode": method, "warnings": warnings,
+            "mask_mode": method, "archived": preset["source"]["archived"],
+            "stored_source": preset["source"]["path"], "warnings": warnings,
             "next": "ae_fx_remix recipe=<recipe path> out_dir=<output folder> strength=1.8 style=anime"}
 
 
