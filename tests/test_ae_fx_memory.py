@@ -286,7 +286,8 @@ def test_ae_auto_fit_wrapper_guards_unrelated_open_projects(tmp_path):
     assert "p.numItems !== 0 || p.file" in wrapper
     assert "$.evalFile(new File(" in wrapper
     assert "app.project.save" in wrapper
-    assert "JSON.stringify" in wrapper
+    assert "JSON.stringify" not in wrapper
+    assert 'f.writeln(ok ? "OK" : "ERROR");' in wrapper
     assert "__ACK__" not in wrapper
     next_wrapper = A._wrapper(tmp_path/"next.jsx", tmp_path/"next.aep",
                               tmp_path/"next.json", previous=tmp_path/"autofit.aep")
