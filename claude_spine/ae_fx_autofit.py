@@ -124,7 +124,7 @@ def auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
     best = None
     for iteration in range(1, max_rounds+1):
         aep = dest / f"autofit_{iteration:03d}.aep"
-        ack = dest / f"autofit_{iteration:03d}.json"
+        ack = dest / f"autofit_{iteration:03d}_ack.txt"
         _execute(current["jsx"], aep, ack, previous, binary, timeout_seconds)
         previous = aep
         folder = dest / f"autofit_{iteration:03d}_frames"
