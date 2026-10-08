@@ -171,7 +171,9 @@ ae_fx_auto_fit recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
 ```
 
 The executable path above is an **example**, not a guaranteed installation path.
-It uses Adobe's supported AfterFX `-r` script execution and the existing
+Enable **Allow Scripts To Write Files And Access Network** in AE's
+Scripting & Expressions preferences so the runner can save its project and
+completion signal. It uses Adobe's supported AfterFX `-r` script execution and the existing
 `aerender` sequence exporter. Each round waits for an AE-written completion
 signal, renders the saved composition, scores the REAL render, generates an
 improved comp and repeats until the score plateaus or its round limit is hit.
