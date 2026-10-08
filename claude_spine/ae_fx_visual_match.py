@@ -233,13 +233,25 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     texture_delta = _clip((tex_target - tex_candidate) * 18., -25, 30)
     timing_correction = (ref_mass_center - cand_mass_center) / duration
     timing_correction = _clip(timing_correction, -.3, .3)
+    previous_path = dest / f"match_{iteration-1:03d}.json"
+    previous = {}
+    if iteration > 1 and previous_path.exists():
+        try:
+            previous = json.loads(previous_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previous = {}
+    previous_score = previous.get("score")
+    # Shrink corrections if the last real render became worse, instead of
+    # blindly amplifying the next adjustment.
+    worse = previous_score is not None and score < float(previous_score) - .15
+    step_scale = .4 if worse else .7
     settings = {key: float((tuning or {}).get(key, default)) for key, default in {
         "energy_gain": 1.0, "radius_gain": 1.0,
         "halo_gain": 1.0, "ring_gain": 1.0,
         "offset_x": 0., "offset_y": 0., "time_shift": 0.,
         "roughness": 0.,
     }.items()}
-    damp = .7
+    damp = step_scale
     settings.update({
         "energy_gain": _clip(settings["energy_gain"] * energy_ratio**damp, .2, 4),
         "radius_gain": _clip(settings["radius_gain"] * radius_ratio**damp, .35, 3),
@@ -272,18 +284,36 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     matched = memory.remix(recipe, str(dest), strength=strength, style=style, color=color,
                            speed=speed, canvas=canvas, fit=settings,
                            comp_name=f'{recipe_obj["id"]}_match_{iteration+1:03d}')
+    best = {"iteration": iteration, "score": score,
+            "candidate": aep or str(Path(candidate_frames).resolve())}
+    if previous:
+        older = previous.get("best", {})
+        if float(older.get("score", -1)) > score:
+            best = older
+    change = None if previous_score is None else round(score - float(previous_score), 4)
+    stop = bool(score >= 98. or (change is not None and abs(change) < .15))
+    stop_reason = ("Visual match already very close by the numeric score."
+                   if score >= 98. else
+                   "Measured change below 0.15 points; review artistically before more iterations."
+                   if stop else
+                   "This iteration scored lower than the previous one; inspect best candidate."
+                   if worse else "")
     report = {
         "version": 1, "iteration": iteration, "reference": str(Path(source).resolve()),
         "candidate": aep or str(Path(candidate_frames).resolve()),
         "candidate_comp": comp or None,
         "frames_compared": len(ref_pm), "matched_times": [round(x, 4) for x in ref_times],
-        "score": score, "score_note": "Diagnostic frame match score; comparison against newly rendered output is needed to verify improvement.",
+        "score": score, "previous_score": previous_score, "measured_change": change,
+        "best": best, "stop": stop, "stop_reason": stop_reason,
+        "score_note": "Diagnostic frame match score; comparison against newly rendered output is needed to verify improvement.",
         "errors": {**aggregate, "center": round(abs_center, 6),
                    "energy": round(energy_l1, 6), "spread": round(radius_l1, 6)},
         "corrections": factors, "tuning": settings,
         "next_jsx": matched["jsx"], "next_comp": matched["comp"],
         "comparison": str(comparison),
-        "next": "Run next_jsx inside AE, render next_comp to new frames or .aep; call ae_fx_match again with iteration incremented and tuning from this result.",
+        "next": ("Review the best reported candidate; no further correction required by the automatic stop criterion."
+                 if stop else
+                 "Run next_jsx inside AE, render next_comp to new frames or .aep; call ae_fx_match again with iteration incremented and tuning from this result."),
     }
     report_path = dest / f"match_{iteration:03d}.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
