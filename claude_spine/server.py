@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_fx_memory, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_fx_memory, ae_fx_visual_match, ae_look, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -492,6 +492,35 @@ def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "
     This is a first-pass procedural rebuild, not an exact inverse render."""
     return ae_fx_memory.remix(recipe, out_dir, strength, style, color, speed,
                               spark_count, comp_name, save_as, canvas)
+
+
+@mcp.tool()
+def ae_fx_match(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps: float = 0.0,
+                aep: str = "", comp: str = "", reference: str = "", background: str = "",
+                candidate_mode: str = "alpha", max_frames: int = 40,
+                iteration: int = 1, style: str = "premium",
+                strength: float = 1.0, color: str = "", speed: float = 1.0,
+                canvas: int = 1024, tuning: dict | None = None) -> dict:
+    """Compare the actual rendered AE effect with its captured reference, then AUTO-CORRECT
+    the next editable After Effects build. Re-run after every AE render for a genuine feedback loop.
+
+    Use candidate_frames (sequence + candidate_fps), OR saved .aep + comp
+    (rendered with aerender). Reference footage path comes from ae_fx_capture's
+    recipe; reference= overrides it if moved. background= clean plate for
+    original composite footage; candidate_mode=alpha|black|none.
+
+    Reports frame-matched image/alpha/energy/size/position/timing/texture error,
+    writes comparison JPG and JSON, calculates damped corrections and produces
+    the next .jsx automatically. Pass the returned tuning to the NEXT call
+    after running/rendering the new JSX. Stop based on measured scores and
+    art direction, NOT on unverified predicted improvements.
+    Original reference is never altered. Native AE source layers stay editable."""
+    return ae_fx_visual_match.compare(
+        recipe=recipe, out_dir=out_dir, candidate_frames=candidate_frames,
+        candidate_fps=candidate_fps, aep=aep, comp=comp, reference=reference,
+        background=background, candidate_mode=candidate_mode, max_frames=max_frames,
+        iteration=iteration, style=style, strength=strength, color=color,
+        speed=speed, canvas=canvas, tuning=tuning)
 
 
 @mcp.tool()
