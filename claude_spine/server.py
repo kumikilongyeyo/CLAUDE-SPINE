@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_templates, ae_vfx_director
+from . import ae_bridge, ae_look, ae_templates, ae_vfx_director
 from . import animation_opt
 from . import atlas as atlas_mod
 from . import fx as fx_mod
@@ -469,9 +469,10 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
                     x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                     blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                     behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                    keep_frames: str = "", copies: list[list[float | None]] | None = None,
+                    keep_frames: str = "", copies: list[list[float | None] | dict[str, Any]] | None = None,
                     feather: float = -1.0, anchor: list[float] | None = None,
-                    deform_like: list[str] | None = None, min_fps: float = -1.0) -> dict:
+                    deform_like: list[str] | None = None, min_fps: float = -1.0, tintable: bool = False,
+                    tint: str = "") -> dict:
     """Production AE->Spine import with automatic mobile-safe sequence budgets.
 
     This wraps ae_fx_to_spine rather than replacing it. The director trims empty frames, keeps playback
@@ -480,7 +481,8 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
     ae_fx_to_spine). Explicit max_size/max_frames/feather override the policy.
     min_fps (default 12; 0 = off; with an explicit max_size AND max_frames it is off unless given): subsampling never
     drops below this playback rate. Loops/pingpongs shrink the texture first, then frames; one-shots drop frames
-    first, down to min_fps, then shrink the texture, so a 16-frame 24 fps fire loop stays smooth."""
+    first, down to min_fps, then shrink the texture, so a 16-frame 24 fps fire loop stays smooth.
+    tintable / tint: one grey frame set recoloured per slot (see ae_fx_to_spine)."""
     p = _open(project)
     res = ae_vfx_director.import_optimized(
         p, name, event=event, style=style, target=target, intensity=intensity, duration=duration,
@@ -490,7 +492,8 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies,
-        feather=feather, anchor=anchor, deform_like=deform_like, min_fps=None if min_fps < 0 else min_fps)
+        feather=feather, anchor=anchor, deform_like=deform_like, min_fps=None if min_fps < 0 else min_fps,
+        tintable=tintable, tint=tint)
     return _saved(p, res)
 
 
@@ -510,9 +513,10 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
                    x: float = 0, y: float = 0, scale: float = 1.0, max_size: int = 0, max_frames: int = 0,
                    blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                    behind: str = "", fade: float = 0.0, start_frame: int = -1, end_frame: int = -1,
-                   keep_frames: str = "", copies: list[list[float | None]] | None = None,
+                   keep_frames: str = "", copies: list[list[float | None] | dict[str, Any]] | None = None,
                    feather: float = 0.0, anchor: list[float] | None = None,
-                   deform_like: list[str] | None = None, min_fps: float = 0.0) -> dict:
+                   deform_like: list[str] | None = None, min_fps: float = 0.0, tintable: bool = False,
+                   tint: str = "") -> dict:
     """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
 
     Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
@@ -537,7 +541,14 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     anchor=[fx, fy]: the comp point (fractions, y down) that lands on x, y (an off-centre lens-flare source);
     feather (0..0.5): fade the frames to nothing toward their border (a halo the comp edge would cut square);
     deform_like=[slots]: the sequence becomes a grid mesh whose weights are copied from those slots' meshes, so
-    light baked on the art (surface_sweep) bends with the art (its tilt, its 2.5D turn)."""
+    light baked on the art (surface_sweep) bends with the art (its tilt, its 2.5D turn).
+    tintable=True: the frames are stored GREY and coloured by the slot's light + dark colour (Spine two-colour tint,
+    "tint black"), fitted so it still looks like the render; then ONE frame set plays in any colour: tint="RRGGBB"
+    turns the fitted pair to that hue (a white core stays white), tint="LLLLLL/DDDDDD" sets light/dark exactly, and
+    copies take their own: copies=[{"x": 0, "y": 0, "tint": "FF3030"}, ...]. The result's tint.grade says whether
+    the effect is two-tone: good for lightning, electricity, frost, ice, smoke; fair for cooling sparks; poor for fire and gold
+    glows (white -> yellow -> orange -> red needs more than two colours: make those variants in AE). The game
+    runtime must draw two-colour tint (spine-webgl does; spine-pixi turns it on for slots with a dark colour)."""
     p = _open(project)
     res = ae_bridge.fx_to_spine(
         p, name, aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
@@ -546,8 +557,32 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies, feather=feather,
-        anchor=anchor, deform_like=deform_like, min_fps=min_fps)
+        anchor=anchor, deform_like=deform_like, min_fps=min_fps, tintable=tintable, tint=tint)
     return _saved(p, res)
+
+
+@mcp.tool()
+def ae_quick_look(aep: str = "", comp: str = "", frames_dir: str = "", fps: float = 0, mode: str = "alpha",
+                  art: str = "", art_scale: float = 1.0, art_offset: list[float] | None = None,
+                  art_in_front: bool = False, background: str = "", out: str = "", tile: int = 260,
+                  start_frame: int = -1, end_frame: int = -1, keep_frames: str = "") -> dict:
+    """Judge an AE effect BEFORE importing it: one contact-sheet PNG of its four key frames (end of anticipation,
+    impact, mid decay, last visible frame), found on the effect's own energy curve, on dark grey and in the scene.
+
+    Source: aep + comp (aerender, from the SAVED .aep) or frames_dir + fps. mode: "alpha" or "additive" (light on
+    black), as for ae_fx_to_spine. art: a PNG of the thing it sits on (the coin face), drawn at comp pixels x
+    art_scale, centred on the comp + art_offset [x, y] px (y down); art_in_front=True draws it over the effect (an
+    aura behind a coin). background: a PNG filling the tile behind everything (the game screen). Read the sheet
+    image to judge; the energy curve under it marks the beats. kind: "hit" (anticipation end, impact = the hottest
+    frame, mid decay, residual), "build" (rises and holds, e.g. frost: start, half built, fully built, end) or
+    "loop" (four evenly spaced frames). Returns the sheet path, the beats (comp frame and seconds), and hit_ae (a
+    hit's impact time) or built_at, to pass to ae_fx_to_spine / ae_vfx_to_spine as hit_ae. Default sheet: <tmp>/claude_spine_looks/<comp>.png. Render time is mostly AE
+    opening the project (18-22 s for a 300-comp project, 5-8 s for a small one): tune effects in a small .aep."""
+    return ae_look.quick_look(aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, art=art,
+                              art_scale=art_scale, art_offset=tuple(art_offset or (0.0, 0.0)),
+                              art_in_front=art_in_front, background=background, out=out, tile=tile,
+                              start_frame=None if start_frame < 0 else start_frame,
+                              end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
 
 
 @mcp.tool()

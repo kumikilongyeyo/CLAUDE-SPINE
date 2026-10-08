@@ -37,6 +37,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from . import ae_tint
 from .ir import Bone, MeshAttachment, RegionAttachment, Sequence, Slot
 from .project import Project
 from .timeline import AnimBuilder, r
@@ -243,14 +244,21 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
                     color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
                     behind: str = "", fade: float = 0.0, trim: bool = True, first_frame_time: float = 0.0,
                     manifest_extra: dict | None = None, feather: float = 0.0, anchor=None,
-                    deform_like: list[str] | None = None, min_fps: float = 0.0, min_size: int = 0) -> dict:
+                    deform_like: list[str] | None = None, min_fps: float = 0.0, min_size: int = 0,
+                    tintable: bool = False, tint: str = "") -> dict:
     """Frames on disk -> sprites in ``images/ae/`` -> a sequence attachment on a new slot, keyed in
     ``animation`` (default ``ae_<name>``; an existing one is merged into).
 
     ``first_frame_time``: comp time (s) of ``frames[0]`` (its frame number / fps), used with ``hit_ae``.
     ``min_fps`` (0 = off): never subsample below this playback rate; ``max_frames`` x ``max_size`` is then a memory
     budget that loops meet by shrinking the texture first (down to ``min_size``, default half of ``max_size``) and
-    one-shots by dropping frames first (see ``frame_budget``)."""
+    one-shots by dropping frames first (see ``frame_budget``).
+
+    ``tintable``: store the frames as grey and colour them with the slot's light + dark colour (Spine two-colour
+    tint), fitted so the default look matches the render; ``tint`` recolours (see ``ae_tint.recolour``) and copies
+    can take their own. The result's ``tint`` reports the fit; grade "poor" means the effect is not two-tone."""
+    if tint and not tintable:
+        raise ValueError("tint needs tintable=True (the frames must be stored as grey to be recoloured)")
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
     if seq_mode not in SEQ_MODES:
@@ -271,6 +279,19 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
                           min_fps=min_fps, min_size=min_size)
     step, (tw, th) = budget["step"], budget["size"]
     keep = keep[::step]
+    resize = (tw, th) if (tw, th) != (w, h) else None
+
+    tint_info = None
+    if tintable:                     # pass 1: fit the two colours on a sample of every kept frame
+        stride = math.ceil(len(keep) * tw * th / ae_tint.SAMPLE)
+        f = ae_tint.fit(np.concatenate([ae_tint.sample_pixels(to_straight(pms[i], mode, resize), stride)
+                                        for i in keep]), mode)
+        light, dark = ae_tint.recolour(f["light"], f["dark"], tint) if tint else (f["light"], f["dark"])
+        color = ae_tint.rgb_hex(light) + (color[6:8] if len(color) >= 8 else "FF")
+        tint_info = {"light": ae_tint.rgb_hex(light), "dark": ae_tint.rgb_hex(dark),
+                     "fitted_light": ae_tint.rgb_hex(f["light"]), "fitted_dark": ae_tint.rgb_hex(f["dark"]), "ramp": f["ramp"],
+                     "error_mean": f["error_mean"], "error_p99": f["error_p99"], "grade": f["grade"],
+                     "note": f["note"], **({"tint": tint} if tint else {})}
 
     digits = max(2, len(str(len(keep) - 1)))
     img_dir = project.images_dir / "ae"
@@ -278,7 +299,10 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
     for old in img_dir.glob(f"{name}_*.png"):
         old.unlink()
     for n, i in enumerate(keep):
-        out = to_straight(pms[i], mode, (tw, th) if (tw, th) != (w, h) else None)
+        out = to_straight(pms[i], mode, resize)
+        if tint_info:
+            out = ae_tint.to_grey(out, ae_tint.hex_rgb(tint_info["fitted_light"]),
+                                  ae_tint.hex_rgb(tint_info["fitted_dark"]), tint_info["ramp"])
         if feather > 0:
             out[..., 3] *= edge_window(out.shape[1], out.shape[0], feather)
         im = Image.fromarray(np.round(out * 255).astype(np.uint8), "RGBA")
@@ -309,7 +333,8 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
         raise ValueError(f"no bone named {parent!r} to parent the sequence to")
     sk.bones.append(Bone(name=gname, parent=parent, x=x, y=y, length=0, color="FF9E00FF"))
     bl = blend or ("additive" if mode == "additive" else "normal")
-    slot = Slot(name=sk.unique_name(f"{gname}", "slot"), bone=gname, color=color, blend=bl)
+    slot = Slot(name=sk.unique_name(f"{gname}", "slot"), bone=gname, color=color, blend=bl,
+                dark=tint_info["dark"] if tint_info else None)
     if behind:
         sk.add_slot(slot, before=behind)
     elif front_of:
@@ -348,24 +373,28 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
             "image_size": [tw, th], "source_size": [w, h], "fps": fps, "delay": round(delay, 5),
             "playback_fps": round(1 / delay, 3), **({"budget_note": budget["note"]} if budget["note"] else {}),
             "start": round(t0, 4), "end": round(t_off, 4), "sequence_seconds": round(dur, 4),
-            "blend": bl, "mode": mode, "seq_mode": seq_mode, **(manifest_extra or {})}
+            "blend": bl, "mode": mode, "seq_mode": seq_mode, **({"tint": tint_info} if tint_info else {}),
+            **(manifest_extra or {})}
 
 
 def copy_sequence(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
-                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0) -> str:
+                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0,
+                  tint: str = "") -> str:
     """Another instance of an imported sequence (``res`` = the import's result) on a new slot that SHARES its frames:
     the atlas holds one set of images however many copies play (glitter in every cell of a cluster, sparks on every
     coin). x, y in ``parent``'s space (default: the original's parent); start defaults to the original's, until to the
     original's end for loops. scale multiplies this instance's size and rotation (degrees) turns it, both on the copy's
-    own bone (escalating hits from one frame set: scale 1 / 1.3 / 1.7). Returns the new slot (``copy_instance`` returns
-    the slot, bone and placement)."""
+    own bone (escalating hits from one frame set: scale 1 / 1.3 / 1.7). tint recolours this copy (the import must be
+    tintable). Returns the new slot (``copy_instance`` returns the slot, bone and placement)."""
     return copy_instance(project, res, x=x, y=y, start=start, until=until, parent=parent, scale=scale,
-                         rotation=rotation)["slot"]
+                         rotation=rotation, tint=tint)["slot"]
 
 
 def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
-                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0) -> dict:
-    """``copy_sequence`` returning ``{slot, bone, x, y, start, end, scale, rotation}``."""
+                  until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0,
+                  tint: str = "") -> dict:
+    """``copy_sequence`` returning ``{slot, bone, x, y, start, end, scale, rotation}`` (+ ``light``, ``dark``
+    when tinted)."""
     sk = project.data
     src = next(s for s in sk.slots if s.name == res["slot"])
     src_bone = next(b for b in sk.bones if b.name == res["bone"])
@@ -374,11 +403,18 @@ def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0
         raise ValueError(f"no bone named {parent!r} to parent the sequence copy to")
     if not scale or scale <= 0:
         raise ValueError(f"copy scale must be positive, not {scale!r}")
+    color, dark = src.color, src.dark
+    if tint:
+        if not res.get("tint"):
+            raise ValueError("a copy's tint needs the sequence imported with tintable=True")
+        light, dk = ae_tint.recolour(ae_tint.hex_rgb(res["tint"]["fitted_light"]),
+                                     ae_tint.hex_rgb(res["tint"]["fitted_dark"]), tint)
+        color, dark = ae_tint.rgb_hex(light) + src.color[6:8], ae_tint.rgb_hex(dk)
     t0 = res["start"] if start is None else start
     bn = sk.unique_name(res["bone"])
     sk.bones.append(Bone(name=bn, parent=parent, x=x, y=y, rotation=rotation, scaleX=scale, scaleY=scale, length=0,
                          color="FF9E00FF"))
-    slot = Slot(name=sk.unique_name(bn, "slot"), bone=bn, color=src.color, blend=src.blend)
+    slot = Slot(name=sk.unique_name(bn, "slot"), bone=bn, color=color, dark=dark, blend=src.blend)
     sk.add_slot(slot, after=res["slot"])
     sk.set_attachment(slot.name, "fx", sk.attachment(res["slot"], "fx").model_copy(deep=True))
     ab = AnimBuilder(sk, res["animation"], replace=False)
@@ -392,16 +428,22 @@ def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0
     ab.slot_attachment(slot.name, pts)
     ab.sequence(slot.name, "fx", [(t0, res["seq_mode"], 0, res["delay"])])
     return {"slot": slot.name, "bone": bn, "x": x, "y": y, "start": round(t0, 4), "end": round(end, 4),
-            "scale": scale, "rotation": rotation}
+            "scale": scale, "rotation": rotation, **({"light": color[:6], "dark": dark} if tint else {})}
 
 
 def parse_copy(cp) -> dict:
     """One ``copies`` entry: [x, y], [x, y, start], [x, y, start, scale] or [x, y, start, scale, rotation]
-    (start may be null = the original's start), or a dict with those keys."""
+    (start may be null = the original's start), or a dict with those keys plus ``tint`` (a tintable import's copy in
+    its own colour: "RRGGBB" or "light/dark")."""
+    tint = ""
     if isinstance(cp, dict):
-        unknown = set(cp) - {"x", "y", "start", "scale", "rotation"}
+        unknown = set(cp) - {"x", "y", "start", "scale", "rotation", "tint"}
         if unknown or "x" not in cp or "y" not in cp:
-            raise ValueError(f"copy {cp!r}: give x, y and optionally start, scale, rotation")
+            raise ValueError(f"copy {cp!r}: give x, y and optionally start, scale, rotation, tint")
+        tint = cp.get("tint") or ""
+        if tint:
+            for part in str(tint).split("/"):
+                ae_tint.hex_rgb(part)                    # a bad colour fails before anything is written
         cp = [cp["x"], cp["y"], cp.get("start"), cp.get("scale"), cp.get("rotation")]
     cp = list(cp)
     if not 2 <= len(cp) <= 5:
@@ -411,7 +453,8 @@ def parse_copy(cp) -> dict:
     if scale is not None and float(scale) <= 0:
         raise ValueError(f"copy {cp[:5]!r}: scale must be positive")
     return {"x": float(x), "y": float(y), "start": None if start is None else float(start),
-            "scale": 1.0 if scale is None else float(scale), "rotation": 0.0 if rot is None else float(rot)}
+            "scale": 1.0 if scale is None else float(scale), "rotation": 0.0 if rot is None else float(rot),
+            **({"tint": str(tint)} if tint else {})}
 
 
 def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", frames_dir: str = "",
@@ -421,6 +464,11 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
     ``frames_dir`` + ``fps`` (frames already on disk: TIFF premultiplied, or PNG straight RGBA / light-on-black
     RGB)."""
     placed = [parse_copy(cp) for cp in copies or []]       # a bad entry fails before anything is rendered or written
+    if any("tint" in c for c in placed) and not kw.get("tintable"):
+        raise ValueError("copies with a tint need tintable=True")
+    if kw.get("tint"):
+        for part in str(kw["tint"]).split("/"):
+            ae_tint.hex_rgb(part)
     tmp = None
     try:
         if aep:

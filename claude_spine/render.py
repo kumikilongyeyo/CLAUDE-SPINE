@@ -2,9 +2,9 @@
 
 Draws textured triangles with PIL affine transforms (C speed), composites them
 in premultiplied space with the slot's blend mode, and writes PNG frames, a
-contact sheet or a GIF. It is a preview, not the game renderer: no MSAA, no
-two-colour tint. It is exact about *where* things are, which is what review
-needs.
+contact sheet or a GIF. It is a preview, not the game renderer: no MSAA. It
+does two-colour tint (a slot's dark colour) the way spine-webgl does. It is
+exact about *where* things are, which is what review needs.
 """
 from __future__ import annotations
 
@@ -106,7 +106,14 @@ def render_frame(draws: list[dict], pages: _Pages, view: tuple[float, float, flo
             continue
         py, px, layer = res
         col = np.array(d["color"], np.float32)
-        layer *= np.r_[col[:3] * col[3], col[3]]
+        if d.get("dark") is not None:
+            # two-colour tint (spine-webgl, premultiplied): rgb = (a - t) * dark + t * light, both times slot alpha
+            dk = np.array(d["dark"], np.float32)
+            ta = layer[..., 3:4]
+            layer[..., :3] = ((ta - layer[..., :3]) * dk + layer[..., :3] * col[:3]) * col[3]
+            layer[..., 3:4] = ta * col[3]
+        else:
+            layer *= np.r_[col[:3] * col[3], col[3]]
         dst = acc[py:py + layer.shape[0], px:px + layer.shape[1]]
         blend = d.get("blend", "normal")
         la = layer[..., 3:4]
@@ -136,7 +143,8 @@ def union_bounds(dump: dict, anims: list[str] | None = None, pad: float = 0.06):
     for n, a in dump["animations"].items():
         if anims is None or n in anims:
             bs.append(a["bounds"])
-    bs = [b for b in bs if all(np.isfinite(b))]
+    # nothing drawn (an FX-only skeleton's setup pose) dumps Infinity bounds, which JSON turns into null
+    bs = [b for b in bs if b is not None and all(v is not None and np.isfinite(v) for v in b)]
     if not bs:
         return (-100, -100, 100, 100)
     b = np.array(bs)

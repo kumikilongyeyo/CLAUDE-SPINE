@@ -114,11 +114,16 @@ If procedural motion is needed, put noise/expression controls behind named contr
 
 ## 5. Render and self-review
 
-Render the comp or representative frames. Inspect at least:
-- end of anticipation
-- impact peak
-- mid decay
-- final residual
+Call ae_quick_look on the saved comp (or rendered frames) with art= the thing the effect sits on and, when you have
+it, background= the game screen. It writes ONE contact sheet: the four judge frames on dark grey and in the scene,
+plus the energy curve. Read that image. It picks the frames itself:
+- a hit: end of anticipation, impact (the flash), mid decay, final residual
+- a build (frost creeping, charge-up): start, half built, fully built, end
+- a loop: four evenly spaced frames
+
+Use its hit_ae as the import's hit_ae. A render costs mostly AE opening the project (18-22 s for a 300-comp .aep, 5-8 s
+for a small one), so tune the effect in a small .aep and re-run quick look after every change; import only once it
+passes review.
 
 Score 0-10:
 - readability
@@ -150,6 +155,11 @@ It wraps the raw ae_fx_to_spine bridge and automatically:
 - exposes the policy in the returned director metadata
 
 Repeated effects should use copies= so all instances share one sequence image set.
+
+Colour variants of a two-tone effect (electricity, lightning, frost, ice, smoke): import once with
+tintable=True and give each copy its own tint ({"x": .., "y": .., "tint": "FF3030"}); one grey frame set then plays
+red, green and purple. Check the result's tint.grade: "poor" (fire, gold glows, anything white -> yellow -> orange ->
+red) means two colours cannot hold it, so render those variants in AE and import without tintable.
 
 Do not bake cheap things into AE just because AE can do them. Keep simple glow pulses, rings, shakes, repeated sparks and similar moving-light effects native Spine when possible.
 
@@ -203,5 +213,8 @@ only visible that way.
   groups); Gradient Wipe completion/softness are 0..1; Cell Pattern's contrast is "Contextual Slider"; scripts run
   through the MCP must `return` a string; AE caches renders by comp NAME (new name per attempt); the first
   saveFrameToPng after switching comps can be stale (throw one away).
+- **Two optimisations that do NOT work on realistic renders** (measured on 6 fx1008 glows): splitting a sharp core
+  from a low-res soft glow saved -19% to +15% of atlas area; shrinking "soft" glows to half size changes 1% of pixels
+  by 12-16/255. Realistic glows carry real texture; budget by frame count and copies, not by blur.
 - **Repeated hits:** one rendered sequence, played as copies with their own scale / rotation (copies=[[x, y, start,
   scale, rotation], ...]) escalates three impacts without three frame sets.

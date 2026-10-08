@@ -926,6 +926,67 @@ Exceptions to the default:
 `ae_fx_to_spine` also takes `min_fps`, but it defaults to 0 there, so its old behaviour is unchanged. Imports now
 report `playback_fps`, and the director's report adds `min_fps` and `playback_fps`.
 
+**`tintable`: one grey frame set, recoloured per slot.**
+
+`ae_fx_to_spine` / `ae_vfx_to_spine` take `tintable=True`. The frames are stored grey and coloured by the slot's
+light and dark colour (Spine two-colour tint, "tint black": `out = g * light + (1 - g) * dark`). The two colours are
+fitted to the render, so the default look matches it. After that, one frame set plays in any colour:
+
+    ae_vfx_to_spine ... tintable=true tint=FF3030                       -> red electricity, white core kept
+    ae_vfx_to_spine ... tintable=true copies=[{x: 0, y: 0, tint: "30FF60"}, {x: 200, y: 0, tint: "FFFFFF/7A2CFF"}]
+
+`tint="RRGGBB"` turns the fitted pair to that hue. Each end keeps its own lightness and saturation, so a white-hot
+core stays white. A colourless fit (white lightning, frost, grey smoke) instead takes the tint as its dark end.
+`tint="LLLLLL/DDDDDD"` sets the light and dark colours exactly. Copies can take their own tint (dict form).
+
+White additive light (lightning, white flashes) has no colour ramp: every pixel is near-white and only its brightness
+varies. Its grey is therefore the pixel's brightness (`ramp: "brightness"` in the result). Untinted, it reproduces
+the render. A tint colours the dim glow and leaves the bright core white.
+
+An effect that cools to near-black (sparks: white -> orange -> dark red) hue-shifts into near-black, so the shift
+barely shows. Give it the pair (`FFFFFF/2E7BFF`); even then it recolours only faintly, which is why it grades fair.
+
+The result's `tint` gives the fitted colours, the error and a grade. The thresholds were measured on the fx1008 and
+skull-coin renders (mean premultiplied error, 0..255):
+
+| grade | error | renders |
+|---|---|---|
+| good | 10 or less | frost 4, lightning 4 (8 on the brightness ramp), smoke 6, electric ring/sphere 7, electric star 9, ice shatter 10 |
+| fair | 10 to 14 | cooling sparks 10.3 (recolours pale), energy orb 13 (its cyan rim goes purple-blue) |
+| poor | above 14 | gold win glow 18, fire 19-23 |
+
+Poor means the effect is not two-tone. White -> yellow -> orange -> red is a curve, and two colours turn it pale
+pink. Make colour variants of fire and gold in After Effects instead.
+
+Through the real runtime, the tinted electric star differs from the plain import by mean 1.4 / p99 22 (0..255) on
+screen. Spine 4.2.43 imports it with zero repairs and keeps the dark colours on re-export. The game runtime must draw
+two-colour tint: spine-webgl does, and spine-pixi turns it on for slots with a dark colour. The preview renderer
+draws it too.
+
+Two other optimisations were measured and rejected, because neither holds on realistic renders:
+
+- Splitting a sharp core from a soft glow at a lower resolution saved -19% to +15% of atlas area.
+- Shrinking "soft" glows: at half size, 1% of pixels change by 12-16 (0..255), because the texture inside realistic
+  glows is real detail.
+
+**`ae_quick_look`: judge the four key frames before importing.**
+
+    ae_quick_look aep=x.aep comp=frost_v3 mode=alpha art=coin_face.png
+    ae_quick_look frames_dir=renders/sparks fps=30 mode=additive art=coin_face.png art_scale=0.5 background=game.png
+
+This writes one contact sheet, with a row on dark grey and a row in the scene (art over an optional background, or
+`art_in_front=true` for an aura behind the object), plus the energy curve with the beats marked. The beats are
+found by the shape of the curve:
+
+- **hit:** anticipation end, impact (the frame with the most white-hot area, so the flash and not the later spread),
+  mid decay and residual. An effect that opens on its flash shows its spread instead of an anticipation frame.
+- **build** (rises and holds, like frost creeping): start, half built, fully built, end.
+- **loop:** four evenly spaced frames.
+
+It returns `hit_ae` (or `built_at`) to pass to the import. Render time is mostly AE opening the project. A 300-comp,
+72 MB .aep takes 18-22 s per render at any resolution or frame step; a small single-effect .aep takes 5-8 s. Tune
+effects in a small project.
+
 ## Hybrids: Spine recipe + After Effects part
 
 `portal` and `electric_frame` return a `ring_hint` (parent bone, the slot to draw in front of, additive, loop, until).

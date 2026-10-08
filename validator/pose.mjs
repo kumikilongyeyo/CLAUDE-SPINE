@@ -118,6 +118,7 @@ function frameDraws(t, animName) {
         page: region && region.page ? region.page.name : null,
         blend: ["normal", "additive", "multiply", "screen"][slot.data.blendMode],
         color: [sc.r * slc.r * color.r, sc.g * slc.g * color.g, sc.b * slc.b * color.b, a],
+        ...(slot.darkColor ? { dark: [slot.darkColor.r, slot.darkColor.g, slot.darkColor.b] } : {}),
         v: v.map((x) => Math.round(x * 100) / 100),
         uv: uvs.map((x) => Math.round(x * 1e5) / 1e5),
         tri: tris,
