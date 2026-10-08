@@ -36,11 +36,11 @@ def test_cliptools_help_runs_without_a_video():
 
 
 def test_starters_use_the_real_api():
-    from claude_spine import ae_bridge, atlas, fx_recipes, qa, spine_cli  # noqa: F401
+    from claude_spine import ae_bridge, ae_vfx_director, atlas, fx_recipes, qa, spine_cli  # noqa: F401
     src = (ROOT / "clip-to-spine/templates/build.py").read_text()
-    for name in ("B.fx_to_spine", "B.render_comp", "R.apply", "atlas.pack", "spine_cli.make_project", "qa.validate"):
+    for name in ("D.import_optimized", "B.render_comp", "R.apply", "atlas.pack", "spine_cli.make_project", "qa.validate"):
         assert name in src
-    assert hasattr(ae_bridge, "fx_to_spine") and hasattr(ae_bridge, "render_comp") and hasattr(atlas, "pack")
+    assert hasattr(ae_vfx_director, "import_optimized") and hasattr(ae_bridge, "render_comp") and hasattr(atlas, "pack")
 
 
 def test_every_template_named_in_the_skill_exists():

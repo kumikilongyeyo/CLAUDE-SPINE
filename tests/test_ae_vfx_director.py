@@ -133,8 +133,9 @@ def test_larger_texture_override_reduces_frames_to_stay_in_budget(symbol, tmp_pa
 def test_mcp_tools_are_registered_and_callable(symbol, tmp_path):
     from claude_spine.server import mcp
 
-    async def call(name, **args):
-        res = await mcp.call_tool(name, args)
+    # positional-only: the tools take their own `name=` argument
+    async def call(tool, /, **args):
+        res = await mcp.call_tool(tool, args)
         content = res[0] if isinstance(res, tuple) else res
         return json.loads(content[0].text)
 
