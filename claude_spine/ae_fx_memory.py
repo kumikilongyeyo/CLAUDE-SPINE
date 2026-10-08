@@ -318,6 +318,8 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     path = Path(out_dir).expanduser().resolve()
     path.mkdir(parents=True, exist_ok=True)
     name = _slug(comp_name or (obj["id"] + "_" + style))
+    if save_as:
+        Path(save_as).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.1, float(obj["analysis"]["duration"]) / speed)
     sample_fps = float(obj["source"]["sample_fps"])
     fps = min(60, max(12, round(sample_fps)))
@@ -399,8 +401,12 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
         // The base ellipse is 100 px wide, so scale == desired diameter.
         track(disk("02_CORE_reference_energy", [1,1,1], 0),
               t, coreOpacity, positions, coreScale);
-        track(disk("05_LIGHTING_soft_halo", __RGB__, 0),
-              t, haloOpacity, positions, haloScale);
+        var halo = disk("05_LIGHTING_soft_halo", __RGB__, 0);
+        try {
+            var blur = halo.property("ADBE Effect Parade").addProperty("ADBE Gaussian Blur 2");
+            blur.property(1).setValue(36);
+        } catch (ignore) { /* Comp still builds if this AE release lacks Gaussian Blur. */ }
+        track(halo, t, haloOpacity, positions, haloScale);
         track(disk("04_DISTORTION_rebuild_ring", __RGB__, 3),
               t, ringOpacity, positions, ringScale);
         var hit = __PEAK__, count = __COUNT__, burst = __BURST__;
