@@ -694,6 +694,7 @@ from . import tools_body  # noqa: E402,F401   rig_biped, clip_set, secondary, sq
 from . import tools_creature  # noqa: E402,F401   rig_creature, make_creature_sample
 from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake, ae_check, edit_slots, clone_art, art_twin, hue_cycle
 from . import tools_sugar  # noqa: E402,F401   sugar_splat_ae, sugar_splat_to_spine
+from . import tools_library  # noqa: E402,F401   ae_library, ae_library_textures, ae_library_to_spine
 
 
 def main() -> None:

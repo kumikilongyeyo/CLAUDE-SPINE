@@ -1,0 +1,1167 @@
+{
+ "_doc": "After Effects FX library: procedural builders (BUILD(V) in jsx/<builder>.jsx) that make comp <comp>. 'needs' = library entries that must be built first (realistic looks reuse their cel comp's motion). textures=true -> needs the CC0 texture folder (see fetch_textures).",
+ "effects": {
+  "aqua_impact": {
+   "name": "aqua_impact",
+   "look": "cel",
+   "builder": "aqua_impact",
+   "version": 14,
+   "comp": "aq_aqua_impact_v14",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 25,
+   "anchor_px": [
+    213,
+    198
+   ],
+   "textures": false,
+   "notes": "Procedural (seeded lumps/holes/spikes/strands, noise; nothing traced). Matches: timing (spark f9, starburst f10, blob f11-f13, shatter f14, ring f15-f21, gone f22), blob r~37 GIF px with dark outline, internal lump shading and white specs, white jagged electric rim + long spikes r~63-67 with blue glow behind and violet streak fringe, holes with dark rims, sparkle dots with blue glow out to r~80, teal/dark-teal palette. Differs: ring phase is a lumpy closed loop with 2 strands rather than the reference's two-lobed figure-8; holes smaller/rounder than the reference's big irregular eyes; spark arms thinner; ring fades a touch earlier at f21.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "blue_head_fireball": {
+   "name": "blue_head_fireball",
+   "look": "cel",
+   "builder": "blue_head_fireball",
+   "version": 22,
+   "comp": "ib_blue_head_fireball_v22",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    45,
+    174
+   ],
+   "textures": false,
+   "notes": "PROCEDURAL cel build (ae/jsx/blue_head_fireball.jsx), 408x372 (S=3), anchor = impact point (shell apex, GIF 15,58). Frames 0-5 empty. Fields: O = cauliflower head (core disc + 9 lobe discs on a ring) + cone back to the impact point, I = inner puff (core + 5 lobes), both turbulent-displaced and blurred; A = 0.5*O + 0.5*I, so the outer outline is A's 0.25 contour and the inner outline its 0.75 contour. Fill = red/orange cel bands of A, yellow patches from A + noise, white impact side from a radial ramp; holes from a distance-from-the-outlines field (|  |A-.5| - .25 |) + noise, so the fill erodes back INTO the outlines; outlines = red bands of a softer A with bead-masked hot cores, fragmented by a Silhouette Alpha noise layer whose brightness rises over time (left side first). Cyan shell = circle minus offset ellipse with a bright rim; f6 flash = orange-hot core + spiky white electric outli",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "ca_coin_glow": {
+   "name": "ca_coin_glow",
+   "look": "cel",
+   "builder": "ca_coin_glow",
+   "version": 4,
+   "comp": "ca_coin_glow_v4",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 24,
+   "anchor_px": [
+    342,
+    138
+   ],
+   "textures": false,
+   "notes": "WIN-bar light when the win jumps (coins, plumeria flowers, number are art). Comp covers clip box (0,1560)-(684,1836). Cyan-white blow-out over the bar 2.80-2.90 (fade by 3.0), white streak + glow on the top rail, magenta fringes above/below and at the frame bottom, purple haze above the rail 2.87-3.0, then glints popping along the rail 2.93-3.28 (white glares with purple/blue halos, a purple 4-point flare at x 465, a yellow glow at the right end, dot sparkles). Differs: clip wash shows the bar's own pattern through it (art-dependent); coin shines not included (art).",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 2.79,
+   "clip_xy": [
+    342,
+    1698
+   ],
+   "needs": [],
+   "kind": "clip"
+  },
+  "ca_pot_burst": {
+   "name": "ca_pot_burst",
+   "look": "cel",
+   "builder": "ca_pot_burst",
+   "version": 9,
+   "comp": "ca_pot_burst_v9",
+   "blend": "normal",
+   "loop": false,
+   "fps": 30,
+   "frames": 15,
+   "anchor_px": [
+    270,
+    248
+   ],
+   "textures": false,
+   "notes": "One pot's burst, measured on the top-middle pot (clip t 1.64-1.85). Translucent crack flash -> white-hot lobed cloud ~180x160 clip px by 1.68 with glassy white/blue shard-light spikes, warm yellow core, small white sparkles; warms and fades 1.80-1.95. Comp is 1.5x clip px. Reuse for every pot (staggered). Differs: clip cloud has more internal grey-blue streak texture and a raggeder top-right; our late fade (after 1.85, hidden by the rainbow burst in the clip) goes pale olive over dark.",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 1.64,
+   "clip_xy": [
+    320,
+    532
+   ],
+   "needs": [],
+   "kind": "clip"
+  },
+  "ca_rainbow_burst": {
+   "name": "ca_rainbow_burst",
+   "look": "cel",
+   "builder": "ca_rainbow_burst",
+   "version": 6,
+   "comp": "ca_rainbow_burst_v6",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 23,
+   "anchor_px": [
+    342,
+    550
+   ],
+   "textures": false,
+   "notes": "Full-board radial burst. The burst is CENTRED ON THE X5 and travels down with it (null 'centre' keyed to the measured X5 path, clip x~320, y 540 at 1.84 -> 1225 at 2.45); comp covers clip box (0,380)-(684,1480). Polar-mapped fractal-noise rays in purple/magenta/pink/orange/yellow/white + short warm streak texture, cyan halo + white core, warm->purple haze, 7 light ribbons, 12 flakes. Full board by ~1.95, translucent by 2.2, r~250 around the X5 at 2.31, gone ~2.50. If the X5 moves differently in-engine, drive 'centre' from it instead. Differs: clip rays carry more painted texture/shard colour; ours a touch more pink-violet late (2.35-2.45) and smoother ray edges.",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 1.84,
+   "clip_xy": [
+    342,
+    930
+   ],
+   "needs": [],
+   "kind": "clip",
+   "spine": {
+    "max_size": 640
+   }
+  },
+  "confetti_column": {
+   "name": "confetti_column",
+   "look": "cel",
+   "builder": "confetti_column",
+   "version": 2,
+   "comp": "cb_confetti_column_v2",
+   "blend": "normal",
+   "loop": true,
+   "fps": 30,
+   "frames": 30,
+   "anchor_px": [
+    300,
+    660
+   ],
+   "textures": false,
+   "notes": "Opaque confetti around the reel-4 fire column (clip B 0.0-1.4), same frame as cb_reel_fire (stack it on top). 150 torn-paper quads 14-30 px (cyan, blue, lime, green, yellow, red, magenta, purple), 26 curled purple/magenta/red streamers, 10 faint rainbow dash glints. ~80% sit within 95 px of the edge lines (62% outside), the rest over the column. Seamless 1.0 s loop: drift, flip (scale X through near 0), spin and twinkle are integer cycles per loop. Differs: clip flakes are a little larger and blur with their motion; their exact paths are not tracked (the clip doubles frames, flakes are hard to follow), so motion is a plausible hover, not a copy.",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 0.0,
+   "clip_xy": [
+    1079,
+    760
+   ],
+   "needs": [],
+   "kind": "clip",
+   "spine": {
+    "max_size": 768
+   }
+  },
+  "el_earth_rock_burst": {
+   "name": "el_earth_rock_burst",
+   "look": "realistic",
+   "builder": "el_earth_rock_burst",
+   "version": 4,
+   "comp": "el_earth_rock_burst_v4",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 30,
+   "anchor_px": [
+    256,
+    402
+   ],
+   "textures": true,
+   "notes": "1.2 s rocks erupting from ground at (256,402): ground heave + scorch_03 crater, 15 jagged rocks cut from a stone material (ready/clay_02 desaturated + clay_01 overlay + grain/mottle noise, bevel + drop shadow) thrown on drag+gravity parabolas (big = slow/low, small = fast/high), spin braked by drag, motion blur; 6 Kenney dirt_01-03 clumps spreading; 46 pebbles; tan dust column (Kenney smoke_04-08 + ready/smoke_04 photo) billowing slowly and a low dust skirt pushed out along the ground. Textures: ready/clay_01, clay_02, smoke_04, kenney dirt_01-03, scorch_03, smoke_04/05/06/07/08.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_fire_burst": {
+   "name": "el_fire_burst",
+   "look": "realistic",
+   "builder": "el_fire_burst",
+   "version": 10,
+   "comp": "el_fire_burst_v10",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 30,
+   "anchor_px": [
+    256,
+    318
+   ],
+   "textures": true,
+   "notes": "1.2 s fire explosion. f0-4 white flash (Kenney Flash/flash00 + flare_01) and a real fireball (ready/explosion_02 photo, feathered ellipse, expanding with drag) mixed with 6 Kenney Explosion cards; graded white-hot -> natural -> red and dimmed as it cools from f12, rising on buoyancy (accelerating). Fractal-noise fire (rising tall noise, alpha from density, CC Toner heat map) and Kenney flame_05/06 tongues peeling upward; 64 embers on drag+gravity ballistics cooling yellow->red; sparks_02 burst; Kenney Black smoke + smoke_04 photo soot billowing up and over the fire from f11. Bloom = thresholded blurred copy (wrapper comp). Textures: ready/explosion_02, ready/sparks_02, ready/smoke_04, kenney flame_05/06, flare_01, kenney_smoke Explosion00-08, Black smoke, Flash.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_fire_loop": {
+   "name": "el_fire_loop",
+   "look": "realistic",
+   "builder": "el_fire_loop",
+   "version": 4,
+   "comp": "el_fire_loop_v4",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 25,
+   "anchor_px": [
+    192,
+    600
+   ],
+   "textures": true,
+   "notes": "Seamless 1.0 s flame column 384x640, base at bottom centre. Rising stretched fractal noise (2 s, loopified by crossfade like the claude-spine fire template) shaped by hot-body/height/side ramps, threshold + heat CC Toner after the crossfade; ready/fire_01 photo displaced by the loop density as material; 10 Kenney flame_05/06 tongues that accelerate up and pinch off on wrapped time; 16 drifting embers; cycled shimmer + bloom; 11 Hz flicker with integer cycles. Seam: last->first diff 0.026 vs consecutive max 0.029. Pure light, no smoke -> additive.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_ice_shatter": {
+   "name": "el_ice_shatter",
+   "look": "realistic",
+   "builder": "el_ice_shatter",
+   "version": 5,
+   "comp": "el_ice_shatter_v5",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 30,
+   "anchor_px": [
+    252,
+    246
+   ],
+   "textures": true,
+   "notes": "1.2 s: f0-9 frost crystallises outward (cell-pattern + fractal front with a bright growth edge) into a translucent ice block (Cell Pattern crystals, fractal frost, ready/water_drop_02 refraction photo, bevel), f8-12 glowing cracks race out from the impact point, f13 shatter: 27 shards cut from the same material fly on drag+gravity parabolas spinning with motion blur, star_06 glints riding shards, 40 ice crumbs, ready/bokeh_01 glitter tinted cyan, flare_01 cold flash, heavy cold mist (Kenney White puff) that sinks and spreads. Textures: ready/water_drop_02, ready/bokeh_01, kenney star_06, flare_01, smoke_08, kenney_smoke White puff.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_lightning_strike": {
+   "name": "el_lightning_strike",
+   "look": "realistic",
+   "builder": "el_lightning_strike",
+   "version": 10,
+   "comp": "el_lightning_strike_v10",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 25,
+   "anchor_px": [
+    268,
+    700
+   ],
+   "textures": true,
+   "notes": "1.0 s cloud-to-ground strike 512x768, ground contact (268,700). Stepped leader f0-4 (Advanced Lightning end point stepping, new forks per step) from a small radial cloud glow at the top (origin now INSIDE the comp at y=46), upward streamer; f5 return stroke: wide white core, heavy branching that dies first, real photographed bolts (ready/lightning_01/02, alpha-cut to the bolt only); re-strikes f12 and f17. The full-frame flash is replaced by a soft radial air-glow around the channel that reaches 0 well inside the comp; the whole body sits in an edge-safe wrapper (feathered inset mask + hard 2 px intersect mask): comp border alpha is exactly 0 on all 25 frames (checked). Ground: Kenney Flash card + flare, bouncing molten sparks, scorch_01/02, Black smoke/White puff + smoke_02 wisp. Has smoke -> normal.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_poison_bubbles": {
+   "name": "el_poison_bubbles",
+   "look": "realistic",
+   "builder": "el_poison_bubbles",
+   "version": 5,
+   "comp": "el_poison_bubbles_v5",
+   "blend": "normal",
+   "loop": true,
+   "fps": 25,
+   "frames": 38,
+   "anchor_px": [
+    256,
+    300
+   ],
+   "textures": true,
+   "notes": "Seamless 1.52 s (38 f) toxic cloud centred (256,300). Fumes rebuilt as a DENSITY precomp (ready/smoke_02/03/04 wisps + Kenney smoke_04/06/07/08 cloud cards, all filled white so only their alpha survives), coloured by thickness in the main comp: thin = deep green 1E8A10, mid = toxic green 5CE01E, thick = glowing yellow-green C8FF4A plus a blurred additive glow; churn noise and a green underside shade matted to the cloud. No grey photo detail left. Bubbles (circle_01 film + body + spec, pop ring + droplets) and drips unchanged. Edge-safe wrapper: border alpha 0 on every frame. Seam: wrap diff 0.026 vs consecutive max 0.027.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_water_splash": {
+   "name": "el_water_splash",
+   "look": "realistic",
+   "builder": "el_water_splash",
+   "version": 8,
+   "comp": "el_water_splash_v8",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 28,
+   "anchor_px": [
+    256,
+    430
+   ],
+   "textures": true,
+   "notes": "1.1 s tall crown splash, surface at y=430. Crown = smooth tulip-shaped liquid sheet (250 px tall, Catmull-Rom outline) rising decelerating, flaring, then collapsing; rim breaks into 9 irregular fingers with bevelled beads that let go as 27 droplets on gravity parabolas (motion blur). Clear-water material: faint blue refraction tint + depth gradient (deeper blue at the base), ready/water_02 luminance-keyed to its bright streaks only, Fresnel-bright inner edges, white specular streaks and rim, darker cavity seen through the opening, star_06 glint. Worthington jet (284 px, same material) rises from f9 and pinches a drop off to y~140. Perspective ripple rings; no white mist. Edge-safe wrapper: border alpha 0.",
+   "needs": [],
+   "kind": "element"
+  },
+  "el_wind_swirl": {
+   "name": "el_wind_swirl",
+   "look": "realistic",
+   "builder": "el_wind_swirl",
+   "version": 3,
+   "comp": "el_wind_swirl_v3",
+   "blend": "normal",
+   "loop": true,
+   "fps": 25,
+   "frames": 38,
+   "anchor_px": [
+    256,
+    446
+   ],
+   "textures": true,
+   "notes": "Seamless 1.52 s (38 f) whirlwind, base at (256,446). 11 stacked rings of moving air (precomps of Kenney twirl_01-03 broken arcs + trace_04/06 streaks, screen) spinning 2 rev/loop at the narrow base and 1 at the wide top, column leans and sways; ready/smoke_04 dust-laden funnel body; Kenney smoke_05/07/08 dust at the base; 26 orbiting dust specks; 9 tumbling leaves (shape + bevel) spiralling up; 2 gust sheets; cycled turbulent distortion. All motion periodic in the loop (seam ratio 0.94).",
+   "needs": [],
+   "kind": "element"
+  },
+  "electric_sphere": {
+   "name": "electric_sphere",
+   "look": "cel",
+   "builder": "electric_ring_loop",
+   "version": 5,
+   "comp": "el_electric_ring_v5",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    198,
+    203
+   ],
+   "textures": false,
+   "notes": "seamless 0.96 s loop of wobbly electric rings every 8 frames (ref births every ~8.3 frames)",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "electric_star": {
+   "name": "electric_star",
+   "look": "cel",
+   "builder": "electric_star",
+   "version": 4,
+   "comp": "es_electric_star_v4",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    262,
+    259
+   ],
+   "textures": false,
+   "notes": "knot -> 11 squiggles flying out; squiggle shapes are procedural, not the exact drawn curls",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "fire_rose_burst": {
+   "name": "fire_rose_burst",
+   "look": "cel",
+   "builder": "fire_rose_burst",
+   "version": 9,
+   "comp": "fr_rose_v9",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 28,
+   "anchor_px": [
+    246,
+    300
+   ],
+   "textures": false,
+   "notes": "7-petal cel burst, white lobes, crimson burn-out, holes; halo behind. Petal shapes procedural",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "fs_transition": {
+   "name": "fs_transition",
+   "look": "cel",
+   "builder": "fs_transition",
+   "version": 5,
+   "comp": "cb_fs_transition_v5",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 39,
+   "anchor_px": [
+    778,
+    870
+   ],
+   "textures": false,
+   "notes": "Full-frame flash into the free-spins scene, then the sunburst switching on. Comp t = clip t - 4.12. Bloom (radial white ramp, centre clip (810,780)) grows r 150->1000 over 4.20-4.31 with a full-screen haze; the added light goes white -> lavender E0D8FF -> lilac -> VIOLET (0.55,0.35,1) and fades out by 4.50-4.56 (measured: the delta over the new scene is violet, the 'pink' look is the scene under it); 26 white 4-point glints in the bloom 4.24-4.52. Sunburst = nested cb_sunburst_loop_v6, scales 70->100 % and fades on in one frame at 4.595-4.615 (clip switches between 4.586 and 4.621), plus an extra warm boost 4.62-5.05 (clip is brightest 4.7-4.8). The nested loop is offset so its loop time is 0 at this comp's last frame: play cb_sunburst_loop from frame 0 at clip 5.42 for a seamless hand-off. Frame means vs clip (my render added over a clip plate): within ~5-15 levels 4.229-4.5 except the ",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 4.12,
+   "clip_xy": [
+    778,
+    870
+   ],
+   "needs": [
+    "sunburst_loop"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 36
+   }
+  },
+  "gl_energy_orb": {
+   "name": "gl_energy_orb",
+   "look": "realistic",
+   "builder": "gl_energy_orb",
+   "version": 5,
+   "comp": "gl_energy_orb_v5",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 40,
+   "anchor_px": [
+    256,
+    256
+   ],
+   "textures": true,
+   "notes": "1.6 s seamless loop (seam 0.0149 vs adjacent median 0.0114/max 0.0141; the only step is arc crackle, which flickers every 2 frames anyway). Orb radius ~118 px: violet/azure bloom, cycling fractal plasma (Dynamic noise + Twirl) inside the sphere, real plasma-lamp tendrils (ready/electric_01 masked to the globe, stem removed, two mirrored copies, slow cross-faded rotation + cycling Turbulent Displace, recoloured ice/violet), Kenney twirl_01/02/03 swirls turning whole turns per loop, magic_02 rune ring, circle_02/circle_03 Fresnel rim, 7 Advanced Lightning (Strike) arcs across the surface with hold-keyed conductivity/opacity, white-hot core, cyan/violet Glow.",
+   "needs": [],
+   "kind": "glow",
+   "spine": {
+    "max_size": 384
+   }
+  },
+  "gl_god_rays_reveal": {
+   "name": "gl_god_rays_reveal",
+   "look": "realistic",
+   "builder": "gl_god_rays_reveal",
+   "version": 4,
+   "comp": "gl_god_rays_reveal_v4",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 38,
+   "anchor_px": [
+    384,
+    384
+   ],
+   "textures": true,
+   "notes": "1.5 s one-shot (38 frames), 768x768. 0-0.2 s a point gathers (12 motes pulled in), 0.2 s burst: white core flash + star_09 glint, beams scale out over 0.28 s (34 sharp + 9 wide procedural ray fans, shimmering, slowly counter-rotating) plus CC Light Rays volumetric haze on a noise disc; 0.3-1.0 s dust motes (60 circle_05) and faint Kenney smoke_07/08 haze drift, shown mostly inside the beams via a luma track matte; 1.0-1.5 s rays retract to 12%/0% and the core + amber halo settle to a steady soft glow (last frames are a hold-able end state).",
+   "needs": [],
+   "kind": "glow",
+   "spine": {
+    "max_size": 512
+   }
+  },
+  "gl_hit_flash_glow": {
+   "name": "gl_hit_flash_glow",
+   "look": "realistic",
+   "builder": "gl_hit_flash_glow",
+   "version": 6,
+   "comp": "gl_hit_flash_glow_v6",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 15,
+   "anchor_px": [
+    256,
+    256
+   ],
+   "textures": true,
+   "notes": "0.6 s one-shot, peak on frame 0. Bloom stack decays as 1/(1+t/tau) (core tau 0.03 s, gold 0.045 s, orange 0.04 s, all forced to 0 by ~0.36 s) so the light cools white->gold->orange; anamorphic horizontal streak (trace_06 core + amber wide, flare_01), star_08 glint, shockwave ring (circle_02 + soft circle_04) expanding to ~300 px radius by 0.42 s, ray burst (procedural fan), 26 motion-blurred tapered spark streaks with gravity, sparkler photo (ready/sparks_02, clean-light precomp) x2, Kenney spark_01/02 crackle on frames 0-3. Frames 11-14 are near-empty tail.",
+   "needs": [],
+   "kind": "glow"
+  },
+  "gl_magic_pulse_green": {
+   "name": "gl_magic_pulse_green",
+   "look": "realistic",
+   "builder": "gl_magic_pulse_green",
+   "version": 4,
+   "comp": "gl_magic_pulse_green_v4",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 38,
+   "anchor_px": [
+    256,
+    372
+   ],
+   "textures": true,
+   "notes": "Loop is 38 frames = 1.52 s (1.5 s is 37.5 frames at 25 fps, so it was rounded up to a whole frame count). Seam 0.0068 vs adjacent median 0.0088. Anchor = centre of the ground circle (ellipse 336x108 px). Ground: deep/emerald circle_05 disc, circle_02 ring and magic_02 rune ring (rotates one symmetry step per loop) squashed into perspective, pulse peaks at frame 0; two circle_02 rings expand half a loop apart; aura column with cycling stretched fractal noise; 26 rising soft light particles (circle_05), 11 leaf-like flutterers (flame_05/flame_06 teardrops + magic_05) that flip via scale X and spin, 5 star_06 sparkles. Mint-white -> emerald -> deep green, lime accents.",
+   "needs": [],
+   "kind": "glow",
+   "spine": {
+    "max_size": 384
+   }
+  },
+  "gl_symbol_rim_glow": {
+   "name": "gl_symbol_rim_glow",
+   "look": "realistic",
+   "builder": "gl_symbol_rim_glow",
+   "version": 2,
+   "comp": "gl_symbol_rim_glow_v2",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 30,
+   "anchor_px": [
+    256,
+    256
+   ],
+   "textures": true,
+   "notes": "1.2 s seamless loop (seam 0.0117 = adjacent median 0.0117). Rounded-square border, 424x424 px (half-extent 212, corner radius 58) centred in 512x512, centre transparent. Two light heads half a perimeter apart, each moving half the perimeter per loop: stacked Trim Paths strokes with taper (white-hot core 5%, gold body 12%, orange 19%, red tail 28%, wide amber bloom), flare_01 + star_07 glint + hot dot riding the head (pointOnPath on the same path), 14 sparks per head shed outward with slight gravity (circle_05/star_06), faint resting frame glow. Colour is warm (white->gold->orange->red); retint in Spine only shifts the tail slightly because the head is near-white.",
+   "needs": [],
+   "kind": "glow"
+  },
+  "gl_win_glow_gold": {
+   "name": "gl_win_glow_gold",
+   "look": "realistic",
+   "builder": "gl_win_glow_gold",
+   "version": 8,
+   "comp": "gl_win_glow_gold_v8",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 50,
+   "anchor_px": [
+    256,
+    256
+   ],
+   "textures": true,
+   "notes": "2.0 s seamless loop (seam diff 0.0062 vs adjacent median 0.0052, max 0.0065). Warm aura BEHIND a symbol: amber/gold circle_05 bloom breathing once per loop, two procedural ray fans (radial-gradient wedges, per-ray shimmer) rotating 12/-9 deg per loop via cross-faded copies (O(D)=O(0)), real bokeh_01 photo ring (clean-light precomp, Tritone, luma alpha), 18 rising bokeh discs (own disc+rim precomp) + 16 light_01 motes, 6 star_06/star_07 twinkles, white-hot core, gold/orange Glow, round vignette so edges are pure black. Centre is the brightest (white-hot) and is meant to be covered by the symbol. Textures: ready/bokeh_01.png, kenney circle_05, light_01, star_06, star_07.",
+   "needs": [],
+   "kind": "glow",
+   "spine": {
+    "max_size": 384,
+    "max_frames": 25
+   }
+  },
+  "pink_radial_burst": {
+   "name": "pink_radial_burst",
+   "look": "cel",
+   "builder": "pink_radial_burst",
+   "version": 16,
+   "comp": "pr_pink_burst_v16",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 48,
+   "anchor_px": [
+    600,
+    600
+   ],
+   "textures": false,
+   "notes": "1200x1200 (S = 2.4), seamless 1.92 s loop; pure black background, no navy layer (CC Toner shadows = black), ready for additive. v13-v16 rebuild, fully procedural (no noise, no traced pixels): in rect space (x = angle, 12 o'clock at x = 0; y = 4.8 x GIF radius) seeded-random spindle-shaped rays (thin tip toward the centre, bold teardrop body, soft outer end) in two tiers (A: r ~ 52-165, B: r ~ 165-300) plus thin hot needles; each ray bobs radially and flickers on sines of period L (1 or 2 cycles per loop), so frame 48 == frame 0 (wrap diff 2.2 vs 2.0 between consecutive frames). Brightness per ray ranges 0.25-0.95, so a few near-white heads sit among many dim plum ones. Rounded dark arches (blurred rounded rects -> rounded wedges) at 12, 6, 3 and 9 o'clock and on the diagonals, breathing slightly. Tier shading comes from a radial profile texture (ae/tex/pr_profile2.png, hand-set control p",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 24
+   }
+  },
+  "re_aqua_impact": {
+   "name": "re_aqua_impact",
+   "look": "realistic",
+   "builder": "re_aqua_impact",
+   "version": 3,
+   "comp": "re_aqua_impact_v3",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 25,
+   "anchor_px": [
+    213,
+    198
+   ],
+   "textures": true,
+   "notes": "Drivers are the exact procedural sub-comps of aq_aqua_impact_v14 (_body minus white/violet/cyan bands = the water, _H holes, _glowsrc starburst, _sparks dots), so timing/shapes match it. Water: cel shading softened + CC Glass (refraction + specular from its own alpha) + exposure -0.3, water_02 (screen) and water_01 (overlay) photo material matted inside, holes cut; on the shatter (f14) two water_02 droplet bursts fly out. Electricity: the starburst bloomed and crackled (Turbulent Displace per frame), 10 Advanced Lightning arcs r 36->59 GIF px (f10-f14), f9 spark = flare_01 + star_04 + 4 short strikes; sparkle dots as blue-white glints. Textures: water_01, water_02, Kenney flare_01, star_04. Differs: water reads glossy/jelly-like (CC Glass) more than clear; the f15-f21 ring keeps the exact comp's lumpy closed loop.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "aqua_impact"
+   ],
+   "kind": "hero"
+  },
+  "re_blue_head_fireball": {
+   "name": "re_blue_head_fireball",
+   "look": "realistic",
+   "builder": "re_blue_head_fireball",
+   "version": 3,
+   "comp": "re_blue_head_fireball_v3",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    45,
+    174
+   ],
+   "textures": true,
+   "notes": "Built on the PROCEDURAL ib_blue_head_fireball_v22 (its _body cel stack is the heat map; _elec and the shell layer are drivers); the traced v10 is not used. Heat = 0.52R+0.39G with cooling gamma, textured by explosion_02 + Kenney fire_01/02 (overlay), gas-displaced streaming right, gradient-mapped white > FFA030 > F25A0C > A0180A > burnt, alpha from heat; heat halo + flame fringe (alpha = luminance). Refractive cyan shockwave shell (CC Glass, screen) with rim glow; f6 flash = flare_01 + Kenney Flash puff + 9 Advanced Lightning strikes + the exact electric streak/sparks as glow; 20 embers flying right; Kenney black smoke at the exact smoke puffs. Textures: explosion_02, Kenney fire_01/02, flare_01, Flash/flash03, Black smoke 03-18. Differs: flash lands one frame before the compare's GIF frame (as the exact); the shell reads a little plastic; outlines are smoother than the GIF's ember lines",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "blue_head_fireball"
+   ],
+   "kind": "hero"
+  },
+  "re_ca_coin_glow": {
+   "name": "re_ca_coin_glow",
+   "look": "realistic",
+   "builder": "re_ca_coin_glow",
+   "version": 5,
+   "comp": "re_ca_coin_glow_v5",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 24,
+   "anchor_px": [
+    342,
+    138
+   ],
+   "textures": true,
+   "notes": "Motion/timing from ca_coin_glow_v4 (bar wash, fringes/purple haze and glint halos precomped from it). Real metallic light: wash with a soft spill bloom, two slanted light sweeps across the bar (2.80-2.95 strong, 3.02-3.30 faint sheen) matted to the bar, anamorphic streaks along the top rail (Kenney trace_01 laid horizontal), metallic star glints (Kenney star_01/04/06/08 + flare_01 cores) popping at the exact glint spots plus three extra on the rails, wide warm bloom. Textures: trace_01, star_01, star_04, star_06, star_08, flare_01. Differs: the bar is blown fully white 2.80-2.89 (clip shows a little more cyan and the bar pattern); the slow second sweep reads as a slanted band on a dark background.",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 2.79,
+   "clip_xy": [
+    342,
+    1698
+   ],
+   "needs": [
+    "ca_coin_glow"
+   ],
+   "kind": "clip"
+  },
+  "re_ca_pot_burst": {
+   "name": "re_ca_pot_burst",
+   "look": "realistic",
+   "builder": "re_ca_pot_burst",
+   "version": 3,
+   "comp": "re_ca_pot_burst_v3",
+   "blend": "normal",
+   "loop": false,
+   "fps": 30,
+   "frames": 15,
+   "anchor_px": [
+    270,
+    248
+   ],
+   "textures": true,
+   "notes": "Motion/timing from ca_pot_burst_v9 (core, spikes, sparks precomped from it). Ceramic pot burst: white-hot flash (Kenney flare_01 + light_01, exact core as hot light), billowing cloud = three Kenney White puff flipbook sequences (time-stretched, turbulent-displaced, tinted white-hot -> warm gold), ceramic dust (Kenney smoke_04/05/07/08 tinted beige) and photo smoke (smoke_04) drifting out and fading by 0.45 s, 12 terracotta shards (clay_02 cut by polygon masks, Bevel Alpha, flash-lit then darkening) on gravity parabolas with motion blur, ice-blue shard light from the exact spikes, gold/white spark streaks and star_06 twinkles, light bloom. Textures: White puff 00-24, smoke_04 (ready), Kenney smoke_04/05/07/08, clay_02, flare_01, light_01, star_06. Differs from the clip: the cloud stays a little more uniformly white than the clip's streaky interior; the clip's own (painted) shards are bigg",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 1.64,
+   "clip_xy": [
+    320,
+    532
+   ],
+   "needs": [
+    "ca_pot_burst"
+   ],
+   "kind": "clip"
+  },
+  "re_ca_rainbow_burst": {
+   "name": "re_ca_rainbow_burst",
+   "look": "realistic",
+   "builder": "re_ca_rainbow_burst",
+   "version": 4,
+   "comp": "re_ca_rainbow_burst_v4",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 23,
+   "anchor_px": [
+    342,
+    550
+   ],
+   "textures": true,
+   "notes": "Motion/timing from ca_rainbow_burst_v6 (ray field, haze and core precomped from it; same X5 path on the 'centre' null). Volumetric light burst: exact ray field + CC Light Rays volume copy, red/blue chromatic fringe copies scaled about the moving centre, dust motes (fractal specks luma-matted by the rays, zoom radial-blurred from the centre), photo bokeh (bokeh_01/02, tinted gold/pink) drifting outward, two sparks_02 sparkler bursts on the centre plus 44 motion-blurred spark streaks with gravity launched from the X5 position, lens flare (flare_01), cyan lens ring (light_03), star_08 glint, soft bloom. Textures: bokeh_01, bokeh_02, sparks_02, flare_01, light_03, star_08. Differs: centre (r~150) is whiter and the overall level a bit hotter than the clip at 1.97-2.15; late stage (2.35-2.45) more pink than the clip's yellow-orange.",
+   "source": "slot clip A (candy pots, X5, win bar)",
+   "clip_t0": 1.84,
+   "clip_xy": [
+    342,
+    930
+   ],
+   "needs": [
+    "ca_rainbow_burst"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 640
+   }
+  },
+  "re_confetti_column": {
+   "name": "re_confetti_column",
+   "look": "realistic",
+   "builder": "re_confetti_column",
+   "version": 3,
+   "comp": "re_cb_confetti_column_v3",
+   "blend": "normal",
+   "loop": true,
+   "fps": 30,
+   "frames": 30,
+   "anchor_px": [
+    300,
+    660
+   ],
+   "textures": true,
+   "notes": "The exact comp's flakes (same seed and draw order: same positions, drift, flip, spin) as metallic foil: colour shaded by facing |cos(flip)| (0.3..1.0), a sharp white specular flash only when face-on AND the slow light phase is up (pow 30 x pow 3, so flashes are sparse), a foil edge stroke that brightens when the flake is edge-on, scale-Y wobble for tumble, motion blur (shutter 180, 16 samples), a high-threshold bloom that only the flashes reach. 26 curled foil streamers shaded the same way; the rainbow dashes became faint lens streaks. 1.0 s seamless (wrap 1.02x an ordinary step). Procedural (no texture). Differs: the clip's flakes are slightly larger and blur longer; paths are a plausible hover, not tracked.",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 0.0,
+   "clip_xy": [
+    1079,
+    760
+   ],
+   "needs": [
+    "confetti_column"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 768
+   }
+  },
+  "re_electric_sphere": {
+   "name": "re_electric_sphere",
+   "look": "realistic",
+   "builder": "re_electric_sphere",
+   "version": 3,
+   "comp": "re_electric_sphere_v3",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    198,
+    203
+   ],
+   "textures": true,
+   "notes": "Seamless 0.96 s loop. Rings come from el_electric_ring_v5 and become plasma arcs: Turbulent Displace crackle (cycled evolution driven by time % 0.96), a luma-noise flicker matte (cycled), electric_01 plasma photo turning once per loop seen through the softened rings, 15 Advanced Lightning arcs riding the rings (radius read from the exact ring sizes, conductivity = floor((time % 0.96) * 25)), a plasma-lamp glow at the birth point that pulses at each birth, blue bloom. Seam 23->0 frame diff 24.7 vs 23.8 mean between consecutive frames. Textures: electric_01. Differs: rings are rounder/smoother at birth than the reference's lumpy blobs (inherited from the exact comp).",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "electric_sphere"
+   ],
+   "kind": "hero"
+  },
+  "re_electric_star": {
+   "name": "re_electric_star",
+   "look": "realistic",
+   "builder": "re_electric_star",
+   "version": 5,
+   "comp": "re_electric_star_v5",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    262,
+    259
+   ],
+   "textures": true,
+   "notes": "Each of the 8 knot and 11 flying squiggles of es_electric_star_v4 drives an Advanced Lightning strike through expressions (position, scale, opacity), oriented radially, new conductivity every frame, light forking; 6 extra strikes discharge from the core while the knot bursts. Core: two electric_01 plasma-lamp photos (filaments only, stem masked), flickering, plus Kenney light_01/flare_01 cold flash; flecks with motion blur; blue-white two-pass bloom. Textures: electric_01, Kenney light_01, flare_01. Differs: bolts are radial jagged arcs, not the reference's curly drawn squiggles.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "electric_star"
+   ],
+   "kind": "hero"
+  },
+  "re_fire_rose_burst": {
+   "name": "re_fire_rose_burst",
+   "look": "realistic",
+   "builder": "re_fire_rose_burst",
+   "version": 12,
+   "comp": "re_fire_rose_burst_v12",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 28,
+   "anchor_px": [
+    246,
+    300
+   ],
+   "textures": true,
+   "notes": "Same 7-petal silhouette and timing: fr_rose_v9 (minus its halo) is turned into a heat field (0.52R + 0.39G, cooling gamma keyed 1.0 -> 0.42), textured by the explosion_02 fireball photo and 7 Kenney fire_01/02 billows (overlay), gas-displaced, then gradient-mapped (CC Toner pentone) white-hot -> yellow -> orange -> deep red -> burnt black; alpha from the heat (luma matte) so edges burn off softly. Additive flame fringe and heat halo (alpha = luminance), explosion_02 additive core early, ember specks in the burning rim, 40 rising motion-blurred embers, Kenney Black smoke + smoke_04 photo smoke behind and in front, lingering to the end. Textures: explosion_02, smoke_04, Kenney fire_01, fire_02, flare_01, Black smoke 02-14 / 11-17. Differs: colour runs hot yellow-orange rather than the reference's crimson; smoke lingers after the reference has cleared (by brief); interior still a little smo",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "fire_rose_burst"
+   ],
+   "kind": "hero"
+  },
+  "re_fs_transition": {
+   "name": "re_fs_transition",
+   "look": "realistic",
+   "builder": "re_fs_transition",
+   "version": 3,
+   "comp": "re_cb_fs_transition_v3",
+   "blend": "additive",
+   "loop": false,
+   "fps": 30,
+   "frames": 39,
+   "anchor_px": [
+    778,
+    870
+   ],
+   "textures": true,
+   "notes": "Same timing/colours as the exact comp (white > lavender > lilac > violet bloom at (810,780), haze, sun ignition at 4.595-4.615) re-lit as a real camera flash: Kenney light_02 source, anamorphic horizontal streak, 4 lens ghosts (light_01, light_03, circle_05 x2) on the line through frame centre, lens dirt from the bokeh_01 photo (desaturated, lit only by the flash), Kenney star_06 glints, a flare_01 pop when the sun ignites, a flash-only bloom. Nests re_cb_sunburst_loop_v3 so its loop time is 0 at this comp's end (continue with that loop at clip 5.42). Core and haze run ~25% under the exact comp because the optics add light. Frame means vs clip: 4.267 (210,183,188) vs (183,180,189); 4.383 (227,164,230) vs (227,152,216); 4.46 (199,134,174) vs (202,120,167). Differs: the 4.306-4.344 peak is whiter than the clip (0.81 vs 0.39 of px > 230 at 4.306, partly because the compare plate there is th",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 4.12,
+   "clip_xy": [
+    778,
+    870
+   ],
+   "needs": [
+    "fs_transition",
+    "re_sunburst_loop"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 36
+   }
+  },
+  "re_pink_radial_burst": {
+   "name": "re_pink_radial_burst",
+   "look": "realistic",
+   "builder": "re_pink_radial_burst",
+   "version": 3,
+   "comp": "re_pink_radial_burst_v3",
+   "blend": "additive",
+   "loop": true,
+   "fps": 25,
+   "frames": 48,
+   "anchor_px": [
+    600,
+    600
+   ],
+   "textures": true,
+   "notes": "Seamless 1.92 s loop over pr_pink_burst_v16 (its rays are the light source). Added: zoom-blurred volumetric shafts (two lengths), ray heads sharpened white-pink, bokeh_02/bokeh_01 photos breathing on loop sines (centre masked so the hole stays dark), 70 dust motes flying out along rays with position/opacity = f(time % L) (1 or 2 cycles per loop, motion blurred), light bloom. Seam check: frame 47->0 diff 2.93 vs 2.2-3.0 between consecutive frames. Opaque black background (for additive). Textures: bokeh_01, bokeh_02. Differs: brighter/whiter overall than the reference's plum mids; dust is small at this size.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "pink_radial_burst"
+   ],
+   "kind": "hero",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 24
+   }
+  },
+  "re_reel_fire": {
+   "name": "re_reel_fire",
+   "look": "realistic",
+   "builder": "re_reel_fire",
+   "version": 5,
+   "comp": "re_cb_reel_fire_v5",
+   "blend": "normal",
+   "loop": true,
+   "fps": 30,
+   "frames": 30,
+   "anchor_px": [
+    300,
+    660
+   ],
+   "textures": true,
+   "notes": "Same frame, edge lines (local x 141/459), 1.0 s seamless loop (wrap step = 1.13x an ordinary step) and breathing as the exact comp. Fire = a vertically tiling 330x1320 strip of 44 Kenney flame_05/06 tongues + 7 fire_01 photo flames (each sprite has twins one strip-height away), streamed up 2 strips/loop with Offset, two cycled Turbulent Displaces, vertical motion blur 55, heat-mapped with CC Toner (FFF2A8 > FFC52E > FF6E12 > A81414 > black, alpha = heat), a white-hot core pass, warm gas glow filling the gaps during the surge, magenta smoulder in the dim phase, 34 rising embers, a cycled heat-haze displace over everything. Edge lines are neon/plasma tubes: white 4 px core + 11 px magenta tube + pink filament noise racing up inside + 30 px and 80 px bloom. 26 motion-blurred Kenney trace_01 sparks shoot up/out. Mean column colour vs clip: surge (227-236, 161-166, 71-75) vs clip (216-239, 12",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 0.0,
+   "clip_xy": [
+    1079,
+    760
+   ],
+   "needs": [
+    "reel_fire"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 640
+   }
+  },
+  "re_smoke_puff_toon": {
+   "name": "re_smoke_puff_toon",
+   "look": "realistic",
+   "builder": "re_smoke_puff_toon",
+   "version": 4,
+   "comp": "re_smoke_puff_toon_v4",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 12,
+   "anchor_px": [
+    546,
+    384
+   ],
+   "textures": true,
+   "notes": "Uses the PROCEDURAL smoke_puff_toon data (puff discs/tails/motion from smoke_puff_toon.jsx, density _S and erosion _E of sp_smoke_puff_toon_v8); the traced v2 is not used. Each disc = a Kenney smoke_04/07/01/05 sprite, each tail = a smoke_01/02 photo wisp, tinted warm mauve (F0AE96 / 6A3E40), gas-displaced, held to the procedural silhouette by a soft luma matte minus the same keyed erosion holes; soft self-shadow (multiply) and the dark smoky base underneath. Same 12-frame timing. Textures: Kenney smoke_01/04/05/07, smoke_01, smoke_02. Differs: puffs are softer/rounder than the reference and dimmer; curls at the end are thinner.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "smoke_puff_toon"
+   ],
+   "kind": "hero",
+   "spine": {
+    "max_size": 720
+   }
+  },
+  "re_sun_rune_burst": {
+   "name": "re_sun_rune_burst",
+   "look": "realistic",
+   "builder": "re_sun_rune_burst",
+   "version": 3,
+   "comp": "re_sun_rune_burst_v3",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    228,
+    210
+   ],
+   "textures": true,
+   "notes": "Motion/timing from sr_sun_rune_v3. Gathering sparks and 36 rays/embers as motion-blurred white-hot streaks with orange/red trails, 34 extra gravity sparks, two sparks_02 sparkler photo bursts on the pop; molten ring (orange body with turbulent edge, luma-noise molten highlights, white core); white-hot cross and spinning filaments; ember donut (amber glow + twinkling fractal specks) with Kenney smoke_10 smoke ring and three smoke_04 photo wisps lit warm, lingering to the end. Textures: sparks_02, smoke_04, Kenney smoke_10, flare_01. Differs: the pop frame is a rounder orange flash than the reference; smoke is warm-lit (no dark smoke, since the blend is additive).",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "sun_rune_burst"
+   ],
+   "kind": "hero"
+  },
+  "re_sunburst_loop": {
+   "name": "re_sunburst_loop",
+   "look": "realistic",
+   "builder": "re_sunburst_loop",
+   "version": 3,
+   "comp": "re_cb_sunburst_loop_v3",
+   "blend": "additive",
+   "loop": true,
+   "fps": 30,
+   "frames": 90,
+   "anchor_px": [
+    780,
+    540
+   ],
+   "textures": true,
+   "notes": "Burst centre clip px (780,540), 3.0 s seamless (wrap 1.16x an ordinary step). Volumetric god rays: a fractal-noise occluder (cycled evolution, streaks turned into spokes by Polar Coordinates, +-4 deg sine sweep) inside a 650 px opening, zoom-blurred twice from the centre (scattering), extinction falloff, tritoned FFF4D0/FFC24A; the exact comp's spokes kept at 14% underneath for the same silhouette; warm wash + yellow glow + core as in the exact comp. 160 dust motes drifting, visible only inside the beams (luma track matte by the rays). Gold bokeh from the bokeh_01 photo (2 feathered layers, drifting), 12 Kenney star_06 glints, gentle bloom. Added light vs the pre-burst frame (upper sectors): r 320 mine (+214,+138) clip (+119,+109); r 400 (+147,+89) vs (+123,+82); r 560 (+73,+37) vs (+61,+15); r 720 (+34,+12) vs (+29,+14). Differs: a little hotter than the clip at r 240-320; ray rotation ",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 5.42,
+   "clip_xy": [
+    778,
+    870
+   ],
+   "needs": [
+    "sunburst_loop"
+   ],
+   "kind": "clip",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 30
+   }
+  },
+  "re_target_ring": {
+   "name": "re_target_ring",
+   "look": "realistic",
+   "builder": "re_target_ring",
+   "version": 5,
+   "comp": "re_target_ring_v5",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    230,
+    204
+   ],
+   "textures": true,
+   "notes": "Motion/timing taken from tr_target_ring_v4 (its layers are cut into driver precomps). Plasma ring: deep-red/red/orange heat bloom with turbulent wisps, white-hot core with gas wobble, luma-noise flicker and two trim-path hot spots running round it. Flash: Kenney flare_01 + star_08 + two anamorphic flare_01 streaks. Spikes: sparkler photo (sparks_02) crackle and star_06 glints at the four tips, ~40 motion-blurred sparks plus 16 embers shed at the dash break-up. Heat-shimmer Turbulent Displace and soft bloom over everything. Textures: Kenney flare_01, star_08, star_06; sparks_02. Differs: warmer (orange) than the reference's pale yellow; the flash star lands ~1 frame early in the compare like the exact comp.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "target_ring"
+   ],
+   "kind": "hero"
+  },
+  "re_teal_dome_splash": {
+   "name": "re_teal_dome_splash",
+   "look": "realistic",
+   "builder": "re_teal_dome_splash",
+   "version": 3,
+   "comp": "re_teal_dome_splash_v3",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 46,
+   "anchor_px": [
+    240,
+    147
+   ],
+   "textures": true,
+   "notes": "Driver = td_teal_dome_v15 (procedural cel dome) for shape/timing. RE.waterize: softened cel shading through CC Glass (refraction/specular), exposure -0.3, water_02/water_01 photo material matted inside; soft dark edge behind, thin pale fresnel rim up-left, bloomed specular glints (incl. the falling drips), faint Kenney White-puff mist (<=7%) and a faint water_02 droplet spray where the dome bursts (f19-f34). Textures: water_01, water_02, Kenney White puff 04-14. Differs: the dome is glossier/blobbier than real water (CC Glass), early arc inherits the exact comp's clean crescent.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "teal_dome_splash"
+   ],
+   "kind": "hero"
+  },
+  "re_toon_whirlpool": {
+   "name": "re_toon_whirlpool",
+   "look": "realistic",
+   "builder": "re_toon_whirlpool",
+   "version": 3,
+   "comp": "re_toon_whirlpool_v3",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 44,
+   "anchor_px": [
+    480,
+    270
+   ],
+   "textures": true,
+   "notes": "960x540 full-screen, driven by wp_toon_whirlpool_v11 (colour map; its hole/foam layers copied with the hole kept as parent). Liquid wobble (Turbulent Displace), spin Radial Blur centred on the moving drain (expression on the exact hole position), embossed relief (overlay) + specular crests (add) from a blurred copy, cell-pattern caustics and water_01 photo twirled around the drain (luma-matted to the water), sparse sun glints, a dark depth falloff and a wet pale rim around the drain, foam softened and filled with water_01 foam texture. Textures: water_01. Differs: still reads as a stylised glossy surface (relief is emboss-based); foam pills keep the exact comp's ellipse shapes; caustics are subtle.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [
+    "toon_whirlpool"
+   ],
+   "kind": "hero",
+   "spine": {
+    "max_size": 640
+   }
+  },
+  "reel_fire": {
+   "name": "reel_fire",
+   "look": "cel",
+   "builder": "reel_fire",
+   "version": 9,
+   "comp": "cb_reel_fire_v9",
+   "blend": "normal",
+   "loop": true,
+   "fps": 30,
+   "frames": 30,
+   "anchor_px": [
+    300,
+    660
+   ],
+   "textures": false,
+   "notes": "Reel-4 anticipation column (clip B 0.0-~1.35, edge lines fade out 1.35-1.55). Comp px = clip px, comp covers clip x 779..1379, y 100..1420; edge lines at clip x 920 / 1238 (local 141 / 459), matching the measured line centres. Seamless 1.0 s loop: vertically tileable noise flowed UP 2 tiles/loop (Offset wrap), cycled evolution, directional (vertical) blur 110 px; colour by tritone FFD44C/FF7214/C81E48 with a hard luma alpha, white-hot core, inner yellow bands hugging the lines, slower pink-red zones, thin pink-white vertical streaks, white core lines (9 px) with salmon-pink halo and an orange-red spill ~40 px outside, 36 thin white diagonal speed sparks shooting up/out. Breathing measured from the clip (bright 0.1-0.45, dim 0.6-1.0, bright again 1.2): fire opacity keyed 75/100/92/35/18/18/75, a dark magenta tint fills the dim phase, edge lines stay on. Matched: column width + line positi",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 0.0,
+   "clip_xy": [
+    1079,
+    760
+   ],
+   "needs": [],
+   "kind": "clip",
+   "spine": {
+    "max_size": 640
+   }
+  },
+  "smoke_puff_toon": {
+   "name": "smoke_puff_toon",
+   "look": "cel",
+   "builder": "smoke_puff_toon",
+   "version": 8,
+   "comp": "sp_smoke_puff_toon_v8",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 12,
+   "anchor_px": [
+    546,
+    384
+   ],
+   "textures": false,
+   "notes": "PROCEDURAL cel build (ae/jsx/smoke_puff_toon.jsx) of the whole 085754 frame (900x500 GIF px, S=1.2 -> 1080x600); anchor = base of the central column. Five puffs (central column, right wisp, three left wisps), each a cluster of discs + pointed tail triangles, turbulent-displaced and blurred into a density field; silhouette cel = shade #8D615E, light #BA8C7A = the same field nudged up-left + noise (threshold rising so the light share shrinks), dark smoky base = a blurred low threshold nudged down (fades by f11). Erosion: holes where (field nudged down-right) + blob noise exceeds a threshold that falls over time, so interiors go first and thin up-left rims remain as curls, which then fade. 12 frames hold the GIF timing (frame j <-> GIF frame nearest 0.42*j/11). Matches: puff positions and sizes, the two flat tones and dark base, burst-then-erode timing (solid to ~f5, curls f8-f11, gone by f",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero",
+   "spine": {
+    "max_size": 720
+   }
+  },
+  "sun_rune_burst": {
+   "name": "sun_rune_burst",
+   "look": "cel",
+   "builder": "sun_rune_burst",
+   "version": 3,
+   "comp": "sr_sun_rune_v3",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    228,
+    210
+   ],
+   "textures": false,
+   "notes": "gathering sparks, ring + cross + radial streaks, spinning chords, amber donut + dashed ring; ref flash is a little redder",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "sunburst_loop": {
+   "name": "sunburst_loop",
+   "look": "cel",
+   "builder": "sunburst_loop",
+   "version": 6,
+   "comp": "cb_sunburst_loop_v6",
+   "blend": "additive",
+   "loop": true,
+   "fps": 30,
+   "frames": 90,
+   "anchor_px": [
+    780,
+    540
+   ],
+   "textures": false,
+   "notes": "Warm yellow-white sunburst held under the centre '5' (clip 4.62 onward; this loop takes over at 5.42 from cb_fs_transition). Burst centre clip px (780,540) = comp px (comp px = clip px). Soft god-ray spokes: 46 bars of varied width in a 2160 px strip (= 360 deg), blurred across, Polar Coordinates (Rect to Polar), product of two radial falloffs; each spoke drifts 15 deg over its 3 s life while fading in/out (sin^2) - reads as a slow clockwise turn and loops exactly. Hot core FFE880 r 350, yellow glow r 700 breathing 2x per loop, wide orange wash (1,0.3,0) r 1150, 110 bokeh dots drifting out + 12 four-point glints twinkling, glow on the glitter only (own precomp). Measured added light vs the pre-burst frame, upper sectors: r 320 clip (+119,+109) mine (+150,+98); r 400 (+123,+82) vs (+121,+76); r 480 (+68,+33) vs (+95,+57); r 640 (+57,+15) vs (+43,+19); r 720 (+29,+14) vs (+30,+11). Seam ch",
+   "source": "slot clip B (reel anticipation, free-spins intro)",
+   "clip_t0": 5.42,
+   "clip_xy": [
+    778,
+    870
+   ],
+   "needs": [],
+   "kind": "clip",
+   "spine": {
+    "max_size": 512,
+    "max_frames": 30
+   }
+  },
+  "target_ring": {
+   "name": "target_ring",
+   "look": "cel",
+   "builder": "target_ring",
+   "version": 4,
+   "comp": "tr_target_ring_v4",
+   "blend": "additive",
+   "loop": false,
+   "fps": 25,
+   "frames": 24,
+   "anchor_px": [
+    230,
+    204
+   ],
+   "textures": false,
+   "notes": "dot -> asterisk flash -> ring with cross spikes -> dashes; ring radius/time measured, matches within ~1 frame",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "teal_dome_splash": {
+   "name": "teal_dome_splash",
+   "look": "cel",
+   "builder": "teal_dome_splash",
+   "version": 15,
+   "comp": "td_teal_dome_v15",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 46,
+   "anchor_px": [
+    240,
+    147
+   ],
+   "textures": false,
+   "notes": "Procedural (measured sphere radius/rim-depth envelopes, seeded drip/hole layout, gravity-fall drips, noise erosion; nothing traced). Matches: thin tapered arc at top centre f9-f14, dome grows to r~40 with 4 teardrop drips off the lower rim f16-f24, holes open f19-f30, detached drips fall, break-up into fragments around the sphere outline f30-f40, gone ~f41; teal fill, thin dark outline, darker teal lower edges, white specular up-left. Differs: early arc is a clean crescent (reference is lumpier with bead-like drops along it at f14-f16); dome slightly fuller/more solid at f22-f26 (reference already more perforated); late fragments are more uniform noise blobs than the reference's strand-like pieces.",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero"
+  },
+  "toon_whirlpool": {
+   "name": "toon_whirlpool",
+   "look": "cel",
+   "builder": "toon_whirlpool",
+   "version": 11,
+   "comp": "wp_toon_whirlpool_v11",
+   "blend": "normal",
+   "loop": false,
+   "fps": 25,
+   "frames": 44,
+   "anchor_px": [
+    480,
+    270
+   ],
+   "textures": false,
+   "notes": "960x540 full-screen comp (S = 6.08 comp px per GIF px of the 158x88 panel inside the 167x97 crop; the crop's black gutter and neighbour-panel strip are not reproduced). All procedural shape layers (explicit spiral ribbons, no tracing): flat cyan #14D0D8, teal #0F8F9A bands, white foam, black hole. Matched: f0 black frame with a cyan top-left corner; the hole's measured centre/radius track (big disc on the right f2-f8, drifting centre-left and shrinking f10-f24, closed at f30); the cyan+teal arm curling counter-clockwise into it from f10, a second arm from f15, a black tail f10-f14 and thin black slivers f15-f24; the white blob circling the closing hole (measured path/size f14-f32); white streaks riding the hole f2-f12; the cyan wave from the right edge f4-f9; counter-clockwise rotation of bands and foam; teal gone by f27, foam by f32; f31-f43 solid cyan. Differences: the hole edge is a s",
+   "source": "cel effect-pack reference GIF",
+   "needs": [],
+   "kind": "hero",
+   "spine": {
+    "max_size": 640
+   }
+  }
+ }
+}

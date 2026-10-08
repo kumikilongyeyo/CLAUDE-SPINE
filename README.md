@@ -51,6 +51,7 @@ check everything.
 | Samples | `make_face_sample`, `make_biped_sample`, `make_quadruped_sample`, `make_serpent_sample`, `make_flier_sample`, `make_host_sample`, `make_creature_sample` | Procedural PSD-named sample rigs to try every recipe on |
 | Export | `pack_atlas`, `make_editable`, `export_runtime` | Atlas + runtime folder; editable `.spine` through the Spine CLI |
 | Symbol from the art | `sphere_spin`, `liquid_splat`, `sugar_splat_ae`, `sugar_splat_to_spine`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a physically simulated melted-sugar splat made gooey in After Effects; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
+| AE FX library | `ae_library`, `ae_library_textures`, `ae_library_to_spine` | 50 finished After Effects effects as procedural builders: 18 cel (toon) slot effects and 32 realistic ones made of CC0 photo / Kenney textures (the same effects, 6 glows, 8 elements). Build any of them into an open project in one call, then one Spine skeleton per effect at a mobile-aware texture budget |
 
 A typical session, as Claude would run it:
 
@@ -97,6 +98,29 @@ left untouched unless explicitly forced.
 reusable `style_profile`. Styled recipe results also return semantic `back / subject / front / lens` depth groups and
 recommended parallax strengths. `relight_slots` adds a short additive response made from the target's own art so a hit
 lights the thing it hits; `qa_fx_premium` lints lighting integration, depth, hierarchy, materials and readability.
+
+### AE FX library
+
+`ae_library` lists 50 finished After Effects effects and writes one script that builds any of them (plus what they
+need) in the open project; `ae_library_to_spine` renders a comp with aerender and makes one skeleton `fx_<name>` per
+effect (animation `<name>` on bone `fx`), packed at the entry's budget (soft full-screen effects at half size and
+scaled back up, slow loops subsampled). Cel effects are self-contained; realistic ones (`re_*`, `gl_*`, `el_*`)
+need the texture folder from `ae_library_textures` once (Kenney Particle Pack + Smoke Particles, CC0, downloaded;
+21 CC0 / public-domain photos committed with their credits in `claude_spine/ae_library/textures/`).
+
+```
+ae_library kind=element                                   # list
+ae_library_textures dest=~/fx_textures                    # once per machine
+ae_library names=[re_fire_rose_burst, el_lightning_strike] out_dir=./fx textures_dir=~/fx_textures save_as=./fx/fx.aep
+# run the returned run_with with the After Effects MCP's ae_run_script
+ae_library_to_spine name=el_lightning_strike out_dir=./fx/spine aep=./fx/fx.aep
+```
+
+Every effect was matched to its reference frame by frame (measured size, colour, timing; built procedurally,
+nothing traced), and rebuilt from these files into an empty project to check: renders are pixel-identical except
+the random Advanced Lightning arcs.
+
+![ae_library](docs/ae_library.jpg)
 
 ### AE VFX director
 

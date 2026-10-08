@@ -50,6 +50,9 @@ or texture budgets; repeated instances still use `copies=` so they share one fra
    .aep) into `ae/frames/<comp>/`.
 3. Judge on a contact sheet (`templates/ae_sheet.py`) BEFORE Spine. Fix the look in AE, not in Spine.
 
+Before building from scratch, check `ae_library` (50 finished cel and realistic effects: bursts, rings, electric,
+water, smoke, fire columns, sunbursts, glows, elements): build the closest one and adapt it, or copy its builder.
+
 Known-good starting points:
 
 | Effect | Template + params |
