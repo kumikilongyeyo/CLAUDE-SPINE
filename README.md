@@ -129,7 +129,7 @@ Turn a video or PNG sequence into a reusable **editable FX recipe** rather than
 pasting a flattened movie on top of every future symbol. The two MCP tools work
 with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
 
-\`\`\`text
+```text
 # 1. Learn the behavior from real footage.
 ae_fx_capture source="./references/heavy_punch.mp4" library_dir="./FX_LIBRARY" name="heavy_punch"
 # For a rendered sequence: source="./frames" fps=24
@@ -144,19 +144,19 @@ ae_fx_remix recipe="./FX_LIBRARY/heavy_punch/recipe.json" out_dir="./AE_scripts"
 # The native AE comp has editable core/halo/ring/spark layers and live controls.
 # 4. Review: ae_quick_look. Finish/grade using existing ae_material_fx / ae_vfx_review.
 # 5. Deliver: ae_vfx_to_spine project=... name=heavy_punch aep=... comp=...
-\`\`\`
+```
 
-The memory folder holds \`recipe.json\` (timing, luminous intensity, size, center,
-dominant color, impact beats and reduced Bezier-ready keys) and \`reference.jpg\`
+The memory folder holds `recipe.json` (timing, luminous intensity, size, center,
+dominant color, impact beats and reduced Bezier-ready keys) and `reference.jpg`
 (four sampled key frames). Reuse or remix the same recipe as often as needed.
-\`strength=0.25..3\` changes punch/coverage/sparks; \`speed=0.25..4\` retimes;
-\`style\` changes procedural accents; \`color\`, \`spark_count\`, and \`canvas\`
+`strength=0.25..3` changes punch/coverage/sparks; `speed=0.25..4` retimes;
+`style` changes procedural accents; `color`, `spark_count`, and `canvas`
 override the generated variation. Use **Impact Strength** and **Global Scale**
 sliders to modify it after creation in AE.
 
-The generated \`.jsx\` creates a native, multi-layer AE composition, which is
-stored in an \`.aep\` library project after running it in After Effects. An
-\`.ffx\` animation preset is a **single-layer property preset**, not a complete
+The generated `.jsx` creates a native, multi-layer AE composition, which is
+stored in an `.aep` library project after running it in After Effects. An
+`.ffx` animation preset is a **single-layer property preset**, not a complete
 multi-layer reconstruction: select relevant properties on one layer in AE and
 choose **Animation > Save Animation Preset** if that format is required.
 
@@ -165,7 +165,7 @@ project. The system estimates timing, brightness, location, growth and color;
 it cannot uniquely infer the original emitter count, turbulence settings, 3D
 geometry, masking or materials. Realistic smoke, fluid simulation, surface
 relighting and scene occlusion require additional authored passes. Feed isolated
-alpha footage for best results; video needs local \`ffmpeg\`. Black-key is
+alpha footage for best results; video needs local `ffmpeg`. Black-key is
 supported, but loses darker smoke; for footage with a background, use a clean
 plate. Missing background isolation produces an explicit warning, not a false
 claim of accurate extraction.
