@@ -545,7 +545,8 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     tintable=True: the frames are stored GREY and coloured by the slot's light + dark colour (Spine two-colour tint,
     "tint black"), fitted so it still looks like the render; then ONE frame set plays in any colour: tint="RRGGBB"
     turns the fitted pair to that hue (a white core stays white), tint="LLLLLL/DDDDDD" sets light/dark exactly, and
-    copies take their own: copies=[{"x": 0, "y": 0, "tint": "FF3030"}, ...]. The result's tint.grade says whether
+    copies take their own: copies=[{"x": 0, "y": 0, "tint": "FF3030"}, ...] (a dict copy also takes "offset": frames
+    into the sequence it starts at, so looping copies run out of step, and "parent": the bone it hangs from). The result's tint.grade says whether
     the effect is two-tone: good for lightning, electricity, frost, ice, smoke; fair for cooling sparks; poor for fire and gold
     glows (white -> yellow -> orange -> red needs more than two colours: make those variants in AE). The game
     runtime must draw two-colour tint (spine-webgl does; spine-pixi turns it on for slots with a dark colour).

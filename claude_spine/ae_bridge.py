@@ -379,20 +379,21 @@ def import_sequence(project: Project, name: str, frames: list[str | Path], fps: 
 
 def copy_sequence(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
                   until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0,
-                  tint: str = "") -> str:
+                  tint: str = "", offset: int = 0) -> str:
     """Another instance of an imported sequence (``res`` = the import's result) on a new slot that SHARES its frames:
     the atlas holds one set of images however many copies play (glitter in every cell of a cluster, sparks on every
     coin). x, y in ``parent``'s space (default: the original's parent); start defaults to the original's, until to the
     original's end for loops. scale multiplies this instance's size and rotation (degrees) turns it, both on the copy's
     own bone (escalating hits from one frame set: scale 1 / 1.3 / 1.7). tint recolours this copy (the import must be
-    tintable). Returns the new slot (``copy_instance`` returns the slot, bone and placement)."""
+    tintable). offset starts this copy's sequence that many frames in (two plumes of one looping smoke out of step).
+    Returns the new slot (``copy_instance`` returns the slot, bone and placement)."""
     return copy_instance(project, res, x=x, y=y, start=start, until=until, parent=parent, scale=scale,
-                         rotation=rotation, tint=tint)["slot"]
+                         rotation=rotation, tint=tint, offset=offset)["slot"]
 
 
 def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0, start: float | None = None,
                   until: float = 0.0, parent: str | None = None, scale: float = 1.0, rotation: float = 0.0,
-                  tint: str = "") -> dict:
+                  tint: str = "", offset: int = 0) -> dict:
     """``copy_sequence`` returning ``{slot, bone, x, y, start, end, scale, rotation}`` (+ ``light``, ``dark``
     when tinted)."""
     sk = project.data
@@ -426,21 +427,29 @@ def copy_instance(project: Project, res: dict, *, x: float = 0.0, y: float = 0.0
     if t0 > 0:
         pts.insert(0, (0.0, None))
     ab.slot_attachment(slot.name, pts)
-    ab.sequence(slot.name, "fx", [(t0, res["seq_mode"], 0, res["delay"])])
+    if offset and not 0 <= offset < res["frames_out"]:
+        raise ValueError(f"copy offset {offset} is outside the sequence's {res['frames_out']} frames")
+    ab.sequence(slot.name, "fx", [(t0, res["seq_mode"], int(offset), res["delay"])])
     return {"slot": slot.name, "bone": bn, "x": x, "y": y, "start": round(t0, 4), "end": round(end, 4),
-            "scale": scale, "rotation": rotation, **({"light": color[:6], "dark": dark} if tint else {})}
+            "scale": scale, "rotation": rotation, **({"light": color[:6], "dark": dark} if tint else {}),
+            **({"offset": int(offset)} if offset else {})}
 
 
 def parse_copy(cp) -> dict:
     """One ``copies`` entry: [x, y], [x, y, start], [x, y, start, scale] or [x, y, start, scale, rotation]
     (start may be null = the original's start), or a dict with those keys plus ``tint`` (a tintable import's copy in
-    its own colour: "RRGGBB" or "light/dark")."""
-    tint = ""
+    its own colour: "RRGGBB" or "light/dark"), ``offset`` (frames into the sequence the copy starts at) and ``parent``
+    (the bone the copy hangs from, default the original's: an aura on each of three coins from one frame set)."""
+    tint, offset, parent = "", 0, None
     if isinstance(cp, dict):
-        unknown = set(cp) - {"x", "y", "start", "scale", "rotation", "tint"}
+        unknown = set(cp) - {"x", "y", "start", "scale", "rotation", "tint", "offset", "parent"}
         if unknown or "x" not in cp or "y" not in cp:
-            raise ValueError(f"copy {cp!r}: give x, y and optionally start, scale, rotation, tint")
+            raise ValueError(f"copy {cp!r}: give x, y and optionally start, scale, rotation, tint, offset, parent")
+        parent = cp.get("parent") or None
         tint = cp.get("tint") or ""
+        offset = int(cp.get("offset") or 0)
+        if offset < 0:
+            raise ValueError(f"copy {cp!r}: offset is a frame count, 0 or more")
         if tint:
             for part in str(tint).split("/"):
                 ae_tint.hex_rgb(part)                    # a bad colour fails before anything is written
@@ -454,7 +463,8 @@ def parse_copy(cp) -> dict:
         raise ValueError(f"copy {cp[:5]!r}: scale must be positive")
     return {"x": float(x), "y": float(y), "start": None if start is None else float(start),
             "scale": 1.0 if scale is None else float(scale), "rotation": 0.0 if rot is None else float(rot),
-            **({"tint": str(tint)} if tint else {})}
+            **({"tint": str(tint)} if tint else {}), **({"offset": offset} if offset else {}),
+            **({"parent": str(parent)} if parent else {})}
 
 
 # Spectrum bands, outermost (largest) first. Additive copies of one frame set in these colours sum to white where

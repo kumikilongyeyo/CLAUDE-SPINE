@@ -227,3 +227,27 @@ def test_spectrum_plays_in_the_runtime(symbol, tmp_path):
     dump = runtime.run(p, animations=[res["animation"]], fps=24, geometry=True)
     drawn = {dr["slot"] for f in dump["animations"][res["animation"]]["frames"] for dr in f["draws"]}
     assert set(res["spectrum"]["slots"][0]) <= drawn
+
+
+def test_copy_offset_starts_a_looping_copy_out_of_step(symbol, tmp_path):
+    d = white_glow(tmp_path / "fr", n=6)
+    res = ae_bridge.fx_to_spine(symbol, "s", frames_dir=str(d), fps=24, mode="additive", seq_mode="loop", until=1.0,
+                                copies=[{"x": 10, "y": 0, "offset": 3}, [20, 0]])
+    a = symbol.data.animations[res["animation"]]
+    seq = lambda slot: a.attachments["default"][slot]["fx"]["sequence"][0]
+    assert seq(res["copy_instances"][0]["slot"]).index == 3 and res["copy_instances"][0]["offset"] == 3
+    assert not getattr(seq(res["copy_instances"][1]["slot"]), "index", 0)          # 0 is left out of the key
+    with pytest.raises(ValueError, match="outside"):
+        ae_bridge.fx_to_spine(symbol, "t", frames_dir=str(d), fps=24, mode="additive", copies=[{"x": 0, "y": 0, "offset": 99}])
+
+
+def test_copy_parent_hangs_a_copy_on_another_bone(symbol, tmp_path):
+    from claude_spine.ir import Bone
+    symbol.data.bones.append(Bone(name="coin2", parent="root", x=300))
+    d = white_glow(tmp_path / "fr")
+    res = ae_bridge.fx_to_spine(symbol, "a", frames_dir=str(d), fps=24, mode="additive", tintable=True,
+                                copies=[{"x": 0, "y": 0, "parent": "coin2", "tint": "30FF8A"}])
+    bone = next(b for b in symbol.data.bones if b.name == res["copy_instances"][0]["bone"])
+    assert bone.parent == "coin2"
+    with pytest.raises(ValueError, match="no bone"):
+        ae_bridge.fx_to_spine(symbol, "b", frames_dir=str(d), fps=24, mode="additive", copies=[{"x": 0, "y": 0, "parent": "nope"}])

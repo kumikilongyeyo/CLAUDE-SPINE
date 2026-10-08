@@ -1,4 +1,4 @@
-/*TEMPLATE {"name":"magic_glow","doc":"A magical aura: a breathing glow (soft halo, body, white-hot core) with wisps of energy flowing OUT of it (fractal noise streaming outward, wrapped round the centre with Polar Coordinates, swirling back and forth) and motes of light rising and twinkling round it. Built entirely in grey and coloured once at the end (black -> color -> core), so the render is two-tone: import it with tintable=True and one frame set plays in any colour. Additive on black (mode=\"additive\"); loops exactly (the energy is rendered twice as long and crossfaded, motes and breathing run on whole cycles).","params":{"size":512,"duration":2.0,"fps":24,"color":"8A3CFF","core":"FFFFFF","radius":0.3,"energy":1.0,"flow":110,"swirl":25,"breathe":0.18,"motes":26,"mote_size":5,"glow":1.0,"seed":3}} */
+/*TEMPLATE {"name":"magic_glow","doc":"A magical aura: a breathing glow (soft halo, body, white-hot core) with wisps of energy flowing OUT of it (fractal noise streaming outward, wrapped round the centre with Polar Coordinates, swirling back and forth; `hole` = where they start, as a fraction of the half-size: put it at the subject's rim, e.g. 0.5 for a coin filling half the comp) and motes of light rising and twinkling round it. Built entirely in grey and coloured once at the end (black -> color -> core), so the render is two-tone: import it with tintable=True and one frame set plays in any colour. Additive on black (mode=\"additive\"); loops exactly (the energy is rendered twice as long and crossfaded, motes and breathing run on whole cycles).","params":{"size":512,"duration":2.0,"fps":24,"color":"8A3CFF","core":"FFFFFF","radius":0.3,"energy":1.0,"flow":110,"swirl":25,"breathe":0.18,"motes":26,"mote_size":5,"glow":1.0,"hole":0.18,"seed":3}} */
 var S = P.size, D = P.duration, name = P.comp || "magic_glow", C = S / 2, R = S * P.radius;
 var DD = 2 * D;
 // 1. energy wisps on a strip: x = angle round the centre, y = distance from it (top row = centre). The noise
@@ -22,13 +22,14 @@ wisp("wisp_big", 70, 150, P.flow, 100, 0);
 wisp("wisp_fine", 30, 90, P.flow * 1.6, 55, 7);
 var band = src.layers.addSolid([1, 1, 1], "band", 1024, 256, 1);  // strongest just outside the aura, gone at the rim
 var br = AEFX.fx(band, "ADBE Ramp");
-AEFX.set(br, "ADBE Ramp-0001", [512, 256 * 0.55]); AEFX.set(br, "ADBE Ramp-0002", [1, 1, 1, 1]);
+AEFX.set(br, "ADBE Ramp-0001", [512, 256 * Math.max(0.55, Math.min(0.9, P.hole + 0.2))]); AEFX.set(br, "ADBE Ramp-0002", [1, 1, 1, 1]);
 AEFX.set(br, "ADBE Ramp-0003", [512, 256]); AEFX.set(br, "ADBE Ramp-0004", [0, 0, 0, 1]);
 band.blendingMode = BlendingMode.MULTIPLY;
 var inner = src.layers.addSolid([1, 1, 1], "inner", 1024, 256, 1);
 var ir = AEFX.fx(inner, "ADBE Ramp");
-AEFX.set(ir, "ADBE Ramp-0001", [512, 256 * 0.18]); AEFX.set(ir, "ADBE Ramp-0002", [0, 0, 0, 1]);
-AEFX.set(ir, "ADBE Ramp-0003", [512, 256 * 0.5]); AEFX.set(ir, "ADBE Ramp-0004", [1, 1, 1, 1]);
+var h0 = Math.max(0, Math.min(0.85, P.hole)), h1 = Math.min(0.95, h0 + Math.max(0.12, 0.32 * (1 - h0)));
+AEFX.set(ir, "ADBE Ramp-0001", [512, 256 * h0]); AEFX.set(ir, "ADBE Ramp-0002", [0, 0, 0, 1]);
+AEFX.set(ir, "ADBE Ramp-0003", [512, 256 * h1]); AEFX.set(ir, "ADBE Ramp-0004", [1, 1, 1, 1]);
 inner.blendingMode = BlendingMode.MULTIPLY;
 var strip = AEFX.loopify(src, name + "_wisp", D);
 // mirror side by side so the wrap has no seam, squeeze into a square, wrap round the centre

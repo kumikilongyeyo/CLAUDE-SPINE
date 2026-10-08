@@ -996,6 +996,10 @@ edges split into colour, the way a prism or a lens's chromatic fringe does. No e
 0.03 is a faint fringe, and `spectrum=0.05 spectrum_bands=6 spectrum_turn=2` fans every ray into a rainbow. Each band
 redraws the glow's area, so 6 bands cost 6 times the fill (3 is the cheap one).
 
+Copies in dict form also take `offset` (frames into the sequence the copy starts at, so two plumes of one
+looping smoke run out of step) and `parent` (the bone the copy hangs from: an aura on each of three coins from one
+frame set). `magic_glow hole=0.5` starts the energy at the subject's rim (half the half-size here).
+
 When a template's result line says `"tintable":true`, import it that way. ExtendScript is ES3: a variable named
 `long`, `int`, `char`... is a SyntaxError in After Effects although `node --check` accepts it. A test now scans every
 template for that.
