@@ -88,7 +88,17 @@ def test_capture_subsamples_entire_sequence_and_accepts_large_sources(tmp_path):
     assert (tmp_path/"lib"/"sample"/"reference.jpg").exists()
 
 
+def test_saved_fx_are_searchable_for_later_reuse(tmp_path):
+    src = make_footage(tmp_path)
+    M.capture(str(src), str(tmp_path/"fx"), "Impact Fire", fps=24)
+    assert M.library(str(tmp_path/"fx"), "ambient")["count"] == 0
+    item = M.library(str(tmp_path/"fx"), "impact")["presets"][0]
+    assert item["name"] == "Impact Fire"
+    assert item["event"] == "impact"
+    assert item["recipe"].endswith("recipe.json")
+
+
 def test_mcp_tools_are_registered(tmp_path):
     from claude_spine.server import mcp
     names = {t.name for t in asyncio.run(mcp.list_tools())}
-    assert {"ae_fx_capture", "ae_fx_remix"} <= names
+    assert {"ae_fx_capture", "ae_fx_library", "ae_fx_remix"} <= names
