@@ -151,6 +151,9 @@ def test_frame_compare_detects_differences_and_creates_corrected_next_build(tmp_
                     style="anime", strength=1.5, canvas=1024)
     assert out["score"] < 99
     assert out["errors"]["visual_error"] > .01
+    assert out["errors"]["silhouette_iou"] < .9
+    assert out["worst_frames"]
+    assert out["next_aep"] is None
     assert out["tuning"]["radius_gain"] > 1.0
     assert out["tuning"]["offset_x"] > 0
     assert out["tuning"]["energy_gain"] > 1.0
@@ -178,3 +181,29 @@ def test_compare_rejects_missing_render_and_composite_without_plate(tmp_path):
                   candidate_fps=24, candidate_mode="arbitrary")
     with pytest.raises(ValueError, match="unknown fit"):
         M.remix(cap["recipe"], str(tmp_path/"review"), fit={"bad_key": 10})
+
+
+def test_speed_changed_render_matches_rescaled_reference_times(tmp_path):
+    reference = make_footage(tmp_path)
+    capture = M.capture(str(reference), str(tmp_path/"fx"), "fast")
+    # Same source frames at 48fps are a precisely 2x faster edit of a 24fps reference.
+    out = V.compare(capture["recipe"], str(tmp_path/"review"), candidate_frames=str(reference),
+                    candidate_fps=48, speed=2, max_frames=40)
+    assert out["score"] > 99.9
+    assert out["matched_times"][-1] == pytest.approx(39/48, abs=.0001)
+
+
+def test_ae_work_area_can_start_late_and_generates_named_next_project(tmp_path, monkeypatch):
+    reference = make_footage(tmp_path)
+    cap = M.capture(str(reference), str(tmp_path/"fx"), "nonzero")
+    class StubRenderInfo:
+        fps = 24
+        start = 300
+        frames = sorted(reference.glob("*.png"))
+    monkeypatch.setattr(V.ae_bridge, "render_comp", lambda *a, **k: StubRenderInfo)
+    out = V.compare(cap["recipe"], str(tmp_path/"review"),
+                    aep=str(tmp_path/"simulated.aep"), comp="nonzero_premium", max_frames=40)
+    assert out["score"] > 99.9
+    assert out["next_aep"].endswith("nonzero_match_002.aep")
+    jsx = Path(out["next_jsx"]).read_text()
+    assert "app.project.save(new File(" in jsx
