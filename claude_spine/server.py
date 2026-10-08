@@ -467,6 +467,16 @@ def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
 
 
 @mcp.tool()
+def ae_fx_library(library_dir: str, query: str = "") -> dict:
+    """Search saved reference-footage FX recipes by name or event family.
+
+    Returns reusable recipe paths, reference thumbnails, duration and captured behavior.
+    These recipes can be passed directly to ae_fx_remix to make new color/style/
+    high-impact variations at any time."""
+    return ae_fx_memory.library(library_dir, query)
+
+
+@mcp.tool()
 def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
                 color: str = "", speed: float = 1.0, spark_count: int = -1,
                 comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
