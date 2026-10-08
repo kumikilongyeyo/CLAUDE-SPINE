@@ -126,7 +126,7 @@ the random Advanced Lightning arcs.
 ### Reference-footage FX memory (new)
 
 Turn a video or PNG sequence into a reusable **editable FX recipe** rather than
-pasting a flattened movie on top of every future symbol. The two MCP tools work
+pasting a flattened movie on top of every future symbol. The three MCP tools work
 with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
 
 ```text
@@ -134,6 +134,8 @@ with the existing AE VFX director, AE MCP and AE-to-Spine bridge:
 ae_fx_capture source="./references/heavy_punch.mp4" library_dir="./FX_LIBRARY" name="heavy_punch"
 # For a rendered sequence: source="./frames" fps=24
 # For FX on top of a scene: background="./clean_plate.png" mask_mode="background"
+
+# Find any stored preset later: ae_fx_library library_dir="./FX_LIBRARY" query="punch"
 
 # 2. Rebuild the core and make a radically stronger or recolored variant.
 ae_fx_remix recipe="./FX_LIBRARY/heavy_punch/recipe.json" out_dir="./AE_scripts" \
