@@ -164,3 +164,66 @@ def test_white_additive_light_ramps_on_brightness(symbol, tmp_path):
     show = lambda a: (a - a * a) * D + a * a * L
     dim, core = show(0.2), show(1.0)
     assert dim[2] > 1.5 * dim[0] and np.allclose(core, L, atol=1e-6)
+
+
+# ---------------------------------------------------------------- spectrum: one frame set split into colour bands
+def white_glow(d, n=4):
+    d.mkdir(parents=True, exist_ok=True)
+    y, x = np.mgrid[0:40, 0:40]
+    for i in range(n):
+        v = np.clip(1 - np.hypot(x - 20, y - 20) / (12 + i), 0, 1)
+        Image.fromarray(np.round(np.dstack([v, v, v]) * 255).astype(np.uint8)).save(d / f"f_{i}.png")
+    return d
+
+
+@pytest.mark.parametrize("bands", [3, 6])
+def test_spectrum_bands_add_up_to_white_and_spread_out(symbol, tmp_path, bands):
+    d = white_glow(tmp_path / "fr")
+    res = ae_bridge.fx_to_spine(symbol, "prism", frames_dir=str(d), fps=24, mode="additive", tintable=True,
+                                spectrum=0.05, spectrum_bands=bands, spectrum_turn=2)
+    sp = res["spectrum"]
+    assert len(sp["slots"]) == 1 and len(sp["slots"][0]) == bands
+    slots = {s.name: s for s in symbol.data.slots}
+    total = sum(ae_tint.hex_rgb(slots[n].color[:6]) for n in sp["slots"][0])
+    assert np.allclose(total, [1, 1, 1], atol=0.01)                       # overlapping bands = the white light
+    assert all(slots[n].blend == "additive" and slots[n].dark == slots[n].color[:6] for n in sp["slots"][0])
+    bones = {b.name: b for b in symbol.data.bones}
+    scales = [bones[slots[n].bone].scaleX for n in sp["slots"][0][1:]]
+    rots = [bones[slots[n].bone].rotation for n in sp["slots"][0][1:]]
+    assert len(set(scales)) == bands - 1 and min(scales) < 1 < max(scales)
+    assert len(set(rots)) == bands - 1
+    assert len(list((symbol.images_dir / "ae").glob("prism_*.png"))) == res["frames_out"]   # still one frame set
+
+
+def test_spectrum_splits_every_copy_and_keeps_fades_on_the_band(symbol, tmp_path):
+    d = white_glow(tmp_path / "fr")
+    res = ae_bridge.fx_to_spine(symbol, "p", frames_dir=str(d), fps=24, mode="additive", tintable=True, fade=0.05,
+                                copies=[[30, 0]], spectrum=0.04)
+    assert len(res["spectrum"]["slots"]) == 2 and all(len(s) == 3 for s in res["spectrum"]["slots"])
+    main = res["spectrum"]["slots"][0][0]
+    keys = symbol.data.animations[res["animation"]].slots[main]["rgba"]
+    assert all(k.color[:6] == "00FF00" for k in keys)                     # the middle band of 3, not the fitted white
+
+
+def test_spectrum_errors(symbol, tmp_path):
+    d = white_glow(tmp_path / "fr")
+    with pytest.raises(ValueError, match="tintable"):
+        ae_bridge.fx_to_spine(symbol, "a", frames_dir=str(d), fps=24, mode="additive", spectrum=0.05)
+    with pytest.raises(ValueError, match="spectrum_bands"):
+        ae_bridge.fx_to_spine(symbol, "b", frames_dir=str(d), fps=24, mode="additive", tintable=True, spectrum=0.05,
+                              spectrum_bands=4)
+    with pytest.raises(ValueError, match="0.3"):
+        ae_bridge.fx_to_spine(symbol, "c", frames_dir=str(d), fps=24, mode="additive", tintable=True, spectrum=0.5)
+
+
+@needs_node
+def test_spectrum_plays_in_the_runtime(symbol, tmp_path):
+    d = white_glow(tmp_path / "fr")
+    res = server.ae_vfx_to_spine(str(symbol.path), "pr", frames_dir=str(d), fps=24, mode="additive", seq_mode="loop",
+                                 until=0.5, tintable=True, spectrum=0.05, spectrum_bands=6, spectrum_turn=2)
+    assert "validation_errors" not in res
+    from claude_spine.project import Project
+    p = Project.open(str(symbol.path))
+    dump = runtime.run(p, animations=[res["animation"]], fps=24, geometry=True)
+    drawn = {dr["slot"] for f in dump["animations"][res["animation"]]["frames"] for dr in f["draws"]}
+    assert set(res["spectrum"]["slots"][0]) <= drawn

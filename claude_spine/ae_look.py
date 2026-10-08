@@ -49,7 +49,8 @@ def find_beats(en: list[float], ht: list[float] | None = None) -> dict:
     first frame at or below half the peak, residual = last visible. An effect that opens on its impact (no
     anticipation) shows its energy peak (spread) in place of anticipation_end.
     build (rises and holds: frost creeping, a charge-up): start, half_built, fully_built (95% of the peak), end.
-    loop (never below 60% of its peak while visible): four evenly spaced frames."""
+    loop (never below 60% of its peak while visible, or opening visible and ending where it opened without
+    dropping below 30%: a breathing glow): four evenly spaced frames."""
     e = np.asarray(en, float)
     peak_v = float(e.max())
     if peak_v <= 0:
@@ -58,7 +59,10 @@ def find_beats(en: list[float], ht: list[float] | None = None) -> dict:
     lo, hi = int(vis[0]), int(vis[-1])
     peak = int(np.argmax(e))
     out = {"lo": lo, "hi": hi, "peak": peak}
-    if hi - lo >= 3 and e[lo:hi + 1].min() >= 0.6 * peak_v:
+    # a loop: steady, or swelling and settling back to where it started (a breathing glow dips well below its peak)
+    steady = e[lo:hi + 1].min() >= 0.6 * peak_v
+    returns = e[lo] >= 0.3 * peak_v and abs(e[hi] - e[lo]) <= 0.15 * peak_v and e[lo:hi + 1].min() >= 0.3 * peak_v
+    if hi - lo >= 3 and (steady or returns):
         idx = [lo + round(k * (hi - lo) / 4) for k in range(4)]
         return {**out, "kind": "loop", "beats": dict(zip(("loop_1", "loop_2", "loop_3", "loop_4"), idx))}
     after = [i for i in range(peak + 1, hi + 1) if e[i] <= 0.5 * peak_v]

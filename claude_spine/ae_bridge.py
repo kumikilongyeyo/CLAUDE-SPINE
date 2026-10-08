@@ -457,15 +457,64 @@ def parse_copy(cp) -> dict:
             **({"tint": str(tint)} if tint else {})}
 
 
+# Spectrum bands, outermost (largest) first. Additive copies of one frame set in these colours sum to white where
+# they overlap: 3 = red / green / blue; 6 = red, yellow, green, cyan, blue, magenta at a third each (smoother).
+SPECTRUM_BANDS = {3: ["FF0000", "00FF00", "0000FF"],
+                  6: ["550000", "555500", "005500", "005555", "000055", "550055"]}
+
+
+def disperse(project: Project, res: dict, spread: float, bands: int = 3, turn: float = 0.0) -> dict:
+    """Split every instance of a tintable sequence (the import and its copies) into a spectrum: the instance's own
+    slot becomes the middle band and the other bands are copies on child bones, each one scaled ``spread`` more
+    than the next (red outermost) and turned ``turn`` degrees, all sharing the one frame set. They are drawn
+    additive, so where they overlap they add back up to the render's own light and only the edges split into
+    colour: real dispersion (a prism, a lens's chromatic fringe) for no extra frames. Fill cost grows with
+    ``bands`` (every band covers the glow's area again): 3 is the cheap one."""
+    if not res.get("tint"):
+        raise ValueError("spectrum needs tintable=True")
+    if bands not in SPECTRUM_BANDS:
+        raise ValueError(f"spectrum_bands must be one of {sorted(SPECTRUM_BANDS)}")
+    if not 0 < spread <= 0.3:
+        raise ValueError("spectrum (the scale step between bands) must be in (0, 0.3]; 0.02-0.05 looks like light")
+    sk = project.data
+    cols = SPECTRUM_BANDS[bands]
+    m = bands // 2
+    insts = [{"slot": res["slot"], "bone": res["bone"], "start": res["start"]}] + list(res.get("copy_instances", []))
+    out = []
+    for inst in insts:
+        slot = sk.slot(inst["slot"])
+        alpha = slot.color[6:8] or "FF"
+        slot.color, slot.dark, slot.blend = cols[m] + alpha, cols[m], "additive"
+        anim = sk.animations[res["animation"]]
+        for k in anim.slots.get(slot.name, {}).get("rgba", []):          # a fade keys the slot colour: keep the band
+            k.color = cols[m] + k.color[6:]
+        made = [slot.name]
+        for k, c in enumerate(cols):
+            if k == m:
+                continue
+            ci = copy_instance(project, res, x=0.0, y=0.0, start=inst["start"], parent=inst["bone"],
+                               scale=1 + spread * (m - k), rotation=turn * (m - k), tint=f"{c}/{c}")
+            s = sk.slot(ci["slot"])
+            s.color, s.blend = c + alpha, "additive"
+            made.append(ci["slot"])
+        out.append(made)
+    return {"bands": cols, "spread": spread, "turn": turn, "slots": out}
+
+
 def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", frames_dir: str = "",
                 fps: float = 0, start_frame: int | None = None, end_frame: int | None = None,
-                keep_frames: str = "", template: str = DEFAULT_TEMPLATE, copies: list | None = None, **kw) -> dict:
+                keep_frames: str = "", template: str = DEFAULT_TEMPLATE, copies: list | None = None,
+                spectrum: float = 0.0, spectrum_bands: int = 3, spectrum_turn: float = 0.0, **kw) -> dict:
     """Render (or read) the frames and import them. Either ``aep`` + ``comp`` (rendered with aerender) or
     ``frames_dir`` + ``fps`` (frames already on disk: TIFF premultiplied, or PNG straight RGBA / light-on-black
     RGB)."""
     placed = [parse_copy(cp) for cp in copies or []]       # a bad entry fails before anything is rendered or written
     if any("tint" in c for c in placed) and not kw.get("tintable"):
         raise ValueError("copies with a tint need tintable=True")
+    if spectrum and not kw.get("tintable"):
+        raise ValueError("spectrum needs tintable=True")
+    if spectrum and spectrum_bands not in SPECTRUM_BANDS:
+        raise ValueError(f"spectrum_bands must be one of {sorted(SPECTRUM_BANDS)}")
     if kw.get("tint"):
         for part in str(kw["tint"]).split("/"):
             ae_tint.hex_rgb(part)
@@ -499,6 +548,8 @@ def fx_to_spine(project: Project, name: str, *, aep: str = "", comp: str = "", f
             inst = [copy_instance(project, res, until=kw.get("until", 0.0), **c) for c in placed]
             res["copies"] = [c["slot"] for c in inst]          # slot names, as before
             res["copy_instances"] = inst                        # slot + bone + placement of each copy
+        if spectrum:
+            res["spectrum"] = disperse(project, res, spectrum, spectrum_bands, spectrum_turn)
         return res
     finally:
         if tmp is not None:

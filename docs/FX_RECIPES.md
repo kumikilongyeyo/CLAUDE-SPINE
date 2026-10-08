@@ -969,6 +969,34 @@ Two other optimisations were measured and rejected, because neither holds on rea
 - Shrinking "soft" glows: at half size, 1% of pixels change by 12-16 (0..255), because the texture inside realistic
   glows is real detail.
 
+**Magic smoke, magic glow, spectrum light: AE templates made to be recoloured.**
+
+Three `ae_template`s are built entirely in grey (shape, noise, glow, motes) and coloured once at the end, so every
+frame lies on one colour line and imports `tintable` with a good grade. One render then plays in any colour:
+
+- `magic_glow`: a breathing aura with energy wisps streaming out of it (fractal noise wrapped round the centre with
+  Polar Coordinates, swirling) and motes rising. Additive; tint grade good (7/255).
+- `magic_smoke`: glowing smoke ribbons and threads rising from a source, torn into curls at two scales, with motes.
+  `luminous=true` (default) is additive, grade fair (10.5). `luminous=false` gives see-through smoke (alpha = density),
+  grade good (3), but it reads dim; use the luminous one for magic.
+- `prism_glow`: a WHITE light glow (core, halo, a star of tapered rays, an anamorphic streak, a faint lens ring).
+  It is meant for `spectrum=`.
+
+    ae_vfx_to_spine ... aep=x.aep comp=magic_glow tintable=true seq_mode=loop copies=[{x: 330, y: 0, tint: "30FF8A"}]
+    ae_vfx_to_spine ... aep=x.aep comp=prism_glow mode=additive tintable=true spectrum=0.05 spectrum_bands=6 spectrum_turn=2
+
+**`spectrum`: a rainbow from one grey frame set.** A rainbow can't be held by two colours, but light can be split.
+`spectrum=` draws every instance (the import and its copies) again as additive colour bands: 3 bands (red, green,
+blue) or 6 (red, yellow, green, cyan, blue, magenta at a third each). Each band is scaled `spectrum` more than the next,
+red outermost, and turned `spectrum_turn` degrees. The bands add back up to white where they overlap, and only the
+edges split into colour, the way a prism or a lens's chromatic fringe does. No extra frames. Judged on `prism_glow`:
+0.03 is a faint fringe, and `spectrum=0.05 spectrum_bands=6 spectrum_turn=2` fans every ray into a rainbow. Each band
+redraws the glow's area, so 6 bands cost 6 times the fill (3 is the cheap one).
+
+When a template's result line says `"tintable":true`, import it that way. ExtendScript is ES3: a variable named
+`long`, `int`, `char`... is a SyntaxError in After Effects although `node --check` accepts it. A test now scans every
+template for that.
+
 **`ae_quick_look`: judge the four key frames before importing.**
 
     ae_quick_look aep=x.aep comp=frost_v3 mode=alpha art=coin_face.png

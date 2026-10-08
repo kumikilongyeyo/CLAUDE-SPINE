@@ -61,3 +61,8 @@ def test_tool_is_registered(tmp_path):
     assert res["sheet"].endswith("s.png") and len(res["beats"]) == 4
     with pytest.raises(ValueError, match="aep"):
         server.ae_quick_look(fps=30)
+
+
+def test_a_breathing_loop_is_a_loop_not_a_build():
+    en = [8, 9, 10, 9.5, 8, 6, 5, 5.2, 6.5, 7.8]          # swells, dips to half, comes back to where it started
+    assert ae_look.find_beats(en)["kind"] == "loop"

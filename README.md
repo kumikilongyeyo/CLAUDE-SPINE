@@ -139,7 +139,8 @@ The plan gives Claude a stable comp hierarchy (`00_CONTROLS` through `07_FINISH`
 physical light-integration rules and a review rubric. The production importer wraps the raw `ae_fx_to_spine` bridge:
 it trims empty frames, caps frame count and texture size by target, preserves playback speed while subsampling,
 feathers comp edges, and keeps repeated `copies=` on one shared image sequence. Explicit size/frame settings still
-override the policy when a shot genuinely needs them. `tintable=True` stores a two-tone effect (electricity, lightning,
+override the policy when a shot genuinely needs them. `magic_glow`, `magic_smoke` and `prism_glow` templates are built to import that way; `spectrum=0.05` splits a white glow into rainbow bands
+from the same frames. `tintable=True` stores a two-tone effect (electricity, lightning,
 frost, smoke) as grey frames coloured by the slot's light and dark colour, so copies play it in any colour from one frame set;
 the result grades the fit (fire and gold glows grade poor: make those variants in AE).
 

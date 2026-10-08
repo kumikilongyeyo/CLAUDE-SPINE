@@ -161,6 +161,11 @@ tintable=True and give each copy its own tint ({"x": .., "y": .., "tint": "FF303
 red, green and purple. Check the result's tint.grade: "poor" (fire, gold glows, anything white -> yellow -> orange ->
 red) means two colours cannot hold it, so render those variants in AE and import without tintable.
 
+For magic effects start from the templates made for this: magic_glow, magic_smoke (luminous by default) and
+prism_glow. They are built in grey and coloured once, so they grade good and recolour cleanly. A rainbow / spectrum
+light is not a colour to tint: render the light WHITE (prism_glow) and import with spectrum=0.05 spectrum_bands=6
+spectrum_turn=2, which redraws the one frame set as rainbow bands that add up to white.
+
 Do not bake cheap things into AE just because AE can do them. Keep simple glow pulses, rings, shakes, repeated sparks and similar moving-light effects native Spine when possible.
 
 ## 7. Spine cleanup after import

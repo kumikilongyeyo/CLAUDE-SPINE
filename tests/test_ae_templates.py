@@ -107,3 +107,33 @@ def test_new_templates_are_in_the_tool_listing():
     out = asyncio.run(mcp.call_tool("ae_template", {}))
     listing = json.loads((out[0] if isinstance(out, tuple) else out)[0].text)["templates"]
     assert {"metal_sparks", "frost_creep"} <= set(listing)
+
+
+def test_magic_and_prism_templates_colour_once_so_they_stay_two_tone(tmp_path):
+    """Built in grey and coloured once at the end (Tritone black -> colour -> light, or Tint shadow -> light), so the
+    render lies on one colour line and imports tintable; they say so in their result line."""
+    t = ae_templates.list_templates()
+    assert {"magic_glow", "magic_smoke", "prism_glow"} <= set(t)
+    for name in ("magic_glow", "magic_smoke", "prism_glow"):
+        src = open(ae_templates.build_script(name, {}, tmp_path)["script"]).read()
+        assert src.count("ADBE Tritone") + src.count("ADBE Tint") >= 1, name
+        assert '"tintable":true' in src, name
+    smoke = open(ae_templates.build_script("magic_smoke", {"luminous": False}, tmp_path)["script"]).read()
+    assert "ADBE Tint" in smoke and '"mode":"alpha"' in smoke and '"mode":"additive"' in smoke   # both branches
+    prism = open(ae_templates.build_script("prism_glow", {}, tmp_path)["script"]).read()
+    assert '"spectrum":0.05' in prism and "var long" not in prism        # `long` is reserved in ExtendScript
+
+
+ES3_RESERVED = ("abstract boolean byte char class const debugger double enum export extends final float goto implements "
+                "import int interface long native package private protected public short static super synchronized "
+                "throws transient volatile").split()
+
+
+@pytest.mark.parametrize("name", sorted(ae_templates.list_templates()))
+def test_no_extendscript_reserved_word_as_a_name(name, tmp_path):
+    """ExtendScript is ES3: `var long = ...` is a SyntaxError in After Effects although node --check accepts it."""
+    import re
+    src = open(ae_templates.build_script(name, {"image": "/x.png"} if name == "relief_shimmer" else {}, tmp_path)["script"]).read()
+    bad = re.findall(r"\b(?:var|function)\s+(" + "|".join(ES3_RESERVED) + r")\b", src)
+    bad += re.findall(r"[,(]\s*(" + "|".join(ES3_RESERVED) + r")\s*[,)]\s*(?=[^;]*\{)", src)
+    assert not bad, f"{name} uses ExtendScript reserved word(s) as names: {sorted(set(bad))}"

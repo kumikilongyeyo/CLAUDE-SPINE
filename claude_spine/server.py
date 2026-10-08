@@ -472,7 +472,7 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
                     keep_frames: str = "", copies: list[list[float | None] | dict[str, Any]] | None = None,
                     feather: float = -1.0, anchor: list[float] | None = None,
                     deform_like: list[str] | None = None, min_fps: float = -1.0, tintable: bool = False,
-                    tint: str = "") -> dict:
+                    tint: str = "", spectrum: float = 0.0, spectrum_bands: int = 3, spectrum_turn: float = 0.0) -> dict:
     """Production AE->Spine import with automatic mobile-safe sequence budgets.
 
     This wraps ae_fx_to_spine rather than replacing it. The director trims empty frames, keeps playback
@@ -482,7 +482,7 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
     min_fps (default 12; 0 = off; with an explicit max_size AND max_frames it is off unless given): subsampling never
     drops below this playback rate. Loops/pingpongs shrink the texture first, then frames; one-shots drop frames
     first, down to min_fps, then shrink the texture, so a 16-frame 24 fps fire loop stays smooth.
-    tintable / tint: one grey frame set recoloured per slot (see ae_fx_to_spine)."""
+    tintable / tint / spectrum: one grey frame set recoloured per slot, or split into a spectrum (see ae_fx_to_spine)."""
     p = _open(project)
     res = ae_vfx_director.import_optimized(
         p, name, event=event, style=style, target=target, intensity=intensity, duration=duration,
@@ -493,7 +493,7 @@ def ae_vfx_to_spine(project: str, name: str, aep: str = "", comp: str = "", fram
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies,
         feather=feather, anchor=anchor, deform_like=deform_like, min_fps=None if min_fps < 0 else min_fps,
-        tintable=tintable, tint=tint)
+        tintable=tintable, tint=tint, spectrum=spectrum, spectrum_bands=spectrum_bands, spectrum_turn=spectrum_turn)
     return _saved(p, res)
 
 
@@ -516,7 +516,7 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
                    keep_frames: str = "", copies: list[list[float | None] | dict[str, Any]] | None = None,
                    feather: float = 0.0, anchor: list[float] | None = None,
                    deform_like: list[str] | None = None, min_fps: float = 0.0, tintable: bool = False,
-                   tint: str = "") -> dict:
+                   tint: str = "", spectrum: float = 0.0, spectrum_bands: int = 3, spectrum_turn: float = 0.0) -> dict:
     """Render an After Effects comp and play it in Spine as a frame sequence, timing matched to the comp.
 
     Source: aep + comp (rendered headless with aerender from the SAVED .aep, over the work area, never
@@ -548,7 +548,13 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
     copies take their own: copies=[{"x": 0, "y": 0, "tint": "FF3030"}, ...]. The result's tint.grade says whether
     the effect is two-tone: good for lightning, electricity, frost, ice, smoke; fair for cooling sparks; poor for fire and gold
     glows (white -> yellow -> orange -> red needs more than two colours: make those variants in AE). The game
-    runtime must draw two-colour tint (spine-webgl does; spine-pixi turns it on for slots with a dark colour)."""
+    runtime must draw two-colour tint (spine-webgl does; spine-pixi turns it on for slots with a dark colour).
+    spectrum (needs tintable): every instance is split into additive colour bands of the same frames, each scaled
+    `spectrum` more than the next (red outermost) and turned spectrum_turn degrees: white where they overlap, rainbow
+    fringes at every edge (a prism / chromatic dispersion) for no extra frames. spectrum_bands 3 (red, green, blue:
+    cheapest) or 6 (red, yellow, green, cyan, blue, magenta: smoother). Judged on prism_glow: 0.03 is a faint
+    fringe, spectrum=0.05 spectrum_bands=6 spectrum_turn=2 fans every ray into a rainbow. Each band redraws the
+    glow's area (fill cost on mobile)."""
     p = _open(project)
     res = ae_bridge.fx_to_spine(
         p, name, aep=aep, comp=comp, frames_dir=frames_dir, fps=fps, mode=mode, seq_mode=seq_mode,
@@ -557,7 +563,8 @@ def ae_fx_to_spine(project: str, name: str, aep: str = "", comp: str = "", frame
         max_size=max_size, max_frames=max_frames, blend=blend, color=color, parent=parent, front_of=front_of,
         behind=behind, fade=fade, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames, copies=copies, feather=feather,
-        anchor=anchor, deform_like=deform_like, min_fps=min_fps, tintable=tintable, tint=tint)
+        anchor=anchor, deform_like=deform_like, min_fps=min_fps, tintable=tintable, tint=tint, spectrum=spectrum,
+        spectrum_bands=spectrum_bands, spectrum_turn=spectrum_turn)
     return _saved(p, res)
 
 
