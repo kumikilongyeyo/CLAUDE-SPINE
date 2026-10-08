@@ -469,7 +469,7 @@ def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
 @mcp.tool()
 def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
                 color: str = "", speed: float = 1.0, spark_count: int = -1,
-                comp_name: str = "", save_as: str = "") -> dict:
+                comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
     """Build a reusable editable native AE FX composition from a captured reference recipe.
 
     strength 0.25..3 boosts impact, scale and particle energy; style = stylized,
@@ -481,7 +481,7 @@ def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "
     a single-layer .ffx can be saved inside AE via Animation > Save Animation Preset.
     This is a first-pass procedural rebuild, not an exact inverse render."""
     return ae_fx_memory.remix(recipe, out_dir, strength, style, color, speed,
-                              spark_count, comp_name, save_as)
+                              spark_count, comp_name, save_as, canvas)
 
 
 @mcp.tool()
