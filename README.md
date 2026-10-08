@@ -159,6 +159,28 @@ ae_fx_match recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
 # 6. Final review/grade -> ae_vfx_to_spine project=... name=heavy_punch aep=... comp=...
 ```
 
+**Optional local auto-run (Windows AE workstation):** Open a new EMPTY UNSAVED
+After Effects project first; keep AE running. Set `AFTERFX_BIN` to the absolute
+path of your installed `AfterFX.exe` or supply `afterfx_bin` explicitly, then:
+
+```text
+ae_fx_auto_fit recipe="./FX_LIBRARY/heavy_punch/recipe.json" \
+  out_dir="./FX_LIBRARY/heavy_punch/autofit" \
+  afterfx_bin="C:/Program Files/Adobe/Adobe After Effects 2026/Support Files/AfterFX.exe" \
+  max_rounds=3 style="premium" canvas=1024
+```
+
+The executable path above is an **example**, not a guaranteed installation path.
+It uses Adobe's supported AfterFX `-r` script execution and the existing
+`aerender` sequence exporter. Each round waits for an AE-written completion
+signal, renders the saved composition, scores the REAL render, generates an
+improved comp and repeats until the score plateaus or its round limit is hit.
+It stores every version and reports the best-scoring AEP/comp. The tool refuses
+a nonempty/saved unrelated AE project instead of writing over your current
+artwork. No hosted system can run your local After Effects unless the tool
+server itself is running on the AE workstation. Actual AE renders and
+human art-direction review are required before calling a result finished.
+
 **Automatic visual feedback:** `ae_fx_match` aligns the rebuilt comp's actual render to
 the source footage by timestamps, scores alpha/visual difference, center,
 energy, spread, and detail, and writes a side-by-side error image plus
