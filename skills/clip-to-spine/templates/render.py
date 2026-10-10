@@ -52,7 +52,12 @@ for n in want:
                 continue
             py, px, layer = res
             col = np.array(d["color"], np.float32)
-            layer *= np.r_[col[:3] * col[3], col[3]]
+            if d.get("dark") is not None:     # two-colour tint (tintable imports), as spine-webgl (premultiplied)
+                dk, ta = np.array(d["dark"], np.float32), layer[..., 3:4]
+                layer[..., :3] = ((ta - layer[..., :3]) * dk + layer[..., :3] * col[:3]) * col[3]
+                layer[..., 3:4] = ta * col[3]
+            else:
+                layer *= np.r_[col[:3] * col[3], col[3]]
             dst = acc[py:py + layer.shape[0], px:px + layer.shape[1]]
             if d.get("blend", "normal") == "additive":
                 dst[..., :3] += layer[..., :3]

@@ -1042,6 +1042,25 @@ static count (every slot visible at once) stays pessimistic, so trust the runtim
 it (`front_of`): the near arcs cross the face and the far arcs pass behind, so the effect reads as 3D. The ring
 radius must clear the subject, so the split points sit beside it.
 
+**`ripple_glow`: an energy rim that sends glowing waves outward.** Rebuilt from a slot clip of a charged multiplier
+orb (one pulse every ~1.03 s, rim radius 63 px on a 258 px clip). AE renders three things: a thin white-hot rim line
+that wobbles (looping turbulent displacement), rings of light that leave the rim, ease out as they travel `travel` of
+the half-size, widen, soften and fade, and a soft halo that swells each time a wave leaves. `waves` sets how many leave
+per loop (1 = one pulse per `duration`, as the clip). `shape=rect` puts it on a cell or frame (`aspect` = width /
+height, `corner` = roundness). `wave` sets the brightness and `wobble` how torn the rings are (0 = clean geometric
+rings). It is built in grey and coloured once, so import it tintable: one frame set plays blue, purple and gold
+(slot light / dark, or `rgba2` keys per wave). Put the comp centre on the subject centre, and set the Spine scale so
+the template's rim lands on the subject's edge. The result line gives the rim size in comp px.
+
+    ae_template name=ripple_glow params={comp: ripple_v1, save_as: x.aep}                  # orb, 1 wave per second
+    ae_template name=ripple_glow params={comp: cell_v1, shape: rect, aspect: 0.8, color: FFB030}
+    ae_vfx_to_spine ... aep=x.aep comp=ripple_v1 mode=additive tintable=true seq_mode=loop event=ambient
+        scale=<subject rim radius / 133> until=<a multiple of duration>   (same call)
+
+Measured: the loop seam (last frame to first) is 2.4/255, below the 3.4 median step between frames. The director
+shrinks a 30-frame loop to 233 px frames, about 0.29 of a 2048 page. Raise `max_size` with `max_frames` when the
+subject is large on screen.
+
 **Warm tints:** dim orange or yellow light reads as brown on a dark screen. Tints between orange and yellow now turn
 their dark end toward red and keep it bright, and the gold coin's aura reads amber.
 

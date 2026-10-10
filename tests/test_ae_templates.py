@@ -137,3 +137,17 @@ def test_no_extendscript_reserved_word_as_a_name(name, tmp_path):
     bad = re.findall(r"\b(?:var|function)\s+(" + "|".join(ES3_RESERVED) + r")\b", src)
     bad += re.findall(r"[,(]\s*(" + "|".join(ES3_RESERVED) + r")\s*[,)]\s*(?=[^;]*\{)", src)
     assert not bad, f"{name} uses ExtendScript reserved word(s) as names: {sorted(set(bad))}"
+
+
+def test_ripple_glow_waves_shapes_and_two_tone(tmp_path):
+    """ripple_glow (energy rim sending waves outward): one wave layer pair per wave, circle or rounded rect, built in
+    grey and coloured once so it imports tintable, and its loops are whole cycles of the duration."""
+    t = ae_templates.list_templates()
+    assert "ripple_glow" in t and t["ripple_glow"]["params"]["waves"] == 1
+    src = open(ae_templates.build_script("ripple_glow", {"waves": 3}, tmp_path)["script"]).read()
+    assert '"waves": 3' in src and "ADBE Tritone" in src and '"tintable":true' in src and '"seq_mode":"loop"' in src
+    assert 'ring("wave" + k' in src and "Cycle Evolution" in src
+    rect = open(ae_templates.build_script("ripple_glow", {"shape": "rect", "aspect": 0.8}, tmp_path)["script"]).read()
+    assert "ADBE Vector Rect Roundness" in rect and "ADBE Vector Ellipse Size" in rect   # both branches present
+    # every wave expression is periodic in the duration: phase = ((time / D) + k / N) % 1
+    assert "t = ((time / D) + " in src and "% 1" in src
