@@ -41,14 +41,24 @@ def version() -> str:
 
 
 def make_project(runtime_json: str, out_spine: str) -> dict:
-    """Import runtime JSON into an editable .spine project. Reports any
-    repairs the importer made (e.g. "Fixed invalid triangulation"), which
-    mean the JSON was not what the editor expects."""
-    Path(out_spine).parent.mkdir(parents=True, exist_ok=True)
-    r = _run(["-i", runtime_json, "-o", out_spine, "-r"])
+    """Import runtime JSON into an editable .spine project, replacing any project already at ``out_spine``. The
+    CLI imports INTO an existing project and keeps what is there, adding the skeleton under a new name
+    ("Skeleton renamed: hero -> hero2"), so a rebuild left a stale copy in the file; it now imports into a fresh
+    file that then replaces the old one. Reports any repairs the importer made (e.g. "Fixed invalid
+    triangulation"), which mean the JSON was not what the editor expects."""
+    out = Path(out_spine)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fresh = out.with_name(out.stem + ".importing.spine")
+    fresh.unlink(missing_ok=True)
+    r = _run(["-i", runtime_json, "-o", str(fresh), "-r"])
     log = _clean(r.stdout + r.stderr)
     repairs = [l for l in log.splitlines() if any(k in l.lower() for k in ("fixed", "invalid", "warning", "error"))]
-    return {"ok": Path(out_spine).exists() and r.returncode == 0, "project": out_spine, "repairs": repairs, "log": log}
+    ok = fresh.exists() and r.returncode == 0
+    if ok:
+        os.replace(fresh, out)
+    else:
+        fresh.unlink(missing_ok=True)
+    return {"ok": ok, "project": out_spine, "repairs": repairs, "log": log}
 
 
 def export_project(project: str, out_dir: str, fmt: str = "json") -> dict:
