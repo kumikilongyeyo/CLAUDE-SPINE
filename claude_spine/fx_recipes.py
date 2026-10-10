@@ -470,7 +470,7 @@ WHITE_TEX: dict[str, Callable[[], Image.Image]] = {
 
 # ------------------------------------------------------------------ custom art
 def load_art(spec: Any) -> tuple[Image.Image, dict]:
-    """spec: "path.png", "path.psd#Layer name" (or "path.psd#Group/Layer"), "kit:<picture>" (a bundled fx_kit picture),
+    """spec: "path.png", "path.psd#Layer name" (or "path.psd#Group/Layer"; .psb too), "kit:<picture>" (a bundled fx_kit picture),
     or {"path": ..., blend, scale, slice, px, anchor}.
     Returns (RGBA image, options). A PSD layer is cut at its own bounding box, so its centre is the target point."""
     import os
@@ -481,7 +481,7 @@ def load_art(spec: Any) -> tuple[Image.Image, dict]:
     if not spec:
         raise ValueError("art entry needs a path")
     path = os.path.expanduser(fx_kit.resolve_path(str(spec)))
-    if "#" in path and path.split("#", 1)[0].lower().endswith(".psd"):
+    if "#" in path and path.split("#", 1)[0].lower().endswith((".psd", ".psb")):
         file, layer_name = path.split("#", 1)
         from psd_tools import PSDImage
         psd = PSDImage.open(file)
@@ -2365,3 +2365,4 @@ from . import fx_props_life  # noqa: E402,F401   prop_bob, prop_blink, prop_brea
 from . import fx_props_elements  # noqa: E402,F401   flame_wick, liquid_bubble, prop_drip, prop_steam, prop_electric, prop_freeze, prop_dissolve, smoke_wisp
 from . import fx_props_bundles  # noqa: E402,F401   bonus_chest_reveal, collect_into_prop, pinata_style_break, magic_vessel
 from . import fx_real  # noqa: E402,F401   bolt_link, crackle, surface_glow
+from . import fx_light_bloom  # noqa: E402,F401   light_bloom, light_ripple, light_shock

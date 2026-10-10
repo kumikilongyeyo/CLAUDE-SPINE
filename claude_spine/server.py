@@ -387,6 +387,9 @@ def fx_recipe(project: str = "", recipe: str = "", x: float = 0, y: float = 0, s
     Realistic recipes: bolt_link (real lightning re-striking between point pairs), crackle (electricity or flames
     flickering round a shape) and surface_glow (an additive copy of YOUR slot that glows red-hot / icy / charged and
     follows its attachment keys).
+    Prism light: light_bloom (one bloom), light_ripple (seamless loop of waves) and light_shock (punchy hit) grow an
+    additive ray burst + ring from small and faint to 100% mid-life, fading as they ripple outward; give your own layers
+    with art={"rays": "file.psb#Layer 1", "ring": "file.psb#Layer 2"} (cleaned for additive and re-centred).
 
     tier = small | medium | big | mega | epic: one recipe covers every win size (scale, counts, one-shot time and the
     recipe's own tier overrides; see the listing's `tiers`).

@@ -736,6 +736,34 @@ Spine alone: `frost`, `icicles`, `ice_shatter`, `bubbles`, `water_splash` (modul
   slot on its own bone, thrown out from the centre and pulled down by gravity.
 - Droplets are turned and stretched along their velocity (unwrapped angles) so they read as water, not confetti.
 
+## Prism light: bloom, ripple, shock (your ray burst + ring)
+
+Three takes on one look (module `fx_light_bloom.py`), lifted from an artist's two-layer PSB (a rainbow ray burst and a
+soft prism ring) and the brief "additive; small to large; small = low opacity, 100% in the middle, then it decreases;
+ripples outward". All Spine, additive. Every piece is invisible in setup and comes in on its own alpha keys:
+
+    fx_recipe recipe=light_bloom  options={size: 986} art={rays: "~/x/lightf.psb#Layer 1", ring: "~/x/lightf.psb#Layer 2"}
+    fx_recipe recipe=light_ripple ...   -> seamless 2.4 s loop (result `loop`), waves=3
+    fx_recipe recipe=light_shock  ...   -> 1.55 s hit, rings=3
+
+- `light_bloom` (2.7 s): the rays open slowly (0.12 -> 1.1x); `rings` rings start inside them 0.35 s later, 0.4 s apart,
+  and ripple out PAST them (to 1.6x, 1.95x). `light_ripple`: a wave (rays + ring) is born every D / `waves` s, each one
+  turned differently, the rings wobble as ellipses, the group breathes 4%. `light_shock`: the rays snap open (expo ease)
+  with a counter-turning copy at 70%, rings fire at 0 / 0.12 / 0.3 s, each bigger and longer than the last.
+- Options shared by the three: `size` (ray burst diameter), `ring` (ring diameter / size, 0.7), `peak` (when a piece is
+  at 100%, as a fraction of its life), `reach` (how far the rings travel), `spin`, `wobble`, `clean`, `tex_scale`.
+- Your art (`clean`, on by default) is made additive-safe: a flat alpha haze over the whole layer is removed (additive
+  draws it as a faint square), art that runs off the layer is faded before the square edge, and each picture is
+  centred on its OWN circle (least-squares fit of its inner edge). The artist's ring sat 36 px off the burst's centre and
+  would have slid sideways while scaling. Cleaned pictures are saved at `tex_scale` (0.5: soft light loses nothing) and
+  shared by all three takes, so one project carries one copy. `.psb#Layer` works like `.psd#Layer`.
+- Keys are real bezier curves (editable in Spine), not dense samples. The loop splits any curve that crosses the loop
+  point (de Casteljau at that time) so it is seamless, and each wave keeps one frame of dead time before it respawns so
+  two keys never share a time.
+- Traps: a piece whose life starts late showed at FULL opacity before its first key, because Spine shows the setup pose
+  there. Setup alpha is 0 and a hold key runs from the recipe start. The first hand-built version stacked the rings on
+  the rays and read as ONE ring, not a ripple: the rings must start later and end wider than the rays.
+
 ## After Effects -> Spine, end to end (lightning, auras, flame trails, speed lines)
 
 The workflow that shipped a whole free-spins sequence (two-fighter slot: reel fire, scatter lightning, fire and
