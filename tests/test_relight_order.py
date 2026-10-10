@@ -103,6 +103,25 @@ def test_draw_order_never_moves_light_across_art_it_covers(tmp_path):
     assert not r["applied"] and [s.name for s in p.data.slots] == before
 
 
+def test_page_sort_puts_each_pages_lights_together():
+    bb = (0, 0, 1, 1)
+    blend = {"n": "normal", "a": "additive", "b": "additive", "c": "additive", "d": "additive", "x": "additive"}
+    frames = [[("n", "normal", 0, bb), ("a", "additive", 0, bb), ("b", "additive", 1, bb), ("c", "additive", 0, bb),
+               ("d", "additive", 1, bb)],
+              [("a", "additive", 0, bb), ("d", "additive", 1, bb)]]
+    order = ["n", "a", "b", "c", "d", "x"]                          # x is never drawn: it rides with the first page
+    new = draw_order.page_sorted(order, blend, set(), frames)
+    assert new == ["n", "a", "c", "x", "b", "d"]
+    assert draw_order.calls(order, frames) == [5, 2] and draw_order.calls(new, frames) == [3, 2]
+    # a normal or pinned slot ends a run: nothing crosses it
+    assert draw_order.page_sorted(["b", "a", "n", "d", "c"], blend, set(), frames) == ["b", "a", "n", "d", "c"]
+    assert draw_order.page_sorted(["a", "b", "c", "d"], blend, {"c"}, frames) == ["a", "b", "c", "d"]
+    # a sequence drawing from several pages counts where it mostly draws
+    seq = [[("s", "additive", 1, bb), ("a", "additive", 0, bb)]] * 3 + [[("s", "additive", 0, bb)]]
+    assert draw_order.page_sorted(["a", "s", "c"], {"a": "additive", "s": "additive", "c": "additive"}, set(),
+                                  seq + [[("c", "additive", 0, bb)]]) == ["a", "c", "s"]
+
+
 def test_draw_order_leaves_draw_order_keys_alone(tmp_path):
     p = subject_project(tmp_path)
     from claude_spine.ir import DrawOrderKey

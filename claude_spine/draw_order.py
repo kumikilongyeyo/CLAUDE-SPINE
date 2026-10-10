@@ -5,8 +5,12 @@ skeletons interleave additive light with normal art (aura behind, coin, face glo
 per switch. Two slots may swap places without changing a single pixel when
   * both are additive (additive light adds, and addition commutes), or
   * they never overlap on screen in any frame where both are drawn (checked on the runtime's vertices).
-``optimize`` moves slots only across such neighbours, greedily, keeping a move only when it lowers the real number of
-calls summed over every frame of every animation. Clipping slots and the slots inside a clipping range stay put, and
+``optimize`` first sorts each run of consecutive additive slots by the atlas page it draws from (any order of a run of
+light is the same picture), then moves slots only across such neighbours, greedily; each step is kept only when it
+lowers the real number of calls summed over every frame of every animation and raises no frame above the old peak
+(a budget is a peak: a lower total that costs one frame an extra call is not a win). One slot at a time cannot regroup many
+lights spread over two pages (a magic smoke banner's 76 slots: single moves 8 -> 7 calls at most, the sort 3), since
+a move that helps the frames where its new neighbour is drawn can cost a call in the frames where it is not. Clipping slots and the slots inside a clipping range stay put, and
 skeletons with draw-order keys are left alone. It then renders sample frames before and after with the same atlas and
 reports the largest pixel difference (and keeps the old order if anything moved by more than 2/255).
 """
@@ -63,6 +67,32 @@ def _overlaps(frames: list, margin: float = 1.0) -> set:
     return pairs
 
 
+def page_sorted(order: list[str], blend: dict, pinned: set, frames: list) -> list[str]:
+    """``order`` with each run of consecutive additive, unpinned slots sorted by the page its draws mostly come from
+    (pages in the order they first appear in the run; stable, so slots keep their order within a page). Every frame's
+    drawn slots of one page then sit together: one call per page, however the frames switch lights on and off.
+    Slots never drawn ride with the run's first page."""
+    seen: dict[str, dict] = {}
+    for draws in frames:
+        for s, _, pg, _ in draws:
+            seen.setdefault(s, {})
+            seen[s][pg] = seen[s].get(pg, 0) + 1
+    page_of = {s: max(c, key=c.get) for s, c in seen.items()}
+    out, i = list(order), 0
+    while i < len(out):
+        j = i
+        while j < len(out) and out[j] not in pinned and blend.get(out[j]) == "additive":
+            j += 1
+        if j - i > 1:
+            first: dict = {}
+            for s in out[i:j]:
+                if s in page_of:
+                    first.setdefault(page_of[s], len(first))
+            out[i:j] = sorted(out[i:j], key=lambda s: first.get(page_of.get(s), 0))
+        i = max(j, i + 1)
+    return out
+
+
 def _pinned(project: Project) -> set:
     """Clipping slots and everything between a clip and its end slot."""
     sk = project.data
@@ -111,8 +141,15 @@ def optimize(project: Project, animations: list[str] | None = None, fps: float =
         return (blend[a] == "additive" and blend[b] == "additive") or (a, b) not in over
 
     before = calls(order, frames)
-    cost = sum(before)
+    cost, peak = sum(before), max(before, default=0)       # a step must lower the total and never raise the peak
     moves = []
+    start = list(order)
+    by_page = page_sorted(order, blend, pinned, frames)
+    sorted_n = 0
+    bp = calls(by_page, frames)
+    if sum(bp) < cost and max(bp, default=0) <= peak:
+        sorted_n = sum(1 for a, b in zip(order, by_page) if a != b)
+        order, cost = by_page, sum(bp)
     for _ in range(max_moves):
         best = None
         for i, x in enumerate(order):
@@ -127,18 +164,20 @@ def optimize(project: Project, animations: list[str] | None = None, fps: float =
                     continue
                 cand = order[:i] + order[i + 1:]
                 cand.insert(j if j < i else j - 1, x)
-                c = sum(calls(cand, frames))
-                if c < cost and (best is None or c < best[0]):
+                cl = calls(cand, frames)
+                c = sum(cl)
+                if c < cost and max(cl, default=0) <= peak and (best is None or c < best[0]):
                     best = (c, cand, x, order[j] if j < len(order) else "<end>")
         if best is None:
             break
         cost, order, x, nxt = best
         moves.append({"slot": x, "before": nxt})
     after = calls(order, frames)
-    res = {"animations": anims, "frames": len(frames), "moves": moves, "group_pages": group_pages,
+    res = {"animations": anims, "frames": len(frames), "moves": moves, "page_sorted": sorted_n,
+           "group_pages": group_pages,
            "calls_before": {"max": max(before), "mean": round(float(np.mean(before)), 2)},
            "calls_after": {"max": max(after), "mean": round(float(np.mean(after)), 2)}, "applied": False}
-    if not moves:
+    if order == start:
         res["reason"] = "no legal move lowers the calls"     # the packing choice (group_pages) still stands
         return res
     # proof: render sample frames with the old and the new order on the SAME atlas, compare pixels

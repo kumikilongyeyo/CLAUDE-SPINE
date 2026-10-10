@@ -595,14 +595,16 @@ def relight_from_fx(project: str, animation: str, sources: list[str], subjects: 
 @mcp.tool()
 def optimize_draw_order(project: str, animations: list[str] | None = None, fps: float = 15, apply: bool = True,
                         group_pages: bool | None = None) -> dict:
-    """Fewer draw calls, same picture. Regroups the draw order, moving a slot only past neighbours it commutes
-    with: both additive (light adds), or never overlapping on screen in any frame where both are drawn (checked on
-    the runtime's vertices). Keeps a move only when the REAL calls (runs of blend mode + atlas page among the
-    slots drawn, every frame of every animation) go down; clipping ranges stay put; skeletons with draw-order keys
-    are left alone. group_pages None tries the plain atlas packing and the grouped one (sequences kept on one
-    page) and keeps the better: export with pack_atlas group_sequences=<pack_atlas_group_sequences>. Renders
-    sample frames before and after and refuses the change if any pixel moves by more than 2/255. On the coin
-    magic pass: reveal 8.0 -> 6.75 mean calls (max 12 -> 8), three-coin loop 10.5 -> 5.1 (max 12 -> 7), 0/255."""
+    """Fewer draw calls, same picture. Regroups the draw order, moving a slot only past neighbours it commutes with:
+    both additive (light adds), or never overlapping on screen in any frame where both are drawn (checked on the
+    runtime's vertices). Runs of additive slots are first sorted by atlas page (many lights over two pages: a
+    76-slot magic banner went 8 -> 3 calls at most, where single moves only reached 7). Keeps a step only when the
+    REAL calls (runs of blend mode + atlas page among the slots drawn, every frame of every animation) go down and
+    no frame rises above the old peak; clipping ranges stay put; skeletons with draw-order keys are left alone.
+    group_pages None tries the plain atlas packing and the grouped one (sequences kept on one page) and keeps the
+    better: export with pack_atlas group_sequences=<pack_atlas_group_sequences>. Renders sample frames before and
+    after and refuses the change if any pixel moves by more than 2/255. On the coin magic pass: reveal 8.0 -> 6.75
+    mean calls (max 12 -> 8), three-coin loop 10.5 -> 5.1 (max 12 -> 7), 0/255."""
     p = _open(project)
     res = draw_order.optimize(p, animations, fps, apply, group_pages=group_pages)
     return _saved(p, res) if res.get("applied") else res
