@@ -1,4 +1,4 @@
-/*TEMPLATE {"name":"ripple_glow","doc":"Soft glowing ripples: rings of light that form small at the CENTRE, expand outward through a softly glowing rim (a charged multiplier orb, a coin, a medallion, a powered-up cell) and fade, then the next one forms in the middle. Every wave in the loop is different (its own turbulent distortion, rotation, slight squash, end size and timing: `jitter` 0..1), each trails `echo` fainter ripple rings, a halo swells as a wave crosses the rim, and the rim line wobbles. origin \"center\" (default) or \"rim\" (waves leave the rim instead). `waves` per loop over `duration` with `life` seconds each (life <= duration; 3 waves / 3 s / 1.6 s = one a second, overlapping a little). `start` = the newborn ring's size as a fraction of the rim, `travel` = how far past the rim it goes (fraction of the half-size), `inner` = brightness while still inside the subject (keeps its art readable), `rim` = rim strength (0 = no rim). `shape` circle or rect (`aspect` = width / height, `corner` = roundness as a fraction of the short side). `radius` = the rim as a fraction of the half-size (put it on the subject's edge; the comp centre is the subject centre). `softness` 0..1 = soft edges and a gentle glow (blurred lines, lower peaks, wider falloff; 0 = crisp neon), `core` = the hottest colour (almost white by default, not pure white), `wave` = wave brightness, `wobble` / `wobble_size` = the soft distortion (0 = clean rings). Built in grey and coloured once (black -> color -> core), so the render is two-tone: import it tintable and one frame set plays in any colour. Additive on black (mode=\"additive\"); loops exactly.","params":{"size":512,"duration":3.0,"fps":30,"shape":"circle","aspect":1.0,"corner":0.16,"origin":"center","color":"3FA8FF","core":"E6F4FF","radius":0.52,"travel":0.36,"start":0.08,"waves":3,"life":1.6,"jitter":1.0,"echo":1,"inner":0.8,"wave":1.35,"wave_width":0.03,"rim":0.55,"rim_width":0.014,"wobble":9,"wobble_size":0.09,"softness":0.7,"halo":1.0,"breathe":0.6,"glow":1.0,"seed":3}} */
+/*TEMPLATE {"name":"ripple_glow","doc":"Soft smoky glowing ripples, like a charged multiplier orb in a slot: look \"smoke\" (default) = each wave is a soft band of evolving smoke (fractal noise inside a turbulence-torn, blurred ring) with a faint glow inside it, and the rim is a smoky halo that breathes as waves pass; look \"line\" = crisp glowing rings. `smoke` = smoke strength, `smoke_size` = the size of the smoke puffs (fraction of the half-size), `line` = how much of the thin ring line shows in the smoke look. Colour is bright, not white: black -> `color` -> `core` (a saturated blue to a bright cyan by default). Rings of light that form small at the CENTRE, expand outward through a softly glowing rim (a charged multiplier orb, a coin, a medallion, a powered-up cell) and fade, then the next one forms in the middle. Every wave in the loop is different (its own turbulent distortion, rotation, slight squash, end size and timing: `jitter` 0..1), each trails `echo` fainter ripple rings, a halo swells as a wave crosses the rim, and the rim line wobbles. origin \"center\" (default) or \"rim\" (waves leave the rim instead). `waves` per loop over `duration` with `life` seconds each (life <= duration; 3 waves / 3 s / 1.6 s = one a second, overlapping a little). `start` = the newborn ring's size as a fraction of the rim, `travel` = how far past the rim it goes (fraction of the half-size), `inner` = brightness while still inside the subject (keeps its art readable), `rim` = rim strength (0 = no rim). `shape` circle or rect (`aspect` = width / height, `corner` = roundness as a fraction of the short side). `radius` = the rim as a fraction of the half-size (put it on the subject's edge; the comp centre is the subject centre). `softness` 0..1 = soft edges and a gentle glow (blurred lines, lower peaks, wider falloff; 0 = crisp neon), `core` = the hottest colour (a bright colour by default, never white unless you ask), `wave` = wave brightness, `wobble` / `wobble_size` = the soft distortion (0 = clean rings). Built in grey and coloured once (black -> color -> core), so the render is two-tone: import it tintable and one frame set plays in any colour. Additive on black (mode=\"additive\"); loops exactly.","params":{"size":512,"duration":3.0,"fps":30,"shape":"circle","aspect":1.0,"corner":0.16,"look":"smoke","origin":"center","color":"2B8CFF","core":"70ECFF","radius":0.52,"travel":0.36,"start":0.08,"waves":3,"life":1.6,"jitter":1.0,"echo":1,"inner":0.8,"wave":1.35,"smoke":1.0,"smoke_size":0.25,"line":0.3,"wave_width":0.03,"rim":0.55,"rim_width":0.014,"wobble":9,"wobble_size":0.09,"softness":0.7,"halo":1.0,"breathe":0.6,"glow":1.0,"seed":3}} */
 var D = P.duration, name = P.comp || "ripple_glow", RECT = P.shape === "rect", CENTER = P.origin !== "rim";
 if (!RECT && P.shape !== "circle") throw new Error("shape must be circle or rect, not " + P.shape);
 if (P.origin !== "center" && P.origin !== "rim") throw new Error("origin must be center or rim, not " + P.origin);
@@ -13,6 +13,8 @@ else { var rr = Math.min(P.radius, 0.97 - P.travel) * S2; BW = BH = 2 * rr; }
 if (BW <= 8 || BH <= 8) throw new Error("travel too large for this size: nothing left for the rim");
 var RREF = Math.min(BW, BH) / 2, RND = RECT ? RREF * Math.min(1, P.corner * 2) : 0;
 var SO = Math.max(0, Math.min(1, P.softness)), JIT = Math.max(0, Math.min(1, P.jitter));
+if (P.look !== "smoke" && P.look !== "line") throw new Error("look must be smoke or line, not " + P.look);
+var SMOKE = P.look === "smoke", LINE = SMOKE ? P.line : 1;
 var LIFE = Math.max(0.1, Math.min(D, P.life));
 // a wave's size is progress p of the rim: p < 1 scales the rim down (inside), p > 1 grows it by (p - 1) * RREF all round
 var P0 = CENTER ? Math.max(0.01, Math.min(0.95, P.start)) : 1, PEND = 1 + TR / RREF, EASE = 2.4;
@@ -56,6 +58,30 @@ function tear(l, amount, size, seed, offset, revs) {
 }
 function blur(l, px) { var b = AEFX.fx(l, "ADBE Gaussian Blur 2"); b.property("Blurriness").setValue(px); return b; }
 var WS = P.wobble_size * S2 * 2;
+// a band of evolving smoke: fractal noise seen through a blurred, turbulence-torn ring (luma track matte). head = the
+// wave's expression head (empty: a fixed band on the rim); the smoke texture grows with the wave so it is pushed out
+function smokeBand(nm, head, strokeW, blurExpr, opExpr, seed, ev, rot, sq, amtMul, revs) {
+  var mt = ring(nm + "_matte", strokeW);
+  if (head) { sizeBy(mt, head); mt.width.expression = head + "value * (0.5 + 1.5 * e)"; }
+  else mt.size.setValue([BW + strokeW * 0.4, BH + strokeW * 0.4]);
+  mt.layer.rotation.setValue(rot); mt.layer.scale.setValue([100 * sq, 100 / sq]);
+  if (P.wobble > 0) tear(mt.layer, P.wobble * 2.2 * amtMul, WS * 1.4, seed + 3, ev, revs);
+  var bb = blur(mt.layer, 1); bb.property("Blurriness").expression = blurExpr;
+  var sm = G.layers.addSolid([0, 0, 0], nm, W, H, 1);
+  var fn = AEFX.fx(sm, "ADBE Fractal Noise");
+  AEFX.set(fn, "Fractal Type", 1); AEFX.set(fn, "Noise Type", 3);
+  AEFX.set(fn, "Contrast", 120); AEFX.set(fn, "Brightness", 24);
+  AEFX.set(fn, "Scale", Math.max(8, S2 * P.smoke_size)); AEFX.set(fn, "Complexity", 5); AEFX.set(fn, "Random Seed", seed);
+  var nev = AEFX.find(fn, "Evolution"); nev.setValueAtTime(0, ev); nev.setValueAtTime(D, ev + 360 * revs);
+  AEFX.set(fn, "Cycle Evolution", 1); AEFX.set(fn, "Cycle (in Revolutions)", revs);
+  if (head) sm.scale.expression = head + "var s = 100 * (0.8 + 0.5 * e); [s, s]";
+  sm.opacity.expression = opExpr;
+  sm.blendingMode = BlendingMode.ADD;
+  mt.layer.moveBefore(sm);
+  sm.setTrackMatte(mt.layer, TrackMatteType.LUMA);
+  mt.layer.enabled = false;
+  return sm;
+}
 
 // every wave its own: start time, life, end size, distortion, rotation, squash (seeded: same seed, same loop)
 var rnd = AEFX.rng(P.seed * 13 + 5), WV = [];
@@ -98,7 +124,7 @@ for (var k2 = 0; k2 < N; k2++) {
     var wv = ring("wave" + k2 + (r ? "_echo" + r : ""), S2 * P.wave_width * (r ? 0.7 : 1));
     sizeBy(wv, head);
     wv.width.expression = head + "value * (0.6 + 2 * e)";
-    wv.layer.opacity.expression = head + alive(WAVEPK * dim, FADEIN, 1.7);
+    wv.layer.opacity.expression = head + alive(WAVEPK * dim * LINE, FADEIN, 1.7);
     wv.layer.rotation.setValue(w.rot + (RECT ? 0 : 23 * r));
     wv.layer.scale.setValue([100 * w.sq, 100 / w.sq]);
     var wtd = tear(wv.layer, P.wobble * w.amt, WS * (r ? 0.8 : 1), w.seed + 7 * r, w.ev + 60 * r, 2);
@@ -113,6 +139,10 @@ for (var k2 = 0; k2 < N; k2++) {
     wg.layer.scale.setValue([100 * w.sq, 100 / w.sq]);
     tear(wg.layer, P.wobble * 1.3 * w.amt, WS * 1.3, w.seed + 29, w.ev + 90, 2);
     blur(wg.layer, S2 * (0.06 + 0.05 * SO));
+    if (SMOKE && P.smoke > 0)
+      smokeBand("wave" + k2 + "_smoke", head, S2 * 0.1,
+                head + (S2 * 0.03).toFixed(2) + " + " + (S2 * 0.06).toFixed(2) + " * e",
+                head + alive(100 * P.smoke, FADEIN, 1.5), w.seed + 50, w.ev, w.rot, w.sq, w.amt, 2);
   }
 }
 
@@ -122,17 +152,20 @@ if (P.rim > 0) {
   tear(rg.layer, P.wobble * 0.8, WS, P.seed, 0);
   blur(rg.layer, S2 * (0.035 + 0.05 * SO));
   rg.layer.opacity.expression = PULSE + "Math.min(100, (30 + 12 * pls) * " + ((1 - 0.5 * SO) * P.rim) + ")";
+  if (SMOKE && P.smoke > 0)
+    smokeBand("rim_smoke", "", S2 * 0.13, String((S2 * 0.05).toFixed(2)),
+              PULSE + "Math.min(100, (55 + 30 * pls) * " + (P.rim * P.smoke) + ")", P.seed + 101, 0, 0, 1, 0.8, 1);
   var r1 = ring("rim", S2 * P.rim_width * 2);
   tear(r1.layer, P.wobble, WS, P.seed, 0);
-  r1.layer.opacity.expression = PULSE + "Math.min(100, (" + (80 - 45 * SO) + " + 8 * pls) * " + P.rim + ")";
+  r1.layer.opacity.expression = PULSE + "Math.min(100, (" + (80 - 45 * SO) + " + 8 * pls) * " + (P.rim * LINE) + ")";
   if (SO > 0) blur(r1.layer, S2 * 0.012 * SO);
   var r2 = ring("rim_hair", S2 * P.rim_width);
   tear(r2.layer, P.wobble * 1.2, WS * 0.8, P.seed + 7, 200);
-  r2.layer.opacity.setValue(Math.min(100, (70 - 35 * SO) * P.rim));
+  r2.layer.opacity.setValue(Math.min(100, (70 - 35 * SO) * P.rim * LINE));
   if (SO > 0) blur(r2.layer, S2 * 0.008 * SO);
   var r3 = ring("rim_hot", S2 * P.rim_width * 0.6);
   tear(r3.layer, P.wobble * 0.9, WS * 1.1, P.seed + 3, 90);
-  r3.layer.opacity.setValue(Math.min(100, (100 - 70 * SO) * P.rim));
+  r3.layer.opacity.setValue(Math.min(100, (100 - 70 * SO) * P.rim * LINE));
   if (SO > 0) blur(r3.layer, S2 * 0.005 * SO);
 }
 

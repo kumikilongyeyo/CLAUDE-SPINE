@@ -65,7 +65,7 @@ Known-good starting points:
 | Flames along a reel edge | `fire` 1024x320 core 0.18 body 0.06 scale 24 alpha_cut 0.34; bone rotated 90, scaleX = reel height / 1024 |
 | Fireball / clash | `smoke_puff` light FFF3A0 mid FF7A1C shadow 3A2018 (blue: E8FFFF / 3A9CFF / 0A1A40) |
 | Neon / laser / energy line | `saber` presets (or the Spine `saber` recipe, no AE needed) |
-| Soft glowing ripples from a subject's centre (charged orb, powered cell) | `ripple_glow` (additive, loop, import tintable; 3 different waves per 3 s, `origin rim` to start at the edge, `shape rect` for cells) |
+| Soft smoky ripple glow from a subject's centre (charged orb, powered cell) | `ripple_glow` (additive, loop, import tintable; look smoke (default) or line, bright colour not white, 3 different waves per 3 s, `shape rect` for cells; recolour with exact `LIGHT/DARK` pairs) |
 
 ## 4. Spine: one build script, one function per animation
 

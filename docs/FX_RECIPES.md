@@ -1042,27 +1042,35 @@ static count (every slot visible at once) stays pessimistic, so trust the runtim
 it (`front_of`): the near arcs cross the face and the far arcs pass behind, so the effect reads as 3D. The ring
 radius must clear the subject, so the split points sit beside it.
 
-**`ripple_glow`: soft glowing ripples from the centre.** Rebuilt from a slot clip of a charged multiplier orb (the rim
-pulses every ~1.03 s, radius 63 px on a 258 px clip), then reworked from the artist's notes. A ring of light forms
-small at the CENTRE, expands outward through a softly glowing rim and fades, then the next one forms in the middle.
-Every wave in the loop is different: its own turbulent distortion, rotation, slight squash, end size and timing
-(`jitter`). Each wave trails `echo` fainter ripple rings, a halo swells as a wave crosses the rim, and the rim line
-wobbles. The look is soft: `softness` 0.7 blurs the lines and lowers the peaks, and `core` is almost white
-(E6F4FF), not pure white. `inner` keeps the waves dimmer inside the subject so its art stays readable, and `rim`
-sets the rim strength (0 = no rim). `origin=rim` sends the waves from the rim instead. `shape=rect` puts it on a cell
-or frame (`aspect` = width / height, `corner` = roundness; a rect wave only flips, it never tilts). Defaults: 3 waves
-in a 3 s loop, 1.6 s each. It is built in grey and coloured once, so import it tintable: one frame set plays blue,
-purple and gold (slot light / dark, or `rgba2` keys per wave). Put the comp centre on the subject centre, and set
-the scale so the template's rim lands on the subject's edge. The result line gives the rim size in comp px.
+**`ripple_glow`: soft smoky ripples from the centre.** Rebuilt from a slot clip of a charged multiplier orb (the rim
+pulses every ~1.03 s, radius 63 px on a 258 px clip), then reworked from the artist's notes ("soft smoke like ripple
+glow", "bright colour, not white", "start at the centre"). A wave forms small at the CENTRE, expands outward through
+a smoky rim and fades, then the next one forms in the middle. `look=smoke` (default): each wave is a band of evolving
+smoke (fractal noise seen through a blurred, turbulence-torn ring, a luma track matte) with a faint glow inside it.
+The smoke texture grows with the wave, so it looks pushed outward. The rim is a smoky halo that breathes as waves
+cross it. `look=line` gives crisp glowing rings instead.
+
+Every wave in the loop is different: seeded distortion, rotation, slight squash, end size and timing (`jitter`), and
+each trails `echo` faint rings. Colour: black -> `color` (saturated blue 2B8CFF) -> `core` (bright cyan 70ECFF),
+never white. Measured: 0% near-white pixels in every frame, against 7% for the first crisp version. Other options:
+`smoke` (strength), `smoke_size`, `line` (how much thin line shows in the smoke look), `softness`, `inner` (waves
+dimmer inside the subject so its art stays readable), `rim`, `origin=rim` (waves leave the rim), and `shape=rect` for
+cells (`aspect`, `corner`; a rect wave only flips, it never tilts). Defaults: 3 waves in a 3 s loop, 1.6 s each.
+
+Import it tintable. Recolour with EXACT pairs, `tint="LIGHT/DARK"` with a bright light end over a deep dark end
+(purple D88CFF/5A00C2, gold FFD442/A02800). The render's two ends differ in hue (cyan over deep blue), so a single hue
+`tint="B060FF"` lands purple on lavender and gold on pink. Put the comp centre on the subject centre, and set the
+scale so the rim lands on its edge. The result line gives the rim size in comp px.
 
     ae_template name=ripple_glow params={comp: ripple_v1, save_as: x.aep}
-    ae_template name=ripple_glow params={comp: cell_v1, shape: rect, aspect: 0.8, color: FFB030, core: FFF4DC}
+    ae_template name=ripple_glow params={comp: cell_v1, shape: rect, aspect: 0.8, color: FF8A1F, core: FFD84A}
     ae_vfx_to_spine ... aep=x.aep comp=ripple_v1 mode=additive tintable=true seq_mode=loop event=ambient
         scale=<subject rim radius / 133> until=<a multiple of duration>   (same call)
 
-Measured on the orb: the loop seam (last frame to first) is 1.1/255, below the 4.8 median step between frames. The
-worst frame is 1.1% near-white, against 7% for the first crisp version. The director keeps 45 of the 90 frames
-(15 fps), and the orb and a cell together fit on one 2048 page. The user liked the soft distorted wave: keep `wobble`.
+Previewing over a frame of the reference clip exaggerates white: that frame already holds the game's own glow (the
+orb rim measured 228-255), and added light over white stays white. Judge the colour on a dark background too. The
+loop seam is 1.4/255, below the 4.5 median step between frames. The director keeps 45 of the 90 frames at 190 px, and
+the orb and a cell together fit on one 2048 page.
 
 **Warm tints:** dim orange or yellow light reads as brown on a dark screen. Tints between orange and yellow now turn
 their dark end toward red and keep it bright, and the gold coin's aura reads amber.

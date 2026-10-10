@@ -145,7 +145,8 @@ def test_ripple_glow_waves_shapes_and_two_tone(tmp_path):
     the duration so the loop is exact."""
     t = ae_templates.list_templates()
     d = t["ripple_glow"]["params"]
-    assert d["origin"] == "center" and d["waves"] == 3 and d["core"] != "FFFFFF" and 0 < d["softness"] <= 1
+    assert d["origin"] == "center" and d["waves"] == 3 and 0 < d["softness"] <= 1
+    assert d["look"] == "smoke" and min(int(d["core"][i:i + 2], 16) for i in (0, 2, 4)) < 200      # a colour, not white
     src = open(ae_templates.build_script("ripple_glow", {"waves": 4}, tmp_path)["script"]).read()
     assert '"waves": 4' in src and "ADBE Tritone" in src and '"tintable":true' in src and '"seq_mode":"loop"' in src
     assert 'ring("wave" + k2' in src and "Cycle Evolution" in src and "AEFX.rng(" in src     # seeded per-wave randomness
@@ -154,3 +155,7 @@ def test_ripple_glow_waves_shapes_and_two_tone(tmp_path):
                                           tmp_path)["script"]).read()
     assert "ADBE Vector Rect Roundness" in rect and '"origin": "rim"' in rect
     assert "RECT ? (rnd() < 0.5 * JIT ? 180 : 0)" in rect                                   # a rect only flips, never tilts
+    # smoke look: fractal noise seen through a torn, blurred ring (luma track matte); line look keeps crisp rings
+    assert "ADBE Fractal Noise" in src and "TrackMatteType.LUMA" in src and 'smokeBand("wave"' in src
+    line = open(ae_templates.build_script("ripple_glow", {"look": "line"}, tmp_path)["script"]).read()
+    assert '"look": "line"' in line and "SMOKE = P.look === \"smoke\"" in line
