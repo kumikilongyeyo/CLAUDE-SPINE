@@ -166,6 +166,12 @@ prism_glow. They are built in grey and coloured once, so they grade good and rec
 light is not a colour to tint: render the light WHITE (prism_glow) and import with spectrum=0.05 spectrum_bands=6
 spectrum_turn=2, which redraws the one frame set as rainbow bands that add up to white.
 
+Smoke that must move like smoke (a puff bursting out, swirling, dissolving) is simulated, not keyed: magic_puff_ae runs
+a real 2D smoke simulation for a wide banner and writes the AE look script; magic_puff_to_spine lands the render as one
+full-width sequence with the light done natively in Spine (lines, flares, rays, pop, glitter on the simulated flow).
+Tune the motion on its no-AE preview first: the simulation takes ~2 minutes at res 0.5. Animating a still image of
+smoke is not the same thing; artists notice.
+
 Do not bake cheap things into AE just because AE can do them. Keep simple glow pulses, rings, shakes, repeated sparks and similar moving-light effects native Spine when possible.
 
 ## 7. Spine cleanup after import

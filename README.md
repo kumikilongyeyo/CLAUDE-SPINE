@@ -53,6 +53,7 @@ check everything.
 | Symbol from the art | `sphere_spin`, `liquid_splat`, `sugar_splat_ae`, `sugar_splat_to_spine`, `shake`, `ae_check`, `edit_slots`, `clone_art`, `art_twin`, `hue_cycle` | A round symbol turned in real 3D from its own art (the cap swings behind the ball); a liquid splat built from the artist's splash layers; a physically simulated melted-sugar splat made gooey in After Effects; a violent build-up shake; read a saved After Effects project's comps and script errors without AE; hide / show / remove / re-blend / re-tint / reorder slots (draw-order keys kept); copy a symbol's art and bones to another spot (shared images); additive twins and a colour-wheel wash |
 | Coins | `rig_coin`, `coin_spin` | A flat coin face made into a real extruded disc: the near and far faces slide apart as it turns and a reeded side wall shows between them (one weighted mesh, nothing keyed per vertex). Depth thin / medium / thick. Spins as a seamless loop, an eased flip, an anticipation spin-up, a slow-down or a tumbling landing, always stopping face-on |
 | AE FX library | `ae_library`, `ae_library_textures`, `ae_library_to_spine` | 50 finished After Effects effects as procedural builders: 18 cel (toon) slot effects and 32 realistic ones made of CC0 photo / Kenney textures (the same effects, 6 glows, 8 elements). Build any of them into an open project in one call, then one Spine skeleton per effect at a mobile-aware texture budget |
+| Banner FX | `magic_puff_ae`, `magic_puff_to_spine` | A magic smoke puff for a wide banner that is a real smoke simulation: from nothing it bursts out of the centre both ways (no mirror), held in a band between gold lines, curls up at the ends, loses its glow as it swirls and dissolves thin-first. After Effects gives the look; Spine gets one smoke sequence plus native lights and glitter that ride the simulated flow |
 
 A typical session, as Claude would run it:
 
@@ -191,6 +192,22 @@ Some symbols are best animated from the artist's own pixels rather than procedur
   same metaball maths renders without AE, so the motion is tuned before each AE run.
 
   ![sugar_splat](docs/sugar_splat.gif)
+- `magic_puff_ae` + `magic_puff_to_spine`: a magic smoke puff for a wide banner (2172 x 724 by default) that is
+  *simulated*, not a still pushed around. Python runs a 2D smoke simulation (stable fluids: exact pressure projection,
+  vorticity confinement, curl-noise stirring) over the whole banner: gas appears at the centre from nothing and bursts
+  out both ways, each side with its own turbulence. Soft barriers along the gold lines hold it in a band until the
+  ends, where the front rolls up into curling vortex pairs. Then the barriers let go, it billows, lifts a little and
+  dissolves thin-first. The glow is a heat pass (freshness: hot where the gas is new) that dies as the smoke swirls;
+  the nebula detail is advected with the flow so it rides the swirl. The After Effects script builds the look in its
+  own project (palette ramp, the hot glow keyed out, cooling, bloom, a softened density matte that erodes thin-first;
+  Pro Levels keys, since Easy Levels cannot be keyed on AE 2026). `magic_puff_to_spine` renders `<comp>_full`,
+  resamples it to an even 20 fps and lands it as ONE full-width sequence, with the light done natively over it: the
+  pop, the gold lines drawn outward with glints, flares igniting, a shimmering ray fan from the bottom flare, an
+  ambient glow, and glitter on paths the simulation advected. Measured on the 2172 x 724 banner at 0.6 scale: 77
+  bones, 76 slots, 2 atlas pages, at most 3 draw calls after `optimize_draw_order`. A preview of the look renders
+  without AE, so the motion is tuned before each AE run.
+
+  ![magic_puff](docs/magic_puff.gif)
 - `shake` is the violent, growing shake before a burst. After Effects adds the light: the `lens_flare` template (an
   optical ghost chain; land its off-centre source with `ae_fx_to_spine anchor=` and `feather=`) and `surface_sweep`
   (a shine that sits on the surface: the art's own colours brightened in a band bent round the volume; play it with

@@ -807,6 +807,7 @@ from . import tools_symbol  # noqa: E402,F401   sphere_spin, liquid_splat, shake
 from . import tools_sugar  # noqa: E402,F401   sugar_splat_ae, sugar_splat_to_spine
 from . import tools_library  # noqa: E402,F401   ae_library, ae_library_textures, ae_library_to_spine
 from . import tools_coin  # noqa: E402,F401   rig_coin, coin_spin
+from . import tools_magic_puff  # noqa: E402,F401   magic_puff_ae, magic_puff_to_spine
 
 
 def main() -> None:
