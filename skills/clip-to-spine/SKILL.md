@@ -67,6 +67,8 @@ Known-good starting points:
 | Neon / laser / energy line | `saber` presets (or the Spine `saber` recipe, no AE needed) |
 | Soft smoky ripple glow from a subject's centre (charged orb, powered cell) | `ripple_glow` (additive, loop, import tintable; look smoke (default) or line, bright colour not white, 3 different waves per 3 s, `shape rect` for cells; recolour with exact `LIGHT/DARK` pairs) |
 | Win aura round a slot symbol (flare in, smoky loop, dissolve out) | `win_aura` (additive, three comps _in/_loop/_out that join seamlessly; `color` alone recolours it, `art` = symbol PNG for the glow that hugs it; import behind the symbol) |
+| Energy burst / edge aura round a button or symbol (tap burst, spinning-state aura hugging its silhouette) | `energy_burst` (one-shot, hit_ae 2/fps) and `edge_aura` (loop) with art = the subject's silhouette PNG, additive, import tintable; pair with fx_recipe `silhouette_halo`, `magic_circle`, `disc_flash`, `rim_pulse` |
+| Spin-start flare flame wisps (anamorphic, both sides) | `flame_wisps` defaults (768x192, 0.9 s, grey: import tintable, play as orange / mirrored orange / violet / pink copies; fx_recipe anamorphic_burst options.wisps_frames does it) |
 
 ## 4. Spine: one build script, one function per animation
 

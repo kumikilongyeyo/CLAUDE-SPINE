@@ -1133,6 +1133,237 @@ layer (Turbulent Displace on it for wispy edges), used as an alpha track matte a
 Draw it BEHIND the symbol and additive. At max_size 320 the three pieces are 64 frames; one set serves every winning
 symbol of that kind through `copies`.
 
+## Magic button (tap, spin, ready, disabled): `fx_magic_button` + AE `energy_burst`, `edge_aura`
+
+Taken from a reference clip of a fantasy slot SPIN button: a round green disc in a bronze frame with four diagonal spikes, at 30 fps. The button is tapped twice, glows "ready" in between, and is disabled at the end. Every colour is a parameter. Scale 1 = a button about 420 units wide (the reference was 170 px, so its build used scale 0.405).
+
+### AE templates (the noise)
+
+| Template | What | Defaults |
+|---|---|---|
+| `energy_burst` | Energy-smoke burst shaped like the subject's silhouette, blown up (`spread` 140%, `wide` 165%). Churning Fractal Noise smoke goes through a torn silhouette matte, and inverted Turbulent Sharp veins are streaked outward with CC Radial Fast Blur. **Timing:** pops in 2 frames (opacity 0 / 35 / 100), holds about 0.2 s, falls to a haze (`plateau` 0.4) by 0.47 s and holds it to 0.77 s, gone by 1.2 s; the scale goes 90 → 100 at the pop and contracts to 91. **Output:** additive, one-shot, `hit_ae` = 2/fps. | 768 px, 1.4 s, 30 fps, color 00C8B4, light 50FFE6, art_scale 2, body 0.6, wide_body 0.4, smoke 1, veins 0.75, seed 21 |
+| `edge_aura` | Lime energy hugging a silhouette: a hug (3 px blur) and a halo (11 px), with noise tongues streaked radially through a ragged band at `reach` 112%. It has thin electric veins and an exposure flicker on whole cycles. **Output:** an exact loop (rendered twice and crossfaded with `AEFX.loopify`), additive. | 640 px, 1.0 s, 30 fps, color 34F07C, light A8FFB4, art_scale 2, tongues 0.9, veins 0.6, seed 9 |
+
+- **Silhouette input:** `art` is the subject's silhouette PNG: alpha = shape, centred, and each art px becomes `art_scale` comp px. Without it, both templates draw a generic spiked medallion as a shape layer (frame r 80, spikes to 116 art px).
+- **Recolouring:** both renders are two-tone. Import them `tintable=True`; at the reference the tints were `10FFD0/00C870` (burst) and `30FF80/08D850` (aura), so a recolour needs no re-render.
+- **Placement in Spine:** put both behind the subject.
+  - **Burst:** played at alpha 0.68. Land comp frame 2 on the tap + 0.195 s; keep the hit a few ms early, because sampling exactly on a frame boundary can show the previous sprite.
+  - **Aura:** starts at the tap + 0.13 s with alpha 0.7 and the `silhouette_halo` envelope.
+
+### Spine recipes (the light)
+
+| Recipe | What | Key options (defaults) |
+|---|---|---|
+| `magic_circle` | Faint magic circle: double ring with tick teeth, a band of 30 rune glyphs, an inner ring, 12 spokes, a hexagram and 6 glyph circles. It appears at `small` 0.62, snaps open in 0.04 s (sine out), opens to `open` 1.08 and turns `turn` 28°, fading by 1.19 s. `arcs` 2 bright swooshes travel `sweep` 160° clockwise on it. Additive, behind the subject. | radius 375 (152 ref px), glow 1 |
+| `disc_flash` | The inner disc lit from inside, **normal blend**: the brighter centre (1.0) and darker rim (0.5) cover the disc art evenly, where additive would show its texture as blotches. `curve` press: 0.06 → 0.92 by 0.2 s, holds to 0.43 s, about 0.8 to 1.03 s, gone by 1.43 s. `curve` ready: 0.42 s ramp, then holds. | radius 156 (63 ref px), color 32FACD |
+| `rim_pulse` | "Ready" pulse: light hugging the outline, peaking 4 ref px outside the edge (gaussian 5.5 plus an exp tail of 9), derived from `art={'silhouette': png}` (a medallion without it). It ramps over 0.42 s (5% at 0.05 s, 40% at 0.1, 65% at 0.15, 80% at 0.25) and **holds**; clear the track to cut it. `disc` adds the disc fill in `disc_color`. | size 949 (the silhouette picture's width), color 1E8C48, disc_color 36E08C |
+| `silhouette_halo` | Wide soft glow round the silhouette (exp falloff of 18 ref px) with the aura's press envelope: in by 0.07 s, hold, out by 1.32 s. The soft light under `edge_aura`. | size 949, falloff 44, color 10500A |
+| `icon_spin` | Icon turning at `speed` deg/s (> 0 = clockwise; the loop is one turn), with `smears` copies trailing at `trail`° steps (alpha 0.36 / 0.2) standing in for motion blur. `art={'icon': png}` (generic curved arrows without it). To stop, set the track's timeScale to 0 so it holds its angle. | speed 708, size 316, smears 2, trail 6.5 |
+| `bar_flood` | A progress bar floods with violet plasma: in 0.075 s, scaleX 0.6 → 1 (sine out), fading by 0.24 s. Between 0.11 and 0.21 s it hands over to a gradient fill made from `stops`, with the bar's bevel rows (13 measured per-row multipliers); the fill holds. The fill is a coloured texture, so recolour it with `stops`; `color` sets the plasma. | width 692, height 32, color B040FF, stops magenta-orange-yellow-orange-magenta |
+| `mote_loop` | Motes drifting up left and right of the subject with sway and twinkle. Each period divides the loop, so the 8 s loop is exact. | count 8, color 9CFF6A, color2 5CFFD2 |
+
+### Measured facts
+
+- **Press, in order:**
+  - **Disc:** lights from the tap (+10 at 0.0 s, +161 by 0.2 s).
+  - **Small circle:** appears at 0.167 s.
+  - **Burst:** peaks at 0.2 s.
+  - **Aura:** in by 0.2 s; it holds while the smoke contracts into a lime band hugging the frame (green +150 within 20 px), and is gone by about 1.43 s.
+- **Colour of the burst:** the burst adds almost no red (+5), so a red component in any light colour turns the whole thing milky.
+- **Spin:** the arrows turn clockwise at 708°/s; this is an absolute-angle fit, because per-frame deltas alias on a 2-fold icon.
+- **Disable:** the bar flashes violet at +0.1 s and is settled by +0.3 s.
+
+### Traps
+
+- **Bone rotate keys are offsets from the setup angle.** Keying `base + 40` on a bone whose setup is `base` puts it at `2 * base + 40`: two arcs at 0° and 180° both land on 40°.
+- **Additive glow over textured art** (a disc with cracks) shows the art's own texture and any repair blotches. Use normal blend for a fill light, additive only for light that spills past the art.
+- **Silhouette-derived pictures** (rim, halo) are made from distances in units, so give the silhouette's real width as `size`.
+
+### Composition (the reference's press)
+
+- **Tap:** `disc_flash` at 0, `magic_circle` at 0.16, `energy_burst` with its frame 2 on 0.195, `edge_aura` loop from 0.13 to 1.45 with the halo envelope, and `silhouette_halo` at 0.13.
+- **Spin:** `icon_spin` on its own track.
+- **Ready:** `rim_pulse`.
+- **Disabled:** `bar_flood`.
+- **Throughout:** `mote_loop`.
+
+## UI flare family (spin button, win banner, total-win light)
+
+Lifted from a reference clip of a desert-themed slot's bottom UI: a round spin button, a win banner over the balance
+bar, a door with a rune coin above a "total win" arch. Module `claude_spine/fx_ui_flare.py`. Every picture is drawn
+in code (white, tinted by the slot colour). The game's own art (button, arrows, coins, text) is NOT part of these recipes:
+play them over your art. Times below are clip frames at 30 fps. At scale 1 the button is ~184 units across (rim radius
+~92) and the banner is ~760 wide.
+
+| recipe | what | kind |
+|---|---|---|
+| rim_glow_pulse | press on a round button: white-hot rim (2 rings), orange wash on the inner band (NORMAL blend), halo spreading 9%, 2 faint shock rings to 1.65x / 1.5x; + AE fire ripple (ae_hint / `ripple_frames`) | one-shot 0.97 s |
+| anamorphic_burst | spin-start flare: rim bloom, wide bloom, 26 rays, 2 anamorphic streaks tilted 12 deg (white-cyan over warm), blue light on the top rim, 16 drifting sparks; + AE flame wisps (ae_hint / `wisps_frames`) | one-shot 1.6 s |
+| ray_fan_beam | looping win light from an arch top: 10 soft wedges swaying and breathing on whole cycles, haze, light column up to a target with a ring, hot spot + flat flare, gold arch glow, back light | loop 2.8 s |
+| glyph_strike | glyph flies into a target in 6 frames (comet trail, light band, prism shards, twinkles), impact flash + rays + ring, glyph cools on the target, light line draws out through it, secondary target lights up | one-shot 1.03 s |
+| banner_energy | win banner lands: green burst spikes, green slashes racing outward, green haze, gold bloom, top-bar flare, coins from 2 sources, glints, resting gold light that stays | one-shot 1.8 s |
+| ember_drift | embers drifting up over an area, each fading in and out once per loop | loop 4 s |
+
+Anchors (`x, y`): the button centre (rim_glow_pulse, anamorphic_burst), the light source on the arch top (ray_fan_beam;
+`target` is relative to it), the target the glyph lands on (glyph_strike; `source`, `secondary` and `twinkles` are
+relative to it), the banner text centre (banner_energy; `bar` and `sources` relative), the area centre (ember_drift).
+
+**Colour, one argument per part.** `color` is the main family colour, and every other part has its own option:
+- rim_glow_pulse: `hot` (rim), `wash` (inner band), `deep` (dark of the AE ripple tint).
+- anamorphic_burst: `bloom`, `hot`, `ray`, `core`, `blue`, `spark`, plus the wisp tints `dark`, `violet`, `violet_dark`, `pink`.
+- ray_fan_beam: `magenta`, `red`, `beam`, `gold`, `hot`.
+- glyph_strike: `trail`, `hot`, `shard`, `impact`, `ring`, `secondary_glow`, `line`.
+- banner_energy: `hot`, `rest`, `green`, `green_hot`, `coin`.
+
+To recolour the whole set, swap these hexes (a blue/cyan swap of every orange/gold one was checked on the clip).
+
+**The After Effects halves.** Each recipe returns an `ae_hint`. Render the comp it names, then pass the frames folder
+back as an option, and the recipe imports the frames into its own slot run (tintable, so the same hexes recolour them):
+- rim_glow_pulse: the existing **ripple_glow** template, unchanged, with `size 384, duration 1, fps 30, look line,
+  origin rim, color FF4A08, core FFB040, radius 0.48, travel 0.4, waves 3, life 0.9, echo 2, wave 0.9, wave_width 0.02,
+  rim 0, halo 0.35, wobble 16, wobble_size 0.1, softness 0.5, breathe 0, seed 5`. It is imported at max_size 320 and
+  15 frames, looped over the pulse, with alpha 0.3 x the pulse. Pass it as `options={"ripple_frames": dir}`.
+- anamorphic_burst: the new **flame_wisps** template (below), at its defaults. Pass it as `options={"wisps_frames": dir}`.
+  One grey frame set plays as 4 copies:
+  - orange, from frame 4;
+  - orange mirrored (rotation 184, scale 0.9, alpha 0.82 to 0.38), from frame 5;
+  - violet (rotation 5, stretching from (1, 1.25) to (1.1, 1.3)), from frame 6;
+  - pink (rotation -4, scale 0.8, alpha 0.7), from frame 8.
+
+AE frames play at their own fps (`frames_fps`, default 30): retiming a one-shot with `duration` retimes the Spine keys
+and the sequence start, not the flipbook speed.
+
+**AE template `flame_wisps`.** Anamorphic flame wisps flying OUT of a centre to both sides:
+- Two fractal-noise fields, stretched into thin strands (`strand` 16 px tall, `stretch` 14x wider), drift outward at
+  `speed` 380 px/s.
+- The left half is a mirrored copy of a second seed, so the 2 sides differ.
+- A drifting turbulent displace (`curl` 16, `curl_size` 34) tears them into curls.
+- They are shaped by a feathered flat ellipse (`spread` 0.6 of the width, `thick` 0.24 of the height), used as an ALPHA
+  matte on its own layer.
+- They flare in over 3 frames, grow fast then crawl (drag, scale 70 > 95 > 110 > 124%), and fade out over 0.9 s, with a glow.
+- Output: 768x192 at 30 fps, additive on black, one-shot, 27 frames (26 after the trim).
+- It is coloured once at the end (black > `color` > `core`). The defaults 808080 / FFFFFF render it GREY: import it
+  tintable and tint it in Spine, or set `color`/`core` to bake a single colour.
+
+**Measured facts from the clip.**
+- The rim pulse peaks at frame 5 and is gone at frame 29. The halo grows 9%, and the 2 shock rings leave at frames 3 and 8.
+- The press squash on the button: 1 > 0.77 (frame 3) > 1.09 (frame 7) > 1. Play it with `button_press`, or with your
+  own keys on the button bone. Faithfulness check: with the same squash on the parent bone, anamorphic_burst matches the
+  build to 0.02/255.
+- The glyph flies at a constant ~38 px per frame and lands on frame 6.
+- The win text pops 0.55 > 1.11 (frame 6) > 1.0 (frame 21). That is art: use `popup`, or your own keys.
+- The total-win light breathes on a 2.8 s period.
+
+**Traps.**
+- The inner-band wash is NORMAL blend. Additive light cannot turn a teal band orange. Keep it in front of the button art.
+- These are one slot run each. Put them `front_of` the button / banner art; the halos and rays are designed to sit over
+  the art's edges (in the clip some sat behind the button: put a copy `behind` it if your rim art is opaque and wide).
+- `glyph_strike`'s default glyph is a generic diamond. Pass your rune as `art={"glyph": ...}`, and the secondary target's
+  LIT picture as `art={"secondary": ...}` (it is revealed bottom-up by a clipping wipe over 4 frames).
+- AE caches renders by comp name: give each flame_wisps attempt a new comp name.
+
+## Round spin-button light (fx_button_glow): hover_pulse, press_flash, bloom_collar, anamorphic_streak, rainbow_halo, glitter_halo, spin_button_glow
+
+Measured frame by frame (30 fps) on a hot-air-balloon slot's round SPIN button (radius 88 px): it glows while the
+cursor hovers, is pressed (dark frame, squash, white-hot rim flash), then shows a gold "spinning" light until the reels
+stop. All native Spine, procedural pictures, one colour per part (a recolour is one argument). Sizes follow
+`radius` (88 = the reference) x `scale`; x, y = the button centre.
+
+**Timing model** (all but hover_pulse): `start` = the flash frame (press_flash: the pressed frame; its flash comes
+`dark` s later), `duration` = how long the light HOLDS (flash -> reels stop; 35 frames = 1.167 s on the reference),
+then `stop`: `fade` (normal stop, gone in 0.47-0.63 s), `quick` (turbo stop: 5-frame drop, then an after-glow, the
+long line and the spectrum linger ~1.25 s) or `hold` (no stop keys).
+
+| recipe | what | defaults | options |
+|---|---|---|---|
+| `hover_pulse` (loop) | face glow (cyan), thin lilac edge line, violet halo hugging the rim (breathing), a pink-white ring leaving the rim every period, 84 -> 114 px (~1 px/frame), fading | color FFB8D8, 1.0 s | radius, period, rings, halo_color 7C8CFF, rim_color D4CCFF, face_color 6CE0FF |
+| `press_flash` | pressed frame(s), squash .955 .922 .903 .906 .94 .985 -> 1 by f+8, white-hot ring ON THE RIM (not squashed), pink-white flash halo (peak f+1, gone f+12), face glow; the rim decays while it holds | color C8EEFF, dark 2 frames | radius, stop, dark, depth .097, button (your bone, squashed through a carrier), halo_color FFB8D8, rim_color D4CCFF, face_color 6CE0FF; art role `disc` = your button picture on the squash bone. Event fx_press_flash |
+| `bloom_collar` | normal-blend gold WASH (r 89-212) + additive bloom + a fiery collar broken into rays (r 92-127) + three thin ripple rings creeping out (95->117, 106->114, 128->136); snaps in f+1..f+5, grows 12 % while it holds; `quick` adds an after-glow | color FFA81C | radius, stop, wash, light_color FFC428, afterglow_color FFE45A |
+| `anamorphic_streak` | normal-blend wash + bright flat band (+-10 px, 540 wide) + yellow hairline beside the button + a long pale line across the screen (640) and a fainter one 21 below; grows out from 35 % width in 5 frames | color FFE45A | radius, stop, wash, wash_color FFA81C, line_color 88E4FF, length, second_line |
+| `rainbow_halo` | spectrum ring (violet in -> cyan -> green -> yellow -> orange/red out), brightest left/right; r 110 -> 122 (f+1) -> 150 -> 168 -> 183 (f+5, ease out), creeps to 196 while it holds | color FFFFFF (a tint: the spectrum is the picture) | radius, stop |
+| `glitter_halo` | 64 gold dots pop, twinkle twice while drifting out/up, vanish, respawn (r 94-200, 45 % near the sides) | color FFB848, duration hold + 0.35 | radius, band, sides |
+| `spin_button_glow` (bundle) | the whole press -> spin -> stop: bloom_collar, anamorphic_streak, rainbow_halo, glitter_halo (behind) + press_flash (front), timed like the reference | start = pressed frame | radius, hold, stop, dark, button, wash, skip, steps {recipe: {color, count, intensity, options}}; art={'press_flash': {'disc': ...}} |
+
+Measured facts:
+- **The gold is not additive**: where it passes, the background's blue channel drops 50-100 levels. So bloom_collar
+  and anamorphic_streak lay a normal-blend wash under the additive light. `wash=False` = additive only (over dark
+  backgrounds a wash only darkens).
+- The flash ring stays at the rim radius while the button squashes to 90 %; only the face glow and the edge line
+  squash with it.
+- Normal stop: gold fades over 17 frames, rim 14, spectrum 19. Quick (turbo) stop: washes gone in 5 frames, an
+  additive after-glow, the long line and the spectrum (~50 %) linger ~0.5 s, ~45 % left at 0.9 s, gone at 1.25 s.
+- Draw this light UNDER a semi-transparent UI bar if the game has one (the reference does, at 0.53 opacity).
+
+Traps:
+- Put hover_pulse and press_flash IN FRONT of the button art (face glow / rim are additive on it), bloom_collar,
+  anamorphic_streak, rainbow_halo and glitter_halo BEHIND it (the bloom is hollow behind the button; the bundle
+  orders them for you).
+- A disabled / grey-arrow state during the spin (the reference dims its rim then) is the game's own art state, not
+  part of these recipes: key the face glow / rim slots down yourself if you need it.
+- rainbow_halo's colour is a tint: red / blue tints still read as a spectrum, darker.
+
+## Win screens (`claude_spine/fx_win_screens.py`)
+
+Fourteen recipes rebuilt from a casual-slot reference clip (portrait 800 x 1396, 30 fps, 23 s): a cascade win
+(winning cells glow, pop, the board drops, a multiplier steps up with a burst of fire, the win number pops), then a
+Big Win screen, a tier upgrade to Mega Win, and a Total Win screen. Units are the clip's pixels (a cell is ~150 units);
+anchor = the subject's centre. Every recipe is procedural, additive unless noted, one group bone, colours from params.
+
+### Cell and board moments
+
+| Recipe | What | Defaults / options |
+|---|---|---|
+| `ornate_cell_glow` | Yellow light PAINTED behind a winning symbol (normal-blend lozenge + round skirt: additive yellow vanishes on a pale board), an ornate lozenge outline of light, `count` rising motes. Grows in 0.17 s (scale 0.8 -> 1, cubic out), breathes (0.5 s), dims over the last 0.3 s. | 1.0 s, color FFE63C, line_color FFF4A8, size 150, off True. Start it 1.0 s before the pop; `result.loop` = [0.17, 0.7] to loop while waiting. Draw it behind the symbol (`behind=`). Roles `paint`, `frame`. |
+| `starburst_pop` | A winner vanishes: translucent square flash, a 22-ray + 12-ray starburst out in 0.12 s and gone by 0.2 s, star core + streak, `count` glints drifting out to 0.45 s. | 0.45 s, color FFB43A, hot_color FFF6D8, glint_color FFF4A8, size 150, count 9. Role `rays`. |
+| `blowout_flash` | A symbol that STAYS (a wild) blows out white 0.06-0.19 s while it re-forms. | color FFF6D8, size [150, 118]. Anchor = the bright part (a wild's heart: +33 units). |
+| `label_glint` | A label that just changed: warm flare + streak, a tilted band sweeping across (0.3 s). | 0.42 s, color FFE7A0, size [192, 120]. Role `band`. |
+| `echo_stamp` | A label joins a total: 3 echo copies stamp down under it (0-0.24 s), one copy drops `drop` units into the target, growing 12%. | size [192, 122], drop 138. Role `label` (stretched to the box; default = a pill of light). |
+| `ghost_pop` | A number lands: label pops 1.42 -> 0.97 -> 1.0 in 0.2 s, a ghost copy swells to 1.55 and fades by 0.33 s. | size [425, 94], pop 1.42, ghost 1.55. Role `label`. |
+| `fire_boost_flare` | Spine half of a multiplier "fire boost": the warm flare on the bar. The fire and smoke are After Effects: `result.ae_hint` carries both template param sets and the import (see below). | 0.85 s window, color FF9426. |
+
+### Win screens (anchor = the win number)
+
+| Recipe | What | Defaults / options |
+|---|---|---|
+| `win_screen_intro` | Board dims (0-0.1 s, 35%), a full-screen wash floods at 0.13 s (82%) and clears by 0.45 s while the screen fades in; glow burst (normal body + additive + hot core) + ray flare + `count` flung sparks bloom 0.2-1.0 s. | 1.0 s, color 2ED2FF, core_color E6FFFF, wash_color 2840FF, dim_color 0A0A30, count 16, screen [840, 1440], screen_offset [-27, -134]. |
+| `win_screen_glow` | Hold behind a count-up: the glow settles from the intro over `settle` s, then breathes (1 s); a fan of streaks turns slowly; `count` stars twinkle. | 4.2 s window, settle 2.2 (`result.loop` = [2.2, 4.2]), dust_color 70ECFF, count 22. |
+| `win_upgrade_flash` | Tier upgrade: flash + star rays + streak at the number (0.02-0.3 s), screen wash wash_color -> wash_mid -> wash_color (0.12-0.44 s) while the game swaps the art. | color 7FEBFF, wash_color FF54D6, wash_mid FF7A3C. |
+| `beam_sweep` | 7 broad soft beams turning behind the title, exactly one beam step per loop (seamless), glow (normal body + additive), white core, stars. | 3.0 s window, color FF54D6, size 1500, count 20. Role `beams`. |
+| `sunburst_intro` | A glow gathers on the counter (0-0.18 s), a bloom fills the screen (0.12-0.45 s) with a light wash. | color FFB52E, core_color FFF3B8, screen_offset [0, -228]. |
+| `sunburst_glow` | Total Win sunburst: NORMAL-blend warm light (outer + sun) behind everything, white-hot core, two fans of thin rays (120 + 90) turning against each other and flickering (periods T/8, T/5), sparkles. | 4.0 s window, color FFB52E, core_color FFF3B8, outer_color = color mixed 45% to FF5A20, turn 12. Role `rays`. |
+| `face_flash` | A light that fills one object's face on a period: `shape` disc (coin) or plate (cut gem), short soft edge, halo, star glint. Peak at `delay` + rise. | 1.25 s window, color FFE45A, shape disc, size 152, delay 0.2, timing [0.1, 0.1, 0.1], peak 0.85. Role `face` (the object's silhouette = an exact fill). The clip's gem: shape plate, size 140, tilt -35, color FFC8B4, delay 0.06, timing [0.07, 0.08, 0.08], peak 0.75, hold_level 0.8, halo 0.4, star False; then the coin at delay 0.2. |
+
+### The After Effects parts (existing templates, unchanged)
+
+- Fire column: `fire` width 320 height 448 duration 1 fps 30 hot FFF6C8 mid FFA23C cool E8582A scale 60 rise 380
+  lick 0.35 flicker 0.25 body 0.55 taper 1.3 flame_height 1.1 threshold 0.12 softness 0.85 alpha_cut 0.12 core 0.45
+  turbulence 24 glow 0.8 loop seed 3 edge_fade 0.2 contrast 55. Import alpha mode, ADDITIVE blend, loop, scale 0.95,
+  on a bone that stretches (1.1, 0.2) -> (1.4, 0.9) -> (1.5, 1.05) over 0.85 s, alpha 0.3. Recolour = a re-render
+  (three colours do not survive a two-colour tint).
+- Orange smoke round it: `magic_smoke` 448 x 640, 1.5 s, luminous, color FF7A1E, light FFE8A0, rise 260, scale 130,
+  threads 0.35, curl 60, fine_curl 24, swirl 14, spread 0.42, height_fade 0.9, motes 10, seed 5. Import additive,
+  `tintable=True`, `tint=` the family colour (grade good: one frame set, any colour), loop, scale 1.15, alpha 0.8.
+  Both go BEHIND the bar's labels.
+- Background fireworks: `metal_sparks` size 384 duration 1.2 fps 30 rate 1 velocity 1.5 gravity 0.3 drag 1.6 extra 0.2
+  life 1.1 hot FFFFFF cool B8B8B8 droplets 0 echoes 40 glow 1 flash 0.4 seed 21 (white sparks with long Echo streaks,
+  drag-slowed: a firework burst). Import additive, `tintable=True`, ONE import and `copies=[{x, y, start, scale,
+  tint}, ...]` for every burst of every screen (36 frames at 256 px shared by ~17 bursts), loop the animation on a
+  fixed period (4.4 s board, 3 s Big, 2.8 s Mega). Draw them behind the balloon / background art.
+
+### Measured facts and traps
+
+- Timing (30 fps clip): highlight starts 1.0 s before the pop; pop flash 0.82-0.93 s; fire rises 0.12 s after the
+  pop, the multiplier slides 0.1 s later; win label lands 0.13 s before the pop. Big Win: dim at +0, wash peak +0.13 s,
+  number from +0.2 s; Mega flash at +0.03 s, wash peak +0.23 s; Total bloom +0.17 s. The gem / coin glint period is
+  1.25 s with the coin peaking 0.17 s after the gem.
+- Additive colour disappears on same-coloured or pale art: the cell glow and the Total sunburst are normal-blend, and
+  the Big / Mega glows carry a normal-blend body under the additive light or a recolour reads as white.
+- Spine 4 rotate / translate keys are RELATIVE to the setup pose: a bone with setup rotation 9 keyed 0 -> -5 turns
+  9 -> 4. Porting absolute values doubled the offsets in the first try.
+- A looping twinkle whose life crosses the loop end must be wrapped (evaluate it at 0 and T): keys built with
+  `t % T` and sorted put a peak on the loop end and a 0 on the start (a pop every loop).
+- Faithfulness: each recipe at defaults vs the clip build, FX only through the runtime: mean difference 0.00-0.35/255.
+
 **Warm tints:** dim orange or yellow light reads as brown on a dark screen. Tints between orange and yellow now turn
 their dark end toward red and keep it bright, and the gold coin's aura reads amber.
 
