@@ -2369,3 +2369,4 @@ from . import fx_light_bloom  # noqa: E402,F401   light_bloom, light_ripple, lig
 from . import fx_magic_button  # noqa: E402,F401   magic_circle, disc_flash, rim_pulse, silhouette_halo, icon_spin, bar_flood, mote_loop
 from . import fx_ui_flare  # noqa: E402,F401   rim_glow_pulse, anamorphic_burst, ray_fan_beam, glyph_strike, banner_energy, ember_drift
 from . import fx_button_glow  # noqa: E402,F401   hover_pulse, press_flash, bloom_collar, anamorphic_streak, rainbow_halo, glitter_halo, spin_button_glow
+from . import fx_win_screens  # noqa: E402,F401   ornate_cell_glow, starburst_pop, blowout_flash, label_glint, echo_stamp, ghost_pop, fire_boost_flare, win_screen_intro, win_screen_glow, win_upgrade_flash, beam_sweep, sunburst_intro, sunburst_glow, face_flash
