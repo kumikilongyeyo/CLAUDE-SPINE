@@ -2366,3 +2366,4 @@ from . import fx_props_elements  # noqa: E402,F401   flame_wick, liquid_bubble, 
 from . import fx_props_bundles  # noqa: E402,F401   bonus_chest_reveal, collect_into_prop, pinata_style_break, magic_vessel
 from . import fx_real  # noqa: E402,F401   bolt_link, crackle, surface_glow
 from . import fx_light_bloom  # noqa: E402,F401   light_bloom, light_ripple, light_shock
+from . import fx_ui_flare  # noqa: E402,F401   rim_glow_pulse, anamorphic_burst, ray_fan_beam, glyph_strike, banner_energy, ember_drift
