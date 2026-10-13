@@ -1100,6 +1100,36 @@ orb rim measured 228-255), and added light over white stays white. Judge the col
 loop seam is 1.4/255, below the 4.5 median step between frames. The director keeps 45 of the 90 frames at 190 px, and
 the orb and a cell together fit on one 2048 page.
 
+**`win_aura`: a slot symbol's win aura (flare, smoky loop, dissolve).** Rebuilt from a pirate-slot payline win where
+three cleavers light up in toxic-green smoke. A smooth glow blob (no noise) carries most of the light; large, soft,
+low-contrast smoke rises through it, a faint edge veil wraps it, and a hot core sits behind the subject. Small,
+high-contrast noise read as crunchy veins, and a steep veil edge read as a straight line over a dark board, so both
+are soft by design. AE renders three comps for Spine plus a preview: `<comp>_in` (the aura licks in, bursts up toward
+the core colour and settles; it ends exactly on loop frame 0), `<comp>_loop` (an exact loop: drifting smoke
+crossfaded with `AEFX.loopify`) and `<comp>_out` (starts on loop frame 0, the light dies first, the smoke tears and
+drifts up, then fades); `<comp>` is in -> loop -> out. Measured in AE 26.5: in -> loop seam 0.8/255, loop wrap 1.5/255,
+loop -> out 0/255.
+
+Colour is three params: `color` (body), `edge` (outer veil) and `core` (hot centre, flare). Leave `edge` and `core`
+empty and they derive from `color`, so ONE param recolours the whole aura (purple 9A3CFF, fire FF6A12, ice 2E9BFF).
+Three hues do not grade as two-tone, so render each colour in AE rather than importing tintable. `art` = the
+subject's PNG (optional): its silhouette, blurred, is the glow that hugs the shape. A blur clips at the layer's own
+bounds, so the PNG sits in a comp-sized precomp before it is blurred, or the glow comes out square. The default
+640 comp fits a ~300 x 390 px symbol; `radius` / `aspect` size the blob, `rise` the smoke speed, `flare` the burst.
+
+Smoke shape trap (it applies to every Fractal Noise layer): Fractal Noise overwrites the layer's alpha, so a mask on
+the noise layer does nothing and the smoke renders as a square. The shape is a separate feathered-ellipse matte
+layer (Turbulent Displace on it for wispy edges), used as an alpha track matte and switched off.
+
+    ae_template name=win_aura params={comp: aura_green, art: /path/symbol.png, save_as: x.aep}
+    ae_template name=win_aura params={comp: aura_purple, color: 9A3CFF, edge: "", core: "", art: /path/symbol.png}
+    ae_fx_to_spine ... comp=aura_green_in   mode=additive behind=<symbol slot> max_size=320 feather=0.08
+    ae_fx_to_spine ... comp=aura_green_loop mode=additive behind=<symbol slot> seq_mode=loop start=<in end> until=...
+    ae_fx_to_spine ... comp=aura_green_out  mode=additive behind=<symbol slot> start=<loop end>
+
+Draw it BEHIND the symbol and additive. At max_size 320 the three pieces are 64 frames; one set serves every winning
+symbol of that kind through `copies`.
+
 **Warm tints:** dim orange or yellow light reads as brown on a dark screen. Tints between orange and yellow now turn
 their dark end toward red and keep it bright, and the gold coin's aura reads amber.
 

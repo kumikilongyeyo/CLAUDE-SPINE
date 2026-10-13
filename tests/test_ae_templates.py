@@ -159,3 +159,24 @@ def test_ripple_glow_waves_shapes_and_two_tone(tmp_path):
     assert "ADBE Fractal Noise" in src and "TrackMatteType.LUMA" in src and 'smokeBand("wave"' in src
     line = open(ae_templates.build_script("ripple_glow", {"look": "line"}, tmp_path)["script"]).read()
     assert '"look": "line"' in line and "SMOKE = P.look === \"smoke\"" in line
+
+
+def test_win_aura_three_comps_one_colour_param_and_silhouette_precomp(tmp_path):
+    """win_aura: a slot symbol win aura. _in ends on loop frame 0, _loop is loopified, _out starts on loop frame 0;
+    colour is color/edge/core and edge/core derive from color when empty; the smoke shape is a matte layer (Fractal
+    Noise overwrites alpha, so a mask on it does nothing); the art silhouette is blurred in a comp-sized precomp."""
+    t = ae_templates.list_templates()
+    d = t["win_aura"]["params"]
+    assert (d["color"], d["edge"], d["core"]) == ("4ED82A", "4FE0B0", "D8FF4A")
+    assert d["intro"] < d["duration"] and d["outro"] > 0 and d["art"] == ""
+    src = open(ae_templates.build_script("win_aura", {"comp": "aura_v1"}, tmp_path)["script"]).read()
+    assert '"mode":"additive"' in src and '"seq_mode":"loop"' in src and '"comps":{"in":"' in src
+    assert "AEFX.loopify(src" in src and "loopLayer(cin, \"01_SOURCE_aura\", TI - L)" in src      # in hands over on loop 0
+    assert "loopLayer(cout, \"01_SOURCE_aura\", 0)" in src                                         # out starts on loop 0
+    assert "s.setTrackMatte(mt, TrackMatteType.ALPHA)" in src and "mt.enabled = false" in src
+    assert '"Contrast", 105' in src                                                                 # >~150 whites out
+    assert "P.edge ? AEFX.rgb(P.edge) : mix(GLOW, WHITE" in src and "P.core ? AEFX.rgb(P.core) : mix(GLOW, WHITE" in src
+    art = open(ae_templates.build_script("win_aura", {"art": "/x/cleaver.png", "color": "9A3CFF", "edge": "",
+                                                       "core": ""}, tmp_path)["script"]).read()
+    assert '"edge": ""' in art and "_silhouette" in art and "hug = src.layers.add(silc)" in art
+    assert ".forEach" not in src and "JSON." not in src

@@ -66,6 +66,7 @@ Known-good starting points:
 | Fireball / clash | `smoke_puff` light FFF3A0 mid FF7A1C shadow 3A2018 (blue: E8FFFF / 3A9CFF / 0A1A40) |
 | Neon / laser / energy line | `saber` presets (or the Spine `saber` recipe, no AE needed) |
 | Soft smoky ripple glow from a subject's centre (charged orb, powered cell) | `ripple_glow` (additive, loop, import tintable; look smoke (default) or line, bright colour not white, 3 different waves per 3 s, `shape rect` for cells; recolour with exact `LIGHT/DARK` pairs) |
+| Win aura round a slot symbol (flare in, smoky loop, dissolve out) | `win_aura` (additive, three comps _in/_loop/_out that join seamlessly; `color` alone recolours it, `art` = symbol PNG for the glow that hugs it; import behind the symbol) |
 
 ## 4. Spine: one build script, one function per animation
 
