@@ -13,6 +13,15 @@ The rule is simple:
 
 Never skip the judge pass for hero effects.
 
+## 0. Start from what is stored (house rule)
+
+Never build an effect from zero. List what exists first: `ae_template` (name=""), `ae_library` (no names) and
+`fx_recipe` (recipe="" / recipe="guide"), plus finished jobs the user already approved. Pick the closest one, say
+which one you are starting from and what you will change, then modify only what the request needs: colour, size,
+timing, path, count, direction. When the target is bigger or smaller than the template's comp, rescale its numbers
+(amplitude, width, branching, blur); don't rewrite its technique. Write new FX code only for a part nothing stored
+covers, and say so.
+
 ## 1. Plan before touching After Effects
 
 Call ae_vfx_plan with the creative brief.

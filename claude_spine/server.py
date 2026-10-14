@@ -31,7 +31,19 @@ from .mesh import rig_mesh as _rig_mesh
 from .project import Project
 from .timeline import AnimBuilder
 
-mcp = FastMCP("claude-spine")
+# House rule, shown to the model in every session that loads this server.
+INSTRUCTIONS = """\
+RULE: start every effect from what is already stored here; never build an FX from zero.
+Before writing any After Effects or Spine FX code for a request:
+1. Look up the closest stored building blocks: ae_template (name="" lists them), ae_library (no names lists them),
+   fx_recipe (recipe="" lists them, recipe="guide" explains them), plus finished jobs the user already approved.
+2. Say which template / library effect / recipe you are starting from and what you will change.
+3. Build from it and modify only what the request needs (colour, size, timing, path, count, direction, look).
+   Rescale a template's numbers to the target size instead of rewriting its technique.
+4. Write new FX code only for a part nothing stored covers, and say so.
+"""
+
+mcp = FastMCP("claude-spine", instructions=INSTRUCTIONS)
 
 
 def _open(project: str) -> Project:

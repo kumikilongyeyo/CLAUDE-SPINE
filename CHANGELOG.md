@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- House rule in the server instructions (shown to the model in every session) and as step 0 of the `ae-vfx-director` skill: start every effect from what is stored (`ae_template`, `ae_library`, `fx_recipe`, approved jobs), say which one and what changes, rescale a template's numbers to the target size instead of rewriting its technique, and write new FX code only for what nothing stored covers. 1 test.
 - magic button family from a fantasy slot SPIN button clip: Spine recipes magic_circle, disc_flash, rim_pulse, silhouette_halo, icon_spin, bar_flood, mote_loop (fx_magic_button.py, silhouette art= role derived into rim / halo) and AE templates energy_burst (silhouette-shaped energy smoke burst, pops in 2 frames) and edge_aura (lime energy hugging a silhouette, exact loop); tests/test_fx_magic_button.py.
 - UI flare family (fx_ui_flare): rim_glow_pulse, anamorphic_burst, ray_fan_beam, glyph_strike, banner_energy, ember_drift (spin button / win banner / total-win light from a slot UI clip), plus AE template flame_wisps (grey anamorphic flame wisps, one frame set played as tinted copies); rim_glow_pulse documents its ripple_glow params.
 - New fx_button_glow family (round spin-button light, measured on a slot spin button): hover_pulse, press_flash (squash through a carrier or your disc art=, white-hot rim flash), bloom_collar and anamorphic_streak (normal-blend wash + additive light, wash= option), rainbow_halo (spectrum ring), glitter_halo, and the spin_button_glow bundle; stop = fade | quick | hold.
