@@ -9,6 +9,15 @@ textures: no art needed, tiny atlas, nothing to re-export when you recolour or r
 moment of a game: the spin, the win, the payout, features, bonus rounds, the screen's atmosphere and the UI. Three of them (portal,
 electric_frame, and optionally any other) are HYBRIDS: the churning plasma / lightning part is After Effects, the rest is Spine.
 
+## House rule: start from what is stored
+
+Never build an effect from zero. First list what exists (`fx_recipe` recipe="", `ae_template` name="", `ae_library`),
+pick the closest recipe / template / library effect (or a finished job the artist approved), say which one and what
+changes, and modify only what the request needs: colour, size, timing, path, count, direction. Rescale a template's
+numbers to the target size instead of rewriting its technique (the `lightning` strike tuned for a 512 px comp is a grey
+scribble at full screen until its amplitude / width / branching are rescaled). New FX code only for a part nothing
+stored covers, and say so.
+
 ## Use
 
     fx_recipe                                   -> lists every recipe with its options and defaults
@@ -1401,9 +1410,51 @@ The recipe builds everything Spine does well; the part that needs per-pixel nois
 
 Same for electric_frame (template electric_frame, scale ~0.95 for the default 512 comp and a 400 frame). Both AE
 comps cycle their turbulence (Cycle Evolution), so the flipbook loops with no seam. The AE part is fixed-size: to make
-a frame resize at runtime, bend an AE strip along a path with `ae_fx_along_path` (when that tool is available).
+a frame resize at runtime, bend an AE strip along a path with `ae_fx_along_path`.
 Stay honest about cost: the portal ring is 48 frames at 384 px, the frame line 24 frames at 512 px. Use `max_size` /
 `max_frames` in ae_fx_to_spine to shrink them.
+
+## Energy payline: an AE beam bent along any winning line (`energy_payline` + `ae_fx_along_path`)
+
+A payline beam with the look of a hand-made AE shot (white-hot core with a long dim tail, soft irregular aura with waving
+edges that peels off and dissipates, glowing embers, a head knot; energy streams from the head back along the trail)
+that the GAME re-routes for every winning line, sharp corners included. Two themes: `red` (swirling ribbon strands) and
+`blue` (the `lightning` template's strike: leader, return stroke + flash, restrikes); `core` / `hot` / `glow` / `ember`
+/ `strand` recolour. Timeline: draw-on 0-0.35 s, loop 0.6-2.6 s (exact: every motion has a 2 s period), fade 2.6-3.0 s.
+
+    ae_template name=energy_payline params={theme: red, layers: core, height: 192, comp: strip_core}   # the sharp line
+    ae_template name=energy_payline params={theme: red, layers: aura, comp: strip_aura, save_as: x.aep} # the soft light
+        -> run both scripts in AE; the result gives mode, baseline, ends (= pad) and the in / loop / out parts
+    ae_fx_along_path project=p.json name=payline points=<7 knots on a STRAIGHT line> aep=x.aep comp=strip_aura
+        corners=sharp baseline=0.5 ends=120 across_scale=1 feather=0.03 mode=additive weight_window=300
+        max_size=768 animation=payline parts=[{name: in, frames: [0, 17], mode: once},
+        {name: loop, frames: [18, 77], mode: loop, max_frames: 30}, {name: out, frames: [78, 89], mode: once}]
+    ae_fx_along_path project=p.json name=payline_core rig=payline points=<the same knots> aep=x.aep comp=strip_core
+        corners=sharp baseline=0.5 ends=120 across_scale=1 feather=0.03 mode=additive weight_window=0
+        max_size=1024 animation=payline parts=<the same, loop max_frames 60>
+
+In the game: one knot per reel centre plus one at each board edge (`payline_c0..c6`); for a win set each control bone's
+position to the line's point, then play `payline_in`, queue `payline_loop`, and `payline_out` to clear it.
+
+Why it is built this way (each one was a visible fault first):
+
+- **Setup pose = a straight line.** Every route the game sets is then reached by bending, so every payline has the same
+  quality. A setup bent for one route bakes that route's corner fixes into the mesh and the other routes go wrong.
+- **Sharp corners come from the path, not the mesh.** With `corners=sharp` each bezier handle is weighted 2/3 to its knot's
+  control bone and 1/3 to the neighbour's, so every segment stays straight wherever the knots move. Handles that are
+  plain offsets on one bone stay horizontal when the knot moves and turn a W into a sine wave.
+- **Two meshes on one rig.** A thick strip cannot turn a sharp corner without folding its inner side (flipped triangles,
+  mirrored texture). The thin `core` strip (192 px) keeps 2-bone weights and stays sharp; the wide `aura` strip (384 px)
+  is weighted over a 300-unit window (`weight_window`), so linear-blend skinning rounds its corners instead of folding,
+  also after re-routing. `rig=` adds the second mesh to the first one's bones.
+- **A baseline row.** The mesh has three rows: top, the baseline ON the path, bottom. With two rows the core is the
+  midpoint of top and bottom, and any corner fix that moves one side kinks the line.
+- **`ends` + `feather`.** The strip is padded (`pad`) so the head glow is not clipped; `ends` hangs that padding past the
+  end knots, and `feather` fades the frame border so the haze that reaches the strip's edge has no hard line.
+- **Budget.** The line keeps 30 fps at full size (`max_frames` 60 for the loop); the soft aura loops at 15 fps
+  (`max_frames` 30). Measured on a 5-reel board: about 6 MB of PNG over five 2048 pages; shrink with `max_size`.
+- **Stretch.** One texture spans the whole path, so a long route (a W through every row) stretches the strip along
+  its length; thickness stays put (`across_scale`).
 
 ## Resizing and recolouring a glowing frame
 

@@ -4,7 +4,7 @@ Small, sharp tools that each do one rigging job on a project on disk
 (``<name>.json`` + ``images/``). Typical session:
 
     import_psd → rig_mesh / rig_strand / rig_ik / rig_turn → juice_apply →
-    fx_generate / ae_fx_to_spine → validate → qa_budget → preview → make_editable / pack_atlas
+    fx_generate / ae_fx_to_spine / ae_fx_along_path → validate → qa_budget → preview → make_editable / pack_atlas
 
 Every tool returns a JSON summary; nothing is printed. Tools that change the
 skeleton save it before returning, so tools can be chained freely.
@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_look, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_look, ae_path, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -652,7 +652,8 @@ def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -
 
     name="" lists the templates with their parameters and defaults. Otherwise name is one of: glow_pulse,
     shockwave, sparkle, relief_shimmer (light wave over a picture, traced by its relief or a depth map),
-    fire, fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic
+    fire, fire_strip (a straight strip for ae_fx_along_path), energy_payline (a payline beam strip
+    for ae_fx_along_path), fire_aura (flame ring shooting out of a hole: fists, scatters, power-ups), lightning, burst (parabolic
     sparks), splash, surface_sweep (the art's own colours brightened in a soft band bent round the volume: a
     shine that sits ON the surface), lens_flare (optical flare with a ghost chain), metal_sparks (realistic
     metal-impact sparks, CC Particle World + Echo streaks, additive), frost_creep (frost growing over a coin face
@@ -667,6 +668,42 @@ def ae_template(name: str = "", params: dict | None = None, out_dir: str = "") -
     if not name:
         return {"templates": ae_templates.list_templates()}
     return ae_templates.build_script(name, params or {}, out_dir or None)
+
+
+@mcp.tool()
+def ae_fx_along_path(project: str, name: str, points: list[list[float]], aep: str = "", comp: str = "",
+                     frames_dir: str = "", fps: float = 0, corners: str = "smooth", bones: int = 0, columns: int = 0,
+                     baseline: float = 0.8, across_scale: float = 0.0, mode: str = "alpha", seq_mode: str = "loop",
+                     parts: list[dict] | None = None, animation: str = "", start: float = 0.0, until: float = 0.0,
+                     fit_duration: float = 0.0, max_size: int = 0, max_frames: int = 0, min_fps: float = 0.0,
+                     blend: str = "", color: str = "FFFFFFFF", parent: str = "root", front_of: str = "",
+                     behind: str = "", demo_bend: float = 0.0, start_frame: int = -1, end_frame: int = -1,
+                     keep_frames: str = "") -> dict:
+    """Bend an After Effects strip along a path in Spine, so the game can reshape the line at runtime.
+
+    Render a straight strip with ae_template (fire_strip; energy_payline for a slot payline beam), then give its comp
+    (aep + comp, or frames_dir + fps) and the path's knots as [[x, y], ...] in the parent bone's space (>= 2 knots).
+    Creates control bones <name>_c0.. (one per knot: move one to drag the line, e.g. to a reel position of the winning
+    line; rotate it to turn the curve), a path attachment weighted to them, a bone chain <name>_b0.. driven by a path
+    constraint so it always spans the whole path, and a mesh on that chain playing the frames.
+    corners: "smooth" (Catmull-Rom curve through the knots) or "sharp" (straight segments, turns at each knot:
+    paylines). baseline = strip row (0 top .. 1 bottom) that sits on the path (0.5 for energy_payline);
+    across_scale = world units per strip pixel across the path (0 = uniform with the length; 1 keeps the AE look's
+    thickness at 1 unit = 1 comp px). bones / columns = 0 pick defaults for the corner mode.
+    parts = [{"name": "in", "frames": [0, 17], "mode": "once"}, {"name": "loop", "frames": [18, 77], "mode": "loop"},
+    {"name": "out", "frames": [78, 89], "mode": "once"}] splits one render into animations <animation or name>_<part>
+    on the same mesh (energy_payline's result gives these ranges); max_frames / min_fps budget each part (see
+    ae_fx_to_spine). demo_bend > 0 adds a swaying key set on the control bones so you can see it bend. Frames are
+    packed at full size (a mesh's UVs map the whole picture)."""
+    p = _open(project)
+    res = ae_path.fx_along_path(
+        p, name, points, corners=corners, bones=bones, columns=columns, baseline=baseline, across_scale=across_scale,
+        mode=mode, seq_mode=seq_mode, parts=parts, animation=animation, start=start, until=until,
+        fit_duration=fit_duration, max_size=max_size, max_frames=max_frames, min_fps=min_fps, blend=blend,
+        color=color, parent=parent, front_of=front_of, behind=behind, demo_bend=demo_bend, aep=aep, comp=comp,
+        frames_dir=frames_dir, fps=fps, start_frame=None if start_frame < 0 else start_frame,
+        end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
+    return _saved(p, res)
 
 
 @mcp.tool()
