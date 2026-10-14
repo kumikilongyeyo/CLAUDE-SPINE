@@ -4,7 +4,7 @@ Small, sharp tools that each do one rigging job on a project on disk
 (``<name>.json`` + ``images/``). Typical session:
 
     import_psd → rig_mesh / rig_strand / rig_ik / rig_turn → juice_apply →
-    fx_generate / ae_fx_to_spine / ae_fx_along_path → validate → qa_budget → preview → make_editable / pack_atlas
+    fx_generate / ae_fx_to_spine / ae_fx_along_path / ae_polyline_fx → validate → qa_budget → preview → make_editable / pack_atlas
 
 Every tool returns a JSON summary; nothing is printed. Tools that change the
 skeleton save it before returning, so tools can be chained freely.
@@ -17,7 +17,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import ae_bridge, ae_look, ae_path, ae_templates, ae_vfx_director, draw_order
+from . import ae_bridge, ae_look, ae_path, ae_polyline, ae_templates, ae_vfx_director, draw_order
 from . import relight as relight_mod
 from . import animation_opt
 from . import atlas as atlas_mod
@@ -703,6 +703,34 @@ def ae_fx_along_path(project: str, name: str, points: list[list[float]], aep: st
         color=color, parent=parent, front_of=front_of, behind=behind, demo_bend=demo_bend, aep=aep, comp=comp,
         frames_dir=frames_dir, fps=fps, start_frame=None if start_frame < 0 else start_frame,
         end_frame=None if end_frame < 0 else end_frame, keep_frames=keep_frames)
+    return _saved(p, res)
+
+
+@mcp.tool()
+def ae_polyline_fx(project: str, name: str, points: list[list[float]], layers: list[dict], aep: str = "",
+                   frames_dir: str = "", fps: float = 0, pad: float = 96.0, across_scale: float = 1.0,
+                   baseline: float = 0.5, mode: str = "additive", parts: list[dict] | None = None,
+                   head: dict | None = None, stagger: float = 0.06, tail_alpha: float = 0.3, tail_curve: float = 1.6,
+                   phase: int = 17, parent: str = "root", max_size: int = 0, max_frames: int = 0) -> dict:
+    """Lay a straight After Effects piece on every segment of a polyline (a slot payline with sharp corners), so
+    NOTHING bends: the AE look survives at 1:1 and corners stay exact. Best for lines made of straight segments; use
+    ae_fx_along_path for smooth curves.
+
+    Render the pieces with ae_template energy_payline piece=segment (layers=aura and layers=core, the same pad) and
+    the head with piece=head layers=head. points = the knots [[x, y], ...] (a STRAIGHT row for the setup is best; the
+    game moves control bones <name>_c0.. to the winning line). Each segment gets a bone aimed at the next knot by a
+    1-bone IK constraint with stretch, and per layer an additive region playing that layer's frames (one frame set
+    shared by every segment, each at its own phase). layers = [{"name": "aura", "comp": .., "fade": 96, "max_size":
+    320, "loop_frames": 30, "alpha": 1}, {"name": "core", "comp": .., "fade": 24}] (first = behind; fade = strip px
+    each side of a knot over which a piece fades so overlapping pieces add back to one). head = {"comp": ..,
+    "size": [256, 256]}. parts = in / loop / out frame ranges (default: the energy_payline timeline). Animations
+    <name>_in (pieces draw on stagger s apart, the head lands last), <name>_loop, <name>_out. Slot alpha ramps from
+    tail_alpha at the tail to 1 at the head (u ** tail_curve)."""
+    p = _open(project)
+    res = ae_polyline.polyline_fx(p, name, points, layers, aep=aep, frames_dir=frames_dir, fps=fps, pad=pad,
+                                  across_scale=across_scale, baseline=baseline, mode=mode, parts=parts, head=head,
+                                  stagger=stagger, tail_alpha=tail_alpha, tail_curve=tail_curve, phase=phase,
+                                  parent=parent, max_size=max_size, max_frames=max_frames)
     return _saved(p, res)
 
 

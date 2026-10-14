@@ -1,4 +1,4 @@
-/*TEMPLATE {"name": "energy_payline", "doc": "Slot payline energy beam on a straight strip, to bend along any winning line with ae_fx_along_path (corners=\"sharp\", baseline=0.5, ends=pad, parts from this result; feather ~0.03). White-hot core with a long dim tail, soft irregular aura whose edges wave, pieces of aura that peel off and dissipate, glowing embers, a head knot; energy streams from the head back along the trail. theme red: swirling ribbon strands; theme blue: the lightning template's strike (leader, return stroke + flash, restrikes) instead of swirls. Timeline: draw-on 0-0.35 s, loop 0.6-2.6 s (exact, every motion has a 2 s period), fade 2.6-3.0 s. Colours: core / hot / glow / ember / strand override the theme. For sharp corners render it twice and bend two meshes on one rig: layers=\"core\" (height ~192, small weight_window) and layers=\"aura\" (default height, weight_window ~1.6x its half height, then rig= the first). The comp keeps every control on 00_CONTROLS and its route on 01_PATH, so it also works as a full-screen payline comp. Needs the JavaScript expression engine. Additive.", "params": {"theme": "red", "layers": "all", "width": 2048, "height": 384, "fps": 30, "pad": 120, "core": "", "hot": "", "glow": "", "ember": "", "strand": ""}} */
+/*TEMPLATE {"name": "energy_payline", "doc": "Slot payline energy beam on a straight strip, to bend along any winning line with ae_fx_along_path (corners=\"sharp\", baseline=0.5, ends=pad, parts from this result; feather ~0.03). White-hot core with a long dim tail, soft irregular aura whose edges wave, pieces of aura that peel off and dissipate, glowing embers, a head knot; energy streams from the head back along the trail. theme red: swirling ribbon strands; theme blue: the lightning template's strike (leader, return stroke + flash, restrikes) instead of swirls. Timeline: draw-on 0-0.35 s, loop 0.6-2.6 s (exact, every motion has a 2 s period), fade 2.6-3.0 s. piece=segment renders one straight piece of a polyline payline (beam off both edges, even swirls / puffs) for ae_polyline_fx: pieces laid knot to knot by IK-stretch bones, overlapping with complementary end fades, so nothing bends and corners stay exact; piece=head (layers=head) the head knot alone. Colours: core / hot / glow / ember / strand override the theme. For sharp corners render it twice and bend two meshes on one rig: layers=\"core\" (height ~192, small weight_window) and layers=\"aura\" (default height, weight_window ~1.6x its half height, then rig= the first). The comp keeps every control on 00_CONTROLS and its route on 01_PATH, so it also works as a full-screen payline comp. Needs the JavaScript expression engine. Additive.", "params": {"theme": "red", "piece": "line", "layers": "all", "width": 2048, "height": 384, "fps": 30, "pad": 120, "core": "", "hot": "", "glow": "", "ember": "", "strand": ""}} */
 // Ported from the payline_energy job (vfx recipe/payline_energy/ae/build_payline.jsx): the same rig, on a strip.
 var THEMES = {
     red: { dir: 2, crackle: 0, wisp: 50,
@@ -21,7 +21,16 @@ var cmap = { core: "Core Color", hot: "Hot Color", glow: "Glow Color", ember: "E
 for (var ck in cmap) if (P[ck]) TH.colors[cmap[ck]] = AEFX.rgb(P[ck]);
 var W = P.width, H = P.height, FPS = P.fps, DUR = 3.0;
 var comp = AEFX.comp(P.comp || "energy_payline", W, H, FPS, DUR);
+// piece: "line" = the whole payline on one strip (head, long dim tail); "segment" = one straight piece of a polyline
+// payline (the beam runs off both strip edges: no caps, no tail, no head; swirls / puffs / bolts spread evenly), to be
+// laid knot to knot and overlapped with complementary end fades; "head" = the head knot alone (comp centre)
+var PIECE = P.piece || "line";
+if (PIECE !== "line" && PIECE !== "segment" && PIECE !== "head") throw new Error("piece must be line, segment or head");
+if (PIECE !== "line") { TH.tails = [0, 0, 0, 0]; TH.coreTaper = 0; TH.coreBand = 0; }
+// (plain if/else: ExtendScript mis-parses a multi-line ?: chain and silently takes the wrong branch)
 var STRIP = [[P.pad, Math.round(H / 2)], [W - P.pad, Math.round(H / 2)]];
+if (PIECE === "segment") STRIP = [[-240, Math.round(H / 2)], [W + 240, Math.round(H / 2)]];
+if (PIECE === "head") STRIP = [[0, Math.round(H / 2)], [Math.round(W / 2), Math.round(H / 2)]];
 
 // ---------- library (evaluated by every expression) ----------
 var LIB = [
@@ -41,7 +50,7 @@ var LIB = [
 "function LIFE(k,salt,LS){var R=RNG(k*7919+salt);var Lf=LS[Math.floor(R(LS.length))];var off=R(Lf);var tt=time+off;var c=Math.floor(tt/Lf);var age=tt/Lf-c;var per=Math.round(TP/Lf);return {age:age,R:RNG(salt*31+k*977+((c%per)+per)%per+101),Lf:Lf};}",
 "function EMB(k){var X=LIFE(k,13,[0.5,2/3,1,1]),R=X.R;return {u:R(0.03,0.97),age:X.age,side:R()<0.5?-1:1,d0:R(8,58),dr:R(14,50),rot:R(-30,30),sz:R(0.7,1.5),al:(cv('Energy Flow')<0?-R(15,70):R(-30,30)),up:R(4,22)};}",
 "function ARC(k){var X=LIFE(k,500,[1,1,2/3,2]),R=X.R,F=cv('Energy Flow');var o={age:X.age,u:R(-0.05,0.85),len:R(300,600),dist:R(260,560)*X.Lf,A:R(0.65,1.35),turns:R(0.35,0.95),th:R(0,6.283),tw:(R()<0.5?-1:1)*R(0.6,1.6),F:F};",
-"if(F<0){o.u=1-Math.pow(R(),1.4)*0.75;o.dist=-R(220,480)*X.Lf;o.tw=-Math.abs(o.tw);}return o;}",
+"if(F<0){o.u=cv('Uniform')>0.5?R(-0.1,1.1):1-Math.pow(R(),1.4)*0.75;o.dist=-R(220,480)*X.Lf;o.tw=-Math.abs(o.tw);}return o;}",
 "function BPART(k){var X=LIFE(k,777,[1/3,0.5,2/3]),R=X.R;return {u:R(0.02,0.98),age:X.age,side:R()<0.5?-1:1,d0:R(10,40),dr:R(20,70),rot:R(0,360),sz:R(0.7,1.4),al:R(-40,40)};}",
 // a closed band round the drawn line: tail taper, round head, both edges carry waves that travel toward the head
 "function BAND(G,S,Wd,amp,lam,k,ph,tail){S=Math.max(2,S);var n=Math.max(4,Math.ceil(S/8)),A=[],B=[];for(var i=0;i<=n;i++){var s=S*i/n,p=AT(G,s),q=NRM(G,s,50);",
@@ -140,7 +149,7 @@ function color(n, c) { addEffect(ctrl, "ADBE Color Control", n); setP(ctrl, n, "
 slider("Draw", 100); slider("Fade", 100); slider("Width", 1); slider("Wisp Amount", TH.wisp);
 slider("Direction", TH.dir);   // 0 = as drawn, 1 = always flows right -> left, 2 = always left -> right
 slider("Crackle", TH.crackle);
-slider("Energy Flow", TH.flow);        // 1 = waves/swirls/pulses run toward the head, -1 = they stream back from the head toward the tail
+slider("Energy Flow", TH.flow); slider("Uniform", PIECE === "segment" ? 1 : 0);        // 1 = waves/swirls/pulses run toward the head, -1 = they stream back from the head toward the tail
 slider("Aura Randomness", TH.rnd);     // 0 = even waves on the aura edge, 1 = irregular (unrelated wave sizes)
 slider("Glow Strength", 100); slider("Ember Amount", 100); slider("Pulse Amount", 100); slider("Head Amount", 100);
 if (TH.recipeBolts) slider("Lightning Amount", 100);
@@ -181,7 +190,7 @@ if (TH.puffs) {
         pv().addProperty("ADBE Vector Shape - Group");
         pv().property(1).property("ADBE Vector Shape").expression = EV +
             "var X=LIFE(" + pi + ",1200,[1,2/3,2]),R=X.R,a=X.age,F=cv('Energy Flow'),G=GEO(PL()),S=G.T*cv('Draw')/100;" +
-            "var u0=F<0?1-Math.pow(R(),1.2)*0.95:R(0.05,0.95),len=R(170,380),wd=R(34,80)*cv('Width'),side=R()<0.5?-1:1,drift=R(20,60),trav=R(90,280)*X.Lf;" +
+            "var u0=F<0&&cv('Uniform')<0.5?1-Math.pow(R(),1.2)*0.95:R(0.05,0.95),len=R(170,380),wd=R(34,80)*cv('Width'),side=R()<0.5?-1:1,drift=R(20,60),trav=R(90,280)*X.Lf;" +
             "var sc=u0*G.T+F*trav*a-len/2,n=24,A=[],B=[];" +
             "for(var i=0;i<=n;i++){var u=i/n,s=Math.max(0,Math.min(S,sc+len*u)),p=AT(G,s),q=NRM(G,s,50);" +
             "var off=side*(wd*0.25+drift*Math.pow(a,0.8)),w=wd*0.5*Math.sin(Math.PI*u)*(0.6+0.8*a);" +
@@ -190,7 +199,7 @@ if (TH.puffs) {
         pv().addProperty("ADBE Vector Graphic - Fill");
         pv().property(2).property("ADBE Vector Fill Color").expression = ctlColor("Glow Color");
         vec(puffLayer).property("Puff " + pi).property("ADBE Vector Transform Group").property("ADBE Vector Group Opacity").expression = EV +
-            "var X=LIFE(" + pi + ",1200,[1,2/3,2]),R=X.R,a=X.age,F=cv('Energy Flow'),u0=F<0?1-Math.pow(R(),1.2)*0.95:R(0.05,0.95);" +
+            "var X=LIFE(" + pi + ",1200,[1,2/3,2]),R=X.R,a=X.age,F=cv('Energy Flow'),u0=F<0&&cv('Uniform')<0.5?1-Math.pow(R(),1.2)*0.95:R(0.05,0.95);" +
             "100*Math.min(1,a/0.25)*Math.pow(1-a,1.3)*(u0<=cv('Draw')/100?1:0)";
     }
     turb(puffLayer, 30, 60, 1); blur(puffLayer, 22); puffLayer.blendingMode = BlendingMode.ADD;
@@ -220,7 +229,7 @@ function swirlLayer(name, colorName, widthMul) {
     for (var i = 0; i < NA; i++) {
         strokeGroup(l, "Arc " + i, arcExpr(i), { color: colorName, width: EV + (3.4 * widthMul) + "*cv('Width')", taper: [45, 45, 0, 0, 55, 55], join: 2 });
         vec(l).property("Arc " + i).property("ADBE Vector Transform Group").property("ADBE Vector Group Opacity").expression =
-            EV + "var R=ARC(" + i + "),a=R.age,T=GEO(PL()).T,uc=R.u+R.dist*a/T,tf=R.F<0?Math.pow(Math.max(0,Math.min(1,(uc-0.1)/0.5)),1.3):1;" +
+            EV + "var R=ARC(" + i + "),a=R.age,T=GEO(PL()).T,uc=R.u+R.dist*a/T,tf=R.F<0&&cv('Uniform')<0.5?Math.pow(Math.max(0,Math.min(1,(uc-0.1)/0.5)),1.3):1;" +
             "100*tf*Math.min(1,a/0.2)*Math.min(1,(1-a)/0.3)*(R.u*T<T*cv('Draw')/100?1:0)";
     }
     l.blendingMode = BlendingMode.ADD;
@@ -241,10 +250,10 @@ if (TH.recipeBolts) {
     var NBL = 6;
     var BCOM = function (k) {
         return EV + "var k=" + k + ",X=LIFE(k,3000,[2/3,1,1,2]),R=X.R,a=X.age,tl=a*X.Lf,F=cv('Energy Flow'),G=GEO(PL()),S=G.T*cv('Draw')/100;" +
-            "var u0=F<0?1-Math.pow(R(),1.3)*0.85:R(0.05,0.95),len=R(130,260)*cv('Width'),side=R()<0.5?-1:1,sh=R(4,16),dr=R(40,140),sd=Math.floor(R(0,900));" +
+            "var u0=F<0&&cv('Uniform')<0.5?1-Math.pow(R(),1.3)*0.85:R(0.05,0.95),len=R(130,260)*cv('Width'),side=R()<0.5?-1:1,sh=R(4,16),dr=R(40,140),sd=Math.floor(R(0,900));" +
             "var c=u0*G.T+F*dr*a,s1=Math.max(0,Math.min(S,c-len/2)),s2=Math.max(0,Math.min(S,c+len/2));if(F<0){var sw=s1;s1=s2;s2=sw;}" +
             "var LEAD=0.08,ST=[LEAD,LEAD+R(0.11,0.18),LEAD+R(0.3,0.42)],si=-1;for(var j=0;j<3;j++)if(tl>=ST[j])si=j;var dt=si<0?0:tl-ST[si];" +
-            "var uc=c/G.T,tf=F<0?Math.pow(Math.max(0,Math.min(1,(uc-0.1)/0.5)),1.3):1,on=u0<=cv('Draw')/100?1:0;" +
+            "var uc=c/G.T,tf=F<0&&cv('Uniform')<0.5?Math.pow(Math.max(0,Math.min(1,(uc-0.1)/0.5)),1.3):1,on=u0<=cv('Draw')/100?1:0;" +
             "function PT(s){var p=AT(G,s),q=NRM(G,s,40);return [p[0]+q[0]*side*sh,p[1]+q[1]*side*sh];}\n";
     };
     var boltLayer = function (k, flash) {
@@ -383,8 +392,9 @@ comp.workAreaStart = 0; comp.workAreaDuration = DUR;
 // layers: "core" keeps the sharp line (core, pulses, swirls / bolts, head), "aura" the wide soft light (haze, aura,
 // drifting puffs, embers); bend each with its own ae_fx_along_path mesh (the aura one with a big weight_window)
 if (P.layers !== "all") {
-  var KEEP = { core: ["02_", "03_", "08_"], aura: ["04_", "05_", "06_", "07_"] }[P.layers];
-  if (!KEEP) throw new Error("layers must be all, core or aura");
+  var KEEP = { core: PIECE === "line" ? ["02_", "03_", "08_"] : ["02_", "03_"], aura: ["04_", "05_", "06_", "07_"],
+               head: ["08_"] }[P.layers];
+  if (!KEEP) throw new Error("layers must be all, core, aura or head");
   for (var li = 1; li <= comp.numLayers; li++) {
     var ln = comp.layer(li).name, pre = ln.substr(0, 3);
     if (pre === "00_" || pre === "01_") continue;
