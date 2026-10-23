@@ -37,7 +37,7 @@ RULE: start every effect from what is already stored here; never build an FX fro
 Before writing any After Effects or Spine FX code for a request:
 1. Look up the closest stored building blocks: ae_template (name="" lists them), ae_library (no names lists them),
    fx_recipe (recipe="" lists them, recipe="guide" explains them), fx_emitter (no project lists its particle
-   presets), plus finished jobs the user already approved. A reference clip: ae_fx_capture ranks the stored AE
+   presets), fx_flipbook (no project lists the ready, pre-rendered AE flipbooks), plus finished jobs the user already approved. A reference clip: ae_fx_capture ranks the stored AE
    templates closest to it, and ae_fx_remix / ae_fx_auto_fit rebuild it FROM one of them.
 2. Say which template / library effect / recipe you are starting from and what you will change.
 3. Build from it and modify only what the request needs (colour, size, timing, path, count, direction, look).
@@ -1001,6 +1001,7 @@ from . import tools_coin  # noqa: E402,F401   rig_coin, coin_spin
 from . import tools_magic_puff  # noqa: E402,F401   magic_puff_ae, magic_puff_to_spine
 from . import tools_pipeline  # noqa: E402,F401   clean_project, secondary_motion_solver, ae_material_fx
 from . import tools_emitter  # noqa: E402,F401   fx_emitter
+from . import tools_flipbook  # noqa: E402,F401   fx_flipbook
 
 
 def main() -> None:

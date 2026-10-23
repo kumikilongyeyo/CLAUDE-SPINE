@@ -588,13 +588,18 @@ def _hex8(rgba) -> str:
 def _flipbook(c: Ctx, spec, name: str) -> tuple[str, int, tuple[int, int], dict]:
     """Write a flipbook's frames as one Spine sequence; returns (path prefix, count, frame size, options)."""
     frames = spec["frames"]
-    if isinstance(frames, str):
+    if isinstance(frames, str) and frames.startswith("flipbook:"):      # a ready AE flipbook from the rigger
+        from . import flipbooks
+        fb, _, part = frames[9:].partition("/")
+        files = flipbooks.frames(fb, part)
+        spec.setdefault("fps", flipbooks.meta(fb)["fps"])
+    elif isinstance(frames, str):
         folder = Path(frames).expanduser()
-        files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".png", ".tif", ".tiff"))
+        files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".png", ".tif", ".tiff", ".webp"))
     else:
         files = [Path(f).expanduser() for f in frames]
     if not files:
-        raise ValueError(f"texture.frames: no PNG/TIFF frames in {frames!r}")
+        raise ValueError(f"texture.frames: no PNG/TIFF/WebP frames in {frames!r}")
     from . import ae_bridge
     digits = max(2, len(str(len(files) - 1)))
     prefix = f"fx/emit_{name}_"

@@ -174,6 +174,30 @@ spine-core runtime, and a real AE smoke render plays as 10 particle flipbooks. C
 a slot and keys per pooled slot), not the number emitted; heavy smoke or fire with hundreds of particles is still
 cheaper as one AE flipbook.
 
+### Ready AE flipbooks: `fx_flipbook` (new)
+
+The non-particle After Effects templates rendered ONCE and stored, so they drop onto any asset with no After Effects:
+caustics, electric_frame, energy_burst, fire, fire_aura, fire_strip, flame_wisps, fog_roll, sand_roll, frost_creep,
+glow_pulse, god_rays, lens_flare, lightning, magic_glow, magic_smoke, magic_smoke_dark, orbit_ribbons (back / front),
+portal_ring, prism_glow, ripple_glow, ripple_lines, shockwave, smoke_haze, smoke_puff, win_aura (in / loop / out).
+(The particle templates are `fx_emitter` presets `ae_*`; templates that need your art or text, such as
+heat_shimmer, surface_sweep, edge_aura and saber, still go through `ae_template`.)
+
+```text
+fx_flipbook                                          # lists them: blend, loop or once, length, size
+fx_flipbook project=coin.json name=fire_aura behind=coin scale=1.3
+fx_flipbook project=coin.json name=magic_glow behind=coin tintable=true tint=FFB830
+fx_flipbook project=coin.json name=win_aura part=loop behind=coin start=0.45 until=2.05
+fx_emitter  project=fx.json preset=smoke_puffs emitter={"texture": {"frames": "flipbook:smoke_puff"}}
+```
+
+Same importer as `ae_fx_to_spine` (placement, draw order, timing, budget, tint, copies); scale 1 = one unit per
+pixel of the template's own comp. Frames are lossless WebP (about 100 MB for the set), so they are not in the
+package: each flipbook is a zip on the GitHub release `flipbooks-v1`, downloaded into
+`~/.cache/claude-spine/flipbooks` the first time it is used (1-13 MB each; `CLAUDE_SPINE_FLIPBOOKS` overrides the
+folder). `flipbooks.render_all` re-renders them with After Effects (26 in about 9 minutes) and `pack_release`
+writes the zips.
+
 ### Reference-footage FX memory (new)
 
 **Rebuilt from your stored templates.** `ae_fx_capture` measures the clip's structure as well as its timing and
