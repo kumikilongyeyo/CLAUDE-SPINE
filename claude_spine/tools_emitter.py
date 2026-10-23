@@ -14,19 +14,23 @@ def fx_emitter(project: str = "", preset: str = "", emitter: dict | None = None,
     (a pool of reused slots, one bone each; shown at birth, hidden at death), so it plays in every Spine runtime.
 
     preset = a stored emitter (sparks_burst, embers_rise, magic_motes, coin_fountain, confetti, smoke_puffs,
-    dust_hit, star_twinkle, snow, bubbles, comet_trail, firework, plus your own); emitter = overrides, module by
+    dust_hit, star_twinkle, snow, bubbles, comet_trail, firework; ae_burst, ae_sparkle, ae_metal_sparks, ae_splash
+    = the After Effects particle templates ported with their physics, no AE needed; plus your own); emitter = overrides, module by
     module, Unity names: duration, loop, lifetime, speed, size, rotation, color, alpha, gravity, max_particles,
     seed, emission {rate, bursts [{time, count, cycles, interval, probability}]}, shape {type point | circle |
     ring | cone | rect | edge | path, radius, thickness, arc, angle (90 = up), spread, width, height, length,
     points, direction outward | angle | normal, edge_only}, velocity {x, y, orbital, radial, speed_multiplier},
     drag, inherit, noise {strength, frequency, scroll}, size_over_lifetime, alpha_over_lifetime,
-    color_over_lifetime, spin, renderer {blend, align none | velocity, stretch, flip}, texture, sub_emitters
-    [{on death | birth, emitter {...} | "<preset>", probability}], move [[t, x, y], ...], key_rate, tolerance.
+    color_over_lifetime, spin, renderer {blend, align none | velocity, stretch (units of travel), stretch_ratio +
+    stretch_ref (After Effects squash-stretch), aspect (squash, e.g. rings lying on a surface), flip}, texture,
+    sub_emitters [{on death | birth, emitter {...} | "<preset>", probability}], move [[t, x, y], ...], offset [x, y],
+    layers [preset name | {"preset": name, ...overrides} | {...}] (whole extra emitters baked into the same
+    animation, drawn after this one: sparks + droplets + flash), key_rate, tolerance.
     Values: number, [lo, hi] random, over-lifetime [[t, v], ...] (t = 0..1 of the life) or {min, max} curves;
     colours RRGGBB, [RRGGBB, ...] or a gradient [[t, RRGGBB], ...].
 
     texture = your art, swappable any time: a built-in (fx/spark, fx/mote, fx/glow, fx/smoke, fx/cloud, fx/ring,
-    fx/wisp, fx/chip), "kit:<picture>" (bundled CC0), a PNG, "file.psd#Layer", or a flipbook {"frames": folder |
+    fx/wisp, fx/chip, and the AE-shaped fx/streak, fx/drop, fx/star4, fx/line, fx/ring_thin), "kit:<picture>" (bundled CC0), a PNG, "file.psd#Layer", or a flipbook {"frames": folder |
     [pngs], "fps": 24 | "cycles": 1, "random_start": true} played as a Spine sequence (After Effects frames from
     aerender drop straight in, TIFF alpha read correctly).
 

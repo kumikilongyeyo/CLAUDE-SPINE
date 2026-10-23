@@ -162,6 +162,12 @@ fx_emitter preset=sparks_burst emitter={"color": "4080FF"} save_preset=blue_spar
 
 Presets: sparks_burst, embers_rise, magic_motes, coin_fountain, confetti, smoke_puffs, dust_hit, star_twinkle,
 snow, bubbles, comet_trail, firework (`claude_spine/emitter_presets/`; yours go to `~/.claude-spine/emitter_presets`).
+
+The After Effects particle templates are presets too, ported with their own physics so they need no After Effects:
+`ae_burst`, `ae_sparkle`, `ae_metal_sparks` (sparks + molten droplets + contact flash as `layers`) and `ae_splash`
+(droplets + flattened ripple rings + mist). Each was measured against its real AE 26.5 render at 512 px (light over
+time, frame for frame): burst correlation 0.99 and the same peak frame, splash 0.95 and the same peak, sparkle 0.78,
+metal_sparks 0.70 (the CC Particle World build-up is approximated). 1 AE px = 1 unit.
 The texture is swappable: a built-in, `kit:<picture>`, a PNG, `file.psd#Layer`, or a flipbook folder (aerender
 TIFFs drop straight in, alpha read correctly). Every preset bakes valid, every loop's seam was checked in the
 spine-core runtime, and a real AE smoke render plays as 10 particle flipbooks. Cost follows `peak_alive` (a bone,

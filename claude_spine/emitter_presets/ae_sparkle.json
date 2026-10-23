@@ -1,0 +1,78 @@
+{
+ "doc": "Port of the AE template `sparkle`: 7 pinched four-point stars popping (scale 0 -> 1 -> 0, eased) and turning 60 degrees at random spots in a disc. Jewels, coins, wins.",
+ "duration": 0.66,
+ "lifetime": [
+  0.36,
+  0.6
+ ],
+ "speed": 0,
+ "size": [
+  82,
+  218
+ ],
+ "rotation": -25,
+ "spin": [
+  100,
+  167
+ ],
+ "emission": {
+  "rate": 10.61,
+  "bursts": []
+ },
+ "shape": {
+  "type": "circle",
+  "radius": 215,
+  "thickness": 1,
+  "direction": "angle"
+ },
+ "color": [
+  "FFE9A0",
+  "FFE9A0",
+  "FFFFFF"
+ ],
+ "alpha_over_lifetime": 1.0,
+ "size_over_lifetime": [
+  [
+   0,
+   0
+  ],
+  [
+   0.1,
+   0.22
+  ],
+  [
+   0.2,
+   0.65
+  ],
+  [
+   0.3,
+   0.92
+  ],
+  [
+   0.4,
+   1
+  ],
+  [
+   0.55,
+   0.85
+  ],
+  [
+   0.7,
+   0.5
+  ],
+  [
+   0.85,
+   0.15
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "renderer": {
+  "blend": "normal"
+ },
+ "texture": "fx/star4",
+ "max_particles": 7,
+ "seed": 7
+}

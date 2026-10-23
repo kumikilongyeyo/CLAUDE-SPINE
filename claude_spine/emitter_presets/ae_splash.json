@@ -1,0 +1,209 @@
+{
+ "doc": "Port of the AE template `splash`: a crown of droplets thrown up from the surface and falling back (gravity 2300), three flattened ripple rings and a soft mist puff, as three layers.",
+ "duration": 0.066,
+ "lifetime": [
+  0.56,
+  1.04
+ ],
+ "speed": [
+  484,
+  1276
+ ],
+ "size": [
+  16,
+  64
+ ],
+ "rotation": 0,
+ "gravity": 2300,
+ "emission": {
+  "rate": 454.5,
+  "bursts": []
+ },
+ "shape": {
+  "type": "point",
+  "angle": 90,
+  "spread": 78
+ },
+ "offset": [
+  0,
+  -153.6
+ ],
+ "color": [
+  "7FD0FF",
+  "7FD0FF",
+  "EAFBFF"
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   0.7,
+   1
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "size_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   0.25,
+   0.966
+  ],
+  [
+   0.5,
+   0.8625
+  ],
+  [
+   0.75,
+   0.69
+  ],
+  [
+   1,
+   0.45
+  ]
+ ],
+ "renderer": {
+  "blend": "normal",
+  "align": "velocity",
+  "stretch_ratio": 1.0,
+  "stretch_ref": 880
+ },
+ "texture": "fx/drop",
+ "max_particles": 30,
+ "seed": 11,
+ "layers": [
+  {
+   "duration": 0.2,
+   "emission": {
+    "rate": 0,
+    "bursts": [
+     {
+      "time": 0,
+      "count": 1,
+      "cycles": 3,
+      "interval": 0.088
+     }
+    ]
+   },
+   "lifetime": [
+    0.81,
+    0.99
+   ],
+   "speed": 0,
+   "size": [
+    420,
+    540
+   ],
+   "rotation": 0,
+   "offset": [
+    0,
+    -153.6
+   ],
+   "size_over_lifetime": [
+    [
+     0,
+     0.07
+    ],
+    [
+     0.3,
+     0.5
+    ],
+    [
+     0.6,
+     0.82
+    ],
+    [
+     1,
+     1
+    ]
+   ],
+   "alpha_over_lifetime": [
+    [
+     0,
+     0
+    ],
+    [
+     0.07,
+     0.9
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "color": [
+    "7FD0FF",
+    "EAFBFF",
+    "7FD0FF"
+   ],
+   "renderer": {
+    "blend": "normal",
+    "aspect": 0.28
+   },
+   "texture": "fx/ring_thin",
+   "max_particles": 3
+  },
+  {
+   "duration": 0.05,
+   "emission": {
+    "rate": 0,
+    "bursts": [
+     {
+      "time": 0,
+      "count": 1
+     }
+    ]
+   },
+   "lifetime": 1.1,
+   "speed": 0,
+   "size": 512,
+   "rotation": 0,
+   "offset": [
+    0,
+    -112.6
+   ],
+   "size_over_lifetime": [
+    [
+     0,
+     0.4
+    ],
+    [
+     0.5,
+     1
+    ],
+    [
+     1,
+     1.4
+    ]
+   ],
+   "alpha_over_lifetime": [
+    [
+     0,
+     0
+    ],
+    [
+     0.12,
+     0.275
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "color": "EAFBFF",
+   "renderer": {
+    "blend": "normal",
+    "aspect": 0.7
+   },
+   "texture": "fx/glow",
+   "max_particles": 1
+  }
+ ]
+}

@@ -1,0 +1,212 @@
+{
+ "doc": "Port of the AE template `metal_sparks` (CC Particle World): an explosive burst of white-hot streaks slowed by drag and pulled down, cooling white -> orange -> red, smeared along their path like the template's Echo trails, plus slower molten droplets and a tiny contact flash (three layers, additive).",
+ "duration": 0.1,
+ "lifetime": [
+  0.45,
+  0.75
+ ],
+ "speed": [
+  150,
+  560
+ ],
+ "size": [
+  8,
+  14
+ ],
+ "gravity": 1400,
+ "drag": 1.4,
+ "emission": {
+  "rate": 0,
+  "bursts": [
+   {
+    "time": 0.033,
+    "count": 90
+   },
+   {
+    "time": 0.1,
+    "count": 22
+   }
+  ]
+ },
+ "shape": {
+  "type": "point",
+  "angle": 90,
+  "spread": 250
+ },
+ "color": "FFFFFF",
+ "color_over_lifetime": [
+  [
+   0,
+   "FFF6E0"
+  ],
+  [
+   0.5,
+   "FFC070"
+  ],
+  [
+   1,
+   "E8500C"
+  ]
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   0.45
+  ],
+  [
+   0.3,
+   1
+  ],
+  [
+   0.7,
+   0.9
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "renderer": {
+  "blend": "additive",
+  "align": "velocity",
+  "stretch": 0.09
+ },
+ "texture": "fx/line",
+ "max_particles": 112,
+ "seed": 17,
+ "layers": [
+  {
+   "duration": 0.1,
+   "emission": {
+    "rate": 0,
+    "bursts": [
+     {
+      "time": 0.033,
+      "count": 22
+     },
+     {
+      "time": 0.1,
+      "count": 6
+     }
+    ]
+   },
+   "lifetime": [
+    0.6,
+    0.8
+   ],
+   "speed": [
+    100,
+    470
+   ],
+   "size": [
+    10,
+    20
+   ],
+   "gravity": 870,
+   "drag": 1.7,
+   "shape": {
+    "type": "point",
+    "spread": 360
+   },
+   "color": "FFFFFF",
+   "color_over_lifetime": [
+    [
+     0,
+     "FFE6A0"
+    ],
+    [
+     1,
+     "B8280A"
+    ]
+   ],
+   "alpha_over_lifetime": [
+    [
+     0,
+     1
+    ],
+    [
+     0.7,
+     1
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "size_over_lifetime": [
+    [
+     0,
+     1
+    ],
+    [
+     1,
+     0.3
+    ]
+   ],
+   "renderer": {
+    "blend": "additive"
+   },
+   "texture": "fx/mote",
+   "max_particles": 28
+  },
+  {
+   "duration": 0.05,
+   "emission": {
+    "rate": 0,
+    "bursts": [
+     {
+      "time": 0,
+      "count": 1
+     }
+    ]
+   },
+   "lifetime": 0.2,
+   "speed": 0,
+   "size": 250,
+   "rotation": 0,
+   "size_over_lifetime": [
+    [
+     0,
+     0.4
+    ],
+    [
+     0.167,
+     1
+    ],
+    [
+     1,
+     0.7
+    ]
+   ],
+   "alpha_over_lifetime": [
+    [
+     0,
+     0
+    ],
+    [
+     0.167,
+     1
+    ],
+    [
+     0.333,
+     0.85
+    ],
+    [
+     1,
+     0
+    ]
+   ],
+   "color": "FFF0C8",
+   "renderer": {
+    "blend": "additive"
+   },
+   "texture": "fx/glow",
+   "max_particles": 1
+  }
+ ],
+ "key_rate": 24,
+ "tolerance": {
+  "position": 1.0,
+  "rotation": 2.0
+ }
+}

@@ -60,7 +60,57 @@ from .ir import Sequence
 from .project import Project
 from .timeline import r
 
+def _glowing(core: np.ndarray, glow: float) -> Image.Image:
+    """White picture: a hard ``core`` mask (H x W, 0..1) plus a soft halo, like After Effects' Glow on a shape."""
+    from PIL import ImageFilter
+    a = Image.fromarray(np.uint8(np.clip(core, 0, 1) * 255), "L")
+    halo = np.asarray(a.filter(ImageFilter.GaussianBlur(glow)), np.float32) / 255
+    alpha = np.clip(core + halo * 0.9, 0, 1)
+    return Image.fromarray(np.dstack([np.full(core.shape + (3,), 255, np.uint8), np.uint8(alpha * 255)]), "RGBA")
+
+
+def _tex_streak(w: int = 32, h: int = 128, bw: float = 16, bl: float = 77, glow: float = 4.0) -> Image.Image:
+    """The After Effects burst 'spark': a 2.4 x 0.5 bar (4.8 : 1) with a glow; long axis = up (the velocity)."""
+    yy, xx = np.mgrid[:h, :w] + 0.5
+    core = ((np.abs(xx - w / 2) <= bw / 2) & (np.abs(yy - h / 2) <= bl / 2)).astype(np.float32)
+    return _glowing(core, glow)
+
+
+def _tex_drop(n: int = 64, glow: float = 3.0) -> Image.Image:
+    """A hard round droplet (the burst 'drop' / 'dot' ellipse) with a glow, filling half the picture."""
+    yy, xx = np.mgrid[:n, :n] + 0.5
+    r = np.hypot(xx - n / 2, yy - n / 2)
+    return _glowing(np.clip(n / 4 + 0.5 - r, 0, 1), glow)
+
+
+def _tex_star4(n: int = 128, pinch: float = 0.18, glow: float = 6.0) -> Image.Image:
+    """After Effects' 4-point star shape (inner radius = pinch x outer), outer radius 3/8 of the picture, glowing."""
+    from PIL import ImageDraw
+    im = Image.new("L", (n * 4, n * 4), 0)
+    R, c = n * 4 * 3 / 8, n * 2
+    pts = [(c + (R if i % 2 == 0 else R * pinch) * math.cos(math.radians(90 + 45 * i)),
+            c - (R if i % 2 == 0 else R * pinch) * math.sin(math.radians(90 + 45 * i))) for i in range(8)]
+    ImageDraw.Draw(im).polygon(pts, fill=255)
+    core = np.asarray(im.resize((n, n), Image.Resampling.LANCZOS), np.float32) / 255
+    return _glowing(core, glow)
+
+
+def _tex_line(w: int = 16, h: int = 128) -> Image.Image:
+    """A thin streak brightest at its head (top) fading to its tail: a spark's light smeared along its path."""
+    yy, xx = np.mgrid[:h, :w] + 0.5
+    across = np.exp(-((xx - w / 2) / (w / 7)) ** 2)
+    along = np.clip(1.0 - yy / h, 0, 1) ** 1.6 * np.clip(yy / (h * 0.06), 0, 1)
+    a = np.clip(across * along, 0, 1)
+    return Image.fromarray(np.dstack([np.full((h, w, 3), 255, np.uint8), np.uint8(a * 255)]), "RGBA")
+
+
 WHITE_TEX.setdefault("fx/chip", lambda: Image.new("RGBA", (32, 48), (255, 255, 255, 255)))   # confetti, debris
+WHITE_TEX.setdefault("fx/streak", _tex_streak)
+WHITE_TEX.setdefault("fx/drop", _tex_drop)
+WHITE_TEX.setdefault("fx/star4", _tex_star4)
+WHITE_TEX.setdefault("fx/line", _tex_line)
+WHITE_TEX.setdefault("fx/ring_thin", lambda: _glowing(
+    np.clip(1.5 - np.abs(np.hypot(*(np.mgrid[:192, :192] + 0.5 - 96)) - 88) , 0, 1).astype(np.float32), 1.5))
 PRESET_DIR = Path(__file__).resolve().parent / "emitter_presets"
 BLENDS = ("additive", "normal", "multiply", "screen")
 SHAPES = ("point", "circle", "ring", "cone", "rect", "edge", "path")
@@ -79,10 +129,11 @@ DEFAULTS: dict = {
     "noise": {"strength": 0.0, "frequency": 0.01, "scroll": 0.5},
     "size_over_lifetime": 1.0, "alpha_over_lifetime": [[0.0, 0.0], [0.08, 1.0], [0.7, 1.0], [1.0, 0.0]],
     "color_over_lifetime": None, "spin": 0.0,
-    "renderer": {"blend": "additive", "align": "none", "stretch": 0.0, "flip": False},
+    "renderer": {"blend": "additive", "align": "none", "stretch": 0.0, "stretch_ratio": 0.0, "stretch_ref": 0.0,
+                 "aspect": 1.0, "flip": False},
     "texture": "fx/spark",
     "sub_emitters": [],
-    "move": [],
+    "move": [], "offset": [0.0, 0.0], "layers": [],
     "key_rate": 30.0, "tolerance": {},
 }
 
@@ -192,6 +243,10 @@ def _curve(v, q: float, k: float = 0.0) -> float:
         if q <= t1:
             return y0 + (y1 - y0) * ((q - t0) / max(t1 - t0, 1e-9))
     return pts[-1][1]
+
+
+def _mean(v) -> float:
+    return float(v) if isinstance(v, (int, float)) else (float(v[0]) + float(v[1])) / 2
 
 
 def _rgbf(h: str) -> tuple[float, float, float]:
@@ -344,7 +399,7 @@ def _spawn_times(spec: dict, rng, loop: bool) -> list[float]:
 
 
 class _P:
-    __slots__ = ("birth", "life", "t", "x", "y", "rot", "sx", "sy", "rgba", "depth", "tex", "frame0", "pool")
+    __slots__ = ("birth", "life", "t", "x", "y", "rot", "sx", "sy", "sy_add", "rgba", "depth", "tex", "frame0", "pool")
 
 
 def _simulate(spec: dict, rng, loop: bool, period: float | None, births: list[tuple] | None = None,
@@ -358,7 +413,9 @@ def _simulate(spec: dict, rng, loop: bool, period: float | None, births: list[tu
     rate_k = float(spec["key_rate"])
     out: list[_P] = []
     if births is None:
-        births = [(t, *_emitter_pos(spec["move"], t)) for t in _spawn_times(spec, rng, loop)]
+        ox_, oy_ = (float(v) for v in spec["offset"])
+        births = [(t, ex + ox_, ey + oy_, evx, evy)
+                  for t in _spawn_times(spec, rng, loop) for ex, ey, evx, evy in [_emitter_pos(spec["move"], t)]]
         sub_each = None
     else:
         sub_each = True
@@ -418,14 +475,23 @@ def _simulate(spec: dict, rng, loop: bool, period: float | None, births: list[tu
             vxk, vyk = np.interp(kt, ts, vxs), np.interp(kt, ts, vys)
             qk = kt / life
             size = np.array([size0 * max(0.0, _curve(spec["size_over_lifetime"], float(q), kcur)) for q in qk])
+            spd = np.hypot(vxk, vyk)
+            asp = float(ren["aspect"])
+            if float(ren["stretch_ratio"]):
+                # After Effects' burst squash-stretch: length x sq, width / sqrt(sq), sq = 1 + k * min(1, v / ref)
+                ref = float(ren["stretch_ref"]) or max(1.0, _mean(spec["speed"]))
+                sq = 1 + float(ren["stretch_ratio"]) * np.minimum(1.0, spd / ref)
+                length, width = size * sq, size / np.sqrt(sq)
+            else:
+                length = size + float(ren["stretch"]) * spd if ren["align"] == "velocity" else size
+                width = size
+            # the stretch is in units of travel: on a tall picture it must not be multiplied by the picture's aspect
+            P.sy_add = (length - size) / BASE * asp if not float(ren["stretch_ratio"]) else np.zeros_like(size)
             if ren["align"] == "velocity":
                 P.rot = np.degrees(np.arctan2(vyk, vxk)) - 90.0
-                spd = np.hypot(vxk, vyk)
-                length = size + float(ren["stretch"]) * spd
-                P.sx, P.sy = size / BASE * flip, length / BASE
             else:
                 P.rot = rot0 + spin * kt
-                P.sx, P.sy = size / BASE * flip, size / BASE
+            P.sx, P.sy = width / BASE * flip, length / BASE * asp
             # keep the rotation continuous (atan2 wraps): Spine interpolates the short way only between close keys
             P.rot = np.degrees(np.unwrap(np.radians(P.rot)))
             alpha = np.array([alpha0 * max(0.0, min(1.0, _curve(spec["alpha_over_lifetime"], float(q), kcur)))
@@ -599,6 +665,8 @@ def bake(p: Project, preset: str = "", emitter: dict | None = None, x: float = 0
             else:
                 sl = c.slot(b, tex if tex.startswith("fx/") else "fx/spark", BASE, blend=blend, role=art_role) \
                     if isinstance(tex, str) else c.slot(b, "fx/spark", BASE, blend=blend, role=art_role)
+            region = c.sk.attachment(sl, "fx")
+            aspect = float(region.height) / max(float(region.width), 1e-6)
             vis: list = []
             tr, ro, scl, col, seq = [], [], [], [], []
             for P, segs in own:
@@ -614,6 +682,9 @@ def bake(p: Project, preset: str = "", emitter: dict | None = None, x: float = 0
                         cols = lambda arr, s=sel: arr[s]  # noqa: E731
                     xs, ys = cols(P.x), cols(P.y)
                     rs, sxs, sys_ = cols(P.rot), cols(P.sx), cols(P.sy)
+                    if aspect != 1.0:                 # displayed length = size x aspect + the stretch in units
+                        add = cols(P.sy_add)
+                        sys_ = (sys_ - add) + add / aspect
                     rgba = np.column_stack([cols(P.rgba[:, k]) for k in range(4)])
                     rgba[:, 3] = np.clip(rgba[:, 3] * intensity, 0, 1)
                     keep = sorted(set(_reduce(tt, np.column_stack([xs, ys]), tol["position"]))
@@ -656,11 +727,22 @@ def bake(p: Project, preset: str = "", emitter: dict | None = None, x: float = 0
     if dropped_out:
         warnings.append(f"{dropped_out} of {emitted} particles dropped: more than max_particles alive at once "
                         f"(raise max_particles, lower the rate/count, or shorten the lifetime)")
-    res = c.result(duration=round(length, 4), loop=loop, emitted=emitted, dropped=dropped_out,
+    layer_info = []
+    for li, lay in enumerate(spec["layers"]):
+        # a layer is a whole emitter of its own (a preset name, or {"preset": name, ...overrides}, or inline), baked
+        # into the same animation and drawn after this one: sparks + droplets + a contact flash, drops + ripples + mist
+        lp, lo = (lay, {}) if isinstance(lay, str) else (lay.get("preset", ""), {k: v for k, v in lay.items()
+                                                                                    if k != "preset"})
+        sub = bake(p, lp, lo, x, y, scale, start, intensity, c.anim, parent, c.last_slot or "", "", f"{nm}_L{li}")
+        emitted += sub["emitted"]; dropped_out += sub["dropped"]; keys_out += sub["keys"]
+        slots_out += sub["slots"]; length = max(length, sub["duration"]); warnings += sub["warnings"]
+        layer_info.append({k: sub[k] for k in ("group_bone", "emitted", "pool_slots", "peak_alive")})
+    res = c.result(duration=round(length, 4), loop=loop, emitted=emitted, dropped=dropped_out, layers=layer_info,
                    peak_alive=peak_alive, pool_slots=len(slots_out), keys=keys_out, warnings=warnings,
                    preset=preset or None,
                    budget={"bones": len(c.bones), "slots": len(slots_out), "keys": keys_out,
                            "note": "each pooled slot is a bone + slot + its keys; cost follows peak_alive, not emitted"})
+    res["slots"] = list(slots_out)            # the layers' slots too
     return res
 
 

@@ -41,7 +41,10 @@ def test_every_preset_bakes_valid_and_within_its_cap(proj, name):
     spec = E.resolve(name)
     subs = sum(int(s["emitter"].get("max_particles", 40)) if isinstance(s["emitter"], dict) else 40
                for s in spec["sub_emitters"])
-    assert res["pool_slots"] <= int(spec["max_particles"]) + subs
+    lays = sum(int(E.resolve(*((l, {}) if isinstance(l, str) else (l.get("preset", ""), {k: v for k, v in l.items()
+                                                                                     if k != "preset"}))
+                             )["max_particles"]) for l in spec["layers"])
+    assert res["pool_slots"] <= int(spec["max_particles"]) + subs + lays
     assert res["emitted"] > 0 and res["keys"] > 0 and res["peak_alive"] <= res["pool_slots"]
     if spec["loop"]:
         assert res["duration"] == pytest.approx(spec["duration"])
@@ -180,3 +183,46 @@ def test_loop_seam_in_the_spine_runtime(proj):
     sig = lambda f: sorted((dr["slot"], tuple(np.round(dr["v"], 0)), tuple(np.round(dr["color"], 2)))  # noqa: E731
                            for dr in f["draws"])
     assert fr[0]["draws"] and sig(fr[0]) == sig(fr[-1])
+
+
+def test_ae_ports_carry_their_template_physics(proj):
+    for name, tpl in (("ae_burst", "burst"), ("ae_sparkle", "sparkle"), ("ae_metal_sparks", "metal_sparks"),
+                      ("ae_splash", "splash")):
+        assert f"`{tpl}`" in E.presets()[name]["doc"]
+    res = E.bake(proj, preset="ae_burst")
+    assert res["emitted"] == 28                                     # the template's n
+    res = E.bake(proj, preset="ae_splash", name="sp")
+    assert len(res["layers"]) == 2 and res["emitted"] == 30 + 3 + 1   # drops, 3 ripples, mist
+    anim = proj.data.animations[res["animation"]]
+    ring = [s for s in res["slots"] if "_L0_" in s][0]
+    sx, sy = _at(anim.bones[proj.data.slot(ring).bone]["scale"], 0.5, ("x", "y"))
+    assert sy / sx == pytest.approx(0.28, abs=0.01)                 # rings lie flat on the surface
+
+
+def test_offset_moves_the_births(proj):
+    res = E.bake(proj, emitter={"offset": [0, -150], "speed": 0, "emission": {"bursts": [{"count": 3}]}})
+    for s in res["slots"]:
+        k = proj.data.animations[res["animation"]].bones[proj.data.slot(s).bone]["translate"][0]
+        assert k.y == pytest.approx(-150, abs=0.5)
+
+
+def test_ae_squash_stretch_and_tall_textures(proj):
+    res = E.bake(proj, emitter={"speed": 400, "size": 20, "rotation": 0, "drag": 0, "emission": {"bursts": [{"count": 1}]},
+                                "renderer": {"align": "velocity", "stretch_ratio": 1.4, "stretch_ref": 400},
+                                "texture": "fx/drop", "size_over_lifetime": 1.0})
+    k = proj.data.animations[res["animation"]].bones[proj.data.slot(res["slots"][0]).bone]["scale"][0]
+    sq = 1 + 1.4                                                    # full speed at birth
+    assert k.y / abs(k.x) == pytest.approx(sq * np.sqrt(sq), rel=0.02)   # length x sq, width / sqrt(sq)
+    res = E.bake(proj, emitter={"speed": 500, "size": 8, "rotation": 0, "drag": 0, "emission": {"bursts": [{"count": 1}]},
+                                "renderer": {"align": "velocity", "stretch": 0.1}, "texture": "fx/line",
+                                "size_over_lifetime": 1.0}, name="tall")
+    att = proj.data.attachment(res["slots"][0], "fx")
+    k = proj.data.animations[res["animation"]].bones[proj.data.slot(res["slots"][0]).bone]["scale"][0]
+    shown = k.y * att.height
+    assert shown == pytest.approx(8 * att.height / att.width + 0.1 * 500, rel=0.03)   # stretch in units, not x aspect
+
+
+def test_layers_can_name_presets_and_share_the_animation(proj):
+    res = E.bake(proj, preset="ae_burst", emitter={"layers": [{"preset": "ae_sparkle", "max_particles": 3}]}, name="mix")
+    assert list(proj.data.animations) == [res["animation"]] and len(res["layers"]) == 1
+    assert res["layers"][0]["pool_slots"] <= 3
