@@ -1,0 +1,78 @@
+{
+ "doc": "Hot impact sparks: a one-shot burst thrown out, pulled down, slowed by air, streaked along their path, cooling white -> orange -> red. Hits, landings, coin clinks.",
+ "duration": 0.1,
+ "lifetime": [
+  0.35,
+  0.7
+ ],
+ "speed": [
+  380,
+  760
+ ],
+ "size": [
+  8,
+  14
+ ],
+ "gravity": 900,
+ "drag": 2.2,
+ "emission": {
+  "rate": 0,
+  "bursts": [
+   {
+    "time": 0,
+    "count": 28
+   }
+  ]
+ },
+ "shape": {
+  "type": "circle",
+  "radius": 12,
+  "direction": "outward"
+ },
+ "renderer": {
+  "blend": "additive",
+  "align": "velocity",
+  "stretch": 0.035
+ },
+ "color": "FFFFFF",
+ "color_over_lifetime": [
+  [
+   0,
+   "FFF6D8"
+  ],
+  [
+   0.35,
+   "FFB040"
+  ],
+  [
+   1,
+   "C03010"
+  ]
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   0.6,
+   1
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "size_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   1,
+   0.4
+  ]
+ ],
+ "texture": "fx/spark",
+ "max_particles": 32
+}

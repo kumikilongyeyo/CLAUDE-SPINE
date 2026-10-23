@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw
 
-from . import ae_bridge, ae_fx_memory as memory
+from . import ae_bridge, ae_fx_template_fit as template_fit, ae_fx_memory as memory
 
 
 def _clip(value: float, lo: float, hi: float) -> float:
@@ -132,10 +132,11 @@ def _frame_preview(target: list[np.ndarray], candidate: list[np.ndarray],
 
 def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps: float = 0.,
             aep: str = "", comp: str = "", reference: str = "", background: str = "",
-            candidate_mode: str = "alpha", max_frames: int = 40,
+            candidate_mode: str = "auto", max_frames: int = 40,
             iteration: int = 1, style: str = "premium",
             strength: float = 1.0, color: str = "", speed: float = 1.0,
-            canvas: int = 1024, tuning: dict | None = None) -> dict:
+            canvas: int = 1024, tuning: dict | None = None,
+            template: str = "auto", template_params: dict | None = None) -> dict:
     """Real render feedback -> quantitative error + automatically revised editable JSX.
 
     candidate_frames + candidate_fps = sequence rendered by AE (or aep + comp
@@ -151,8 +152,8 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         raise ValueError("out_dir is required")
     if candidate_frames and candidate_fps <= 0:
         raise ValueError("candidate_frames needs candidate_fps > 0")
-    if candidate_mode not in ("alpha", "black", "none"):
-        raise ValueError("candidate_mode must be alpha|black|none")
+    if candidate_mode not in ("auto", "alpha", "black", "none"):
+        raise ValueError("candidate_mode must be auto|alpha|black|none")
     if not 8 <= max_frames <= 120:
         raise ValueError("max_frames must be 8..120")
     if not 0.25 <= speed <= 4.0:
@@ -162,6 +163,13 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     recipe_obj = json.loads(Path(recipe).expanduser().read_text(encoding="utf-8"))
     if recipe_obj.get("schema") != memory.FORM:
         raise ValueError("Expected an FX reference recipe")
+    if template == "auto":
+        template = template_fit.rank(recipe_obj)[0]["template"]
+    templated = template != "shapes"
+    if candidate_mode == "auto":
+        # an additive template renders on opaque black: key it like the footage, not by its alpha
+        additive = templated and template_fit.CANDIDATES.get(template, {}).get("mode") == "additive"
+        candidate_mode = "black" if additive else "alpha"
     source = reference or recipe_obj["source"]["path"]
     if not Path(source).expanduser().is_file() and not Path(source).expanduser().is_dir():
         raise FileNotFoundError("Original reference footage unavailable; pass reference=<new path>")
@@ -232,9 +240,15 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     cand_mass_center = float(np.average(target_times, weights=np.maximum(c_energy, 1e-8)))
     duration = max(recipe_obj["analysis"]["duration"] / speed, 1e-5)
     # Corrective parameters are bounded and partially damped to prevent oscillation.
-    energy_ratio = _weighted_ratio(t_energy, c_energy, weights, .4, 2.5)
+    probe = templated and iteration == 1 and not tuning
+    energy_ratio = _weighted_ratio(t_energy, c_energy, weights, *((.1, 8.) if probe else (.4, 2.5)))
     radius_ratio = _weighted_ratio([f["radius"] for f in reference_features],
-                                    [f["radius"] for f in render_features], weights, .6, 1.9)
+                                    [f["radius"] for f in render_features], weights,
+                                    *((.25, 4.) if probe else (.6, 1.9)))
+    if templated:
+        # scaling the template layer by k already scales its light by k^2 (area): take that out of the
+        # brightness correction, or a too-big probe ends up both smaller AND darker
+        energy_ratio = _clip(energy_ratio / radius_ratio ** 2, .05, 20.)
     shifts = [float(np.average([t[k]-r[k] for t, r in zip(reference_features, render_features)], weights=weights))
               for k in ("x", "y")]
     vis_target = float(np.average([f["coverage"] for f in reference_features], weights=weights))
@@ -245,12 +259,22 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     texture_delta = _clip((tex_target - tex_candidate) * 18., -25, 30)
     timing_correction = (ref_mass_center - cand_mass_center) / duration
     timing_correction = _clip(timing_correction, -.3, .3)
+    if templated and recipe_obj["analysis"]["kind"] == "loop":
+        # a loop has no start to line up: delaying the template layer only leaves the first frames empty
+        timing_correction = 0.0
     # Score is comparable within repeated renders of THIS reference. This is a
     # bounded diagnostic score, not proof of an exact/pixel-identical recreation.
-    total_error = (aggregate["visual_error"] * .30 + aggregate["alpha_error"] * .20
-                   + abs_center * .12 + min(energy_l1 * 2, 1.) * .10
-                   + min(radius_l1, 1.) * .10
-                   + (1. - aggregate["silhouette_iou"]) * .18)
+    # structure: rays (light varying around the centre) and a hollow centre, compared frame by frame. Pixels of a
+    # streaky effect never line up, so without this a smooth ring of the right size outscores the right technique
+    lum = np.array([.2126, .7152, .0722], np.float32)
+    shape_err = float(np.average([
+        min(abs(a["rays"] - b["rays"]), 1.) * .6 + abs(a["hollow"] - b["hollow"]) * .4
+        for a, b in ((template_fit.shape_traits(r[..., :3] @ lum), template_fit.shape_traits(c[..., :3] @ lum))
+                     for r, c in zip(ref_pm, can_pm))], weights=weights))
+    total_error = .85 * (aggregate["visual_error"] * .30 + aggregate["alpha_error"] * .20
+                         + abs_center * .12 + min(energy_l1 * 2, 1.) * .10
+                         + min(radius_l1, 1.) * .10
+                         + (1. - aggregate["silhouette_iou"]) * .18) + .15 * shape_err
     score = round(_clip((1 - total_error)*100, 0, 100), 2)
     previous_path = dest / f"match_{iteration-1:03d}.json"
     previous = {}
@@ -270,10 +294,10 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         "offset_x": 0., "offset_y": 0., "time_shift": 0.,
         "roughness": 0.,
     }.items()}
-    damp = step_scale
+    damp = 1.0 if probe else step_scale
     settings.update({
-        "energy_gain": _clip(settings["energy_gain"] * energy_ratio**damp, .2, 4),
-        "radius_gain": _clip(settings["radius_gain"] * radius_ratio**damp, .35, 3),
+        "energy_gain": _clip(settings["energy_gain"] * energy_ratio**damp, .05, 8),
+        "radius_gain": _clip(settings["radius_gain"] * radius_ratio**damp, .1, 4),
         "halo_gain": _clip(settings["halo_gain"] * cover_ratio**.3, .2, 3),
         "ring_gain": _clip(settings["ring_gain"] * radius_ratio**.25, .3, 3),
         "offset_x": _clip(settings["offset_x"] + shifts[0]*damp, -.45, .45),
@@ -358,7 +382,8 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
     matched = memory.remix(recipe, str(dest), strength=strength, style=style, color=color,
                            speed=speed, canvas=canvas, fit=settings,
                            save_as=str(next_project) if next_project else "",
-                           comp_name=next_name)
+                           comp_name=next_name, template=template,
+                           template_params=template_params)
     best = {"iteration": iteration, "score": score,
             "candidate": aep or str(Path(candidate_frames).resolve())}
     if previous:
@@ -382,10 +407,11 @@ def compare(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps
         "best": best, "stop": stop, "stop_reason": stop_reason,
         "score_note": "Diagnostic frame match score; comparison against newly rendered output is needed to verify improvement.",
         "errors": {**aggregate, "center": round(abs_center, 6),
-                   "energy": round(energy_l1, 6), "spread": round(radius_l1, 6)},
+                   "energy": round(energy_l1, 6), "spread": round(radius_l1, 6), "shape": round(shape_err, 6)},
         "worst_frames": worst_frames,
         "corrections": factors, "tuning": settings,
-        "next_jsx": matched["jsx"], "next_comp": matched["comp"],
+        "next_jsx": matched["jsx"], "next_comp": matched["comp"], "template": template,
+        "candidate_mode": candidate_mode,
         "next_aep": str(next_project) if next_project else None,
         "comparison": str(comparison),
         "next": ("Review the best reported candidate; no further correction required by the automatic stop criterion."

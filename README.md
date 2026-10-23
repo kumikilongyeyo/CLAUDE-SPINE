@@ -142,7 +142,53 @@ the random Advanced Lightning arcs.
 
 ![ae_library](docs/ae_library.jpg)
 
+### Particle emitter: `fx_emitter` (new)
+
+Unity-style particles without Unity. The emitter is simulated in Python (Shuriken modules: main, emission rate and
+bursts, shape point / circle / ring / cone / rect / edge / path, velocity with orbital and radial, drag, gravity,
+curl noise, size / alpha / colour / spin over lifetime, renderer blend and velocity-aligned stretch, flipbook
+texture sheets, sub-emitters at birth or death, a moving emitter for trails) and BAKED into plain Spine keys, so it
+plays in every runtime. Particles reuse a fixed pool of slots (shown at birth, hidden at death); `max_particles`
+is a hard cap and anything over it is dropped and reported. Loops close exactly. Lives are keyed at `key_rate` and
+thinned to straight-line keys within `tolerance`.
+
+```text
+fx_emitter                                    # lists the 12 stored presets
+fx_emitter project=fx.json preset=sparks_burst x=0 y=40
+fx_emitter project=fx.json preset=coin_fountain emitter={"texture": "art/coin.png", "max_particles": 24}
+fx_emitter project=fx.json preset=smoke_puffs emitter={"texture": {"frames": "ae_renders/smoke_puff", "cycles": 1}}
+fx_emitter preset=sparks_burst emitter={"color": "4080FF"} save_preset=blue_sparks   # your own preset
+```
+
+Presets: sparks_burst, embers_rise, magic_motes, coin_fountain, confetti, smoke_puffs, dust_hit, star_twinkle,
+snow, bubbles, comet_trail, firework (`claude_spine/emitter_presets/`; yours go to `~/.claude-spine/emitter_presets`).
+The texture is swappable: a built-in, `kit:<picture>`, a PNG, `file.psd#Layer`, or a flipbook folder (aerender
+TIFFs drop straight in, alpha read correctly). Every preset bakes valid, every loop's seam was checked in the
+spine-core runtime, and a real AE smoke render plays as 10 particle flipbooks. Cost follows `peak_alive` (a bone,
+a slot and keys per pooled slot), not the number emitted; heavy smoke or fire with hundreds of particles is still
+cheaper as one AE flipbook.
+
 ### Reference-footage FX memory (new)
+
+**Rebuilt from your stored templates.** `ae_fx_capture` measures the clip's structure as well as its timing and
+colour (rays: light varying round the centre; hollow: a dark centre) and lists the stored AE templates whose own
+render measured closest (`ae_templates/_traits.json`, made by `ae_fx_template_fit.measure_templates`). `ae_fx_remix`
+builds from one of them by default (`template="auto"`, or name one; `template="shapes"` = the old core / halo /
+ring / spark layers): the template comp keeps all its controls, and an outer comp carries the fit as keys on one
+layer (position, scale, opacity, Exposure). `ae_fx_auto_fit` auditions the 3 closest templates (each gets a probe
+render AND one fitted round before they are compared), keeps the best and tunes it. The match score includes a
+shape term, so a smooth ring of the right size no longer beats the right technique.
+
+**Runs on macOS.** Scripts go to After Effects through AppleScript (`DoScript`; Windows still uses
+`AfterFX.exe -r`). Every round builds in a new project: a saved, clean open project is left alone and reopened
+afterwards, one with unsaved changes is refused. Rounds take the shared AE lock (`AE_LOCK_DIR`). Videos are read
+with ffmpeg, or on macOS with Apple's AVFoundation (a small Swift helper compiled on first use); animated GIFs are
+read on their own frame delays.
+
+Measured on a pink radial burst GIF (fx1008): the audition picked `fire_aura` (flame tongues out of a hollow,
+the right technique) and the fit took it from 63 to 71.5 in four renders, ~2 minutes. What the fit cannot change
+is the template's own shape (here the reference's rays are sparser and longer); that is the template's sliders,
+left live in the AE comp.
 
 Turn a video or PNG sequence into a reusable **editable FX recipe** rather than
 pasting a flattened movie on top of every future symbol. The four MCP tools work
@@ -246,7 +292,7 @@ it cannot uniquely infer the original emitter count, turbulence settings, 3D
 geometry, masking or materials. A frame similarity score is a diagnostic,
 not proof of matching texture, visual quality, gameplay readability or impact. Realistic smoke, fluid simulation, surface
 relighting and scene occlusion require additional authored passes. Feed isolated
-alpha footage for best results; video needs local `ffmpeg`. Black-key is
+alpha footage for best results; video needs `ffmpeg`, or macOS (AVFoundation). Black-key is
 supported, but loses darker smoke; for footage with a background, use a clean
 plate. Missing background isolation produces an explicit warning, not a false
 claim of accurate extraction.

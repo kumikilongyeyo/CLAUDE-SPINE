@@ -1,0 +1,59 @@
+{
+ "doc": "Ground dust kicked sideways on a landing: low, wide, quick to settle. Reel stops, heavy symbols landing.",
+ "duration": 0.1,
+ "lifetime": [
+  0.4,
+  0.8
+ ],
+ "speed": [
+  150,
+  420
+ ],
+ "size": [
+  26,
+  46
+ ],
+ "drag": 5,
+ "gravity": -30,
+ "emission": {
+  "rate": 0,
+  "bursts": [
+   {
+    "time": 0,
+    "count": 16
+   }
+  ]
+ },
+ "shape": {
+  "type": "edge",
+  "length": 160,
+  "angle": 90,
+  "spread": 150
+ },
+ "size_over_lifetime": [
+  [
+   0,
+   0.6
+  ],
+  [
+   1,
+   1.5
+  ]
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   0.6
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "renderer": {
+  "blend": "normal"
+ },
+ "color": "C8B8A0",
+ "texture": "fx/cloud",
+ "max_particles": 16
+}

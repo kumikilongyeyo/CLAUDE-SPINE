@@ -1,0 +1,66 @@
+{
+ "doc": "A soft smoke puff: a few big sprites that burst out, slow, grow and fade. Landings, poofs. Normal blend (it darkens); give a flipbook for real smoke.",
+ "duration": 0.1,
+ "lifetime": [
+  0.7,
+  1.1
+ ],
+ "speed": [
+  120,
+  260
+ ],
+ "size": [
+  70,
+  110
+ ],
+ "drag": 3.5,
+ "gravity": -40,
+ "emission": {
+  "rate": 0,
+  "bursts": [
+   {
+    "time": 0,
+    "count": 10
+   }
+  ]
+ },
+ "shape": {
+  "type": "circle",
+  "radius": 30,
+  "direction": "outward"
+ },
+ "spin": [
+  -40,
+  40
+ ],
+ "size_over_lifetime": [
+  [
+   0,
+   0.5
+  ],
+  [
+   1,
+   1.6
+  ]
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   0
+  ],
+  [
+   0.1,
+   0.7
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "renderer": {
+  "blend": "normal"
+ },
+ "color": "D8D4CE",
+ "texture": "fx/smoke",
+ "max_particles": 12
+}

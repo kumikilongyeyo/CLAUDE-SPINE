@@ -1,0 +1,82 @@
+{
+ "doc": "Looping bubbles rising and wobbling, popping at the top (a tiny pop at each death). Water, potions.",
+ "duration": 3.0,
+ "loop": true,
+ "lifetime": [
+  1.2,
+  2.2
+ ],
+ "speed": [
+  60,
+  130
+ ],
+ "size": [
+  8,
+  22
+ ],
+ "emission": {
+  "rate": 6,
+  "bursts": []
+ },
+ "shape": {
+  "type": "edge",
+  "length": 160,
+  "angle": 90,
+  "spread": 12
+ },
+ "noise": {
+  "strength": 35,
+  "frequency": 0.03,
+  "scroll": 1.0
+ },
+ "alpha_over_lifetime": [
+  [
+   0,
+   0
+  ],
+  [
+   0.1,
+   0.8
+  ],
+  [
+   0.95,
+   0.8
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "color": "C8F0FF",
+ "texture": "fx/ring",
+ "max_particles": 16,
+ "sub_emitters": [
+  {
+   "on": "death",
+   "emitter": {
+    "emission": {
+     "bursts": [
+      {
+       "count": 3
+      }
+     ]
+    },
+    "lifetime": [
+     0.15,
+     0.25
+    ],
+    "speed": [
+     60,
+     120
+    ],
+    "size": [
+     3,
+     5
+    ],
+    "texture": "fx/mote",
+    "color": "E8FAFF",
+    "max_particles": 40
+   }
+  }
+ ]
+}

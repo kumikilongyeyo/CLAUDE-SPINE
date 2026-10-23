@@ -53,7 +53,7 @@ def test_remix_generates_nondestructive_editable_ae_script(tmp_path):
     captured = M.capture(str(make_footage(tmp_path)), str(tmp_path/"FX_LIBRARY"), "Heavy Punch")
     out = M.remix(captured["recipe"], str(tmp_path/"scripts"), strength=2.4,
                   style="anime", color="#2255ff", speed=1.4, canvas=1024,
-                  spark_count=21, save_as=str(tmp_path / "hit.aep"))
+                  spark_count=21, save_as=str(tmp_path / "hit.aep"), template="shapes")
     js = (tmp_path / "scripts" / "heavy_punch_anime.jsx").read_text()
     assert out["canvas"] == [1024, 1024]
     assert out["spark_count"] == 21
@@ -77,11 +77,11 @@ def test_mask_mode_no_background_warns_and_invalid_options_rejected(tmp_path):
     cap = M.capture(str(src), str(tmp_path/"lib"), "nope", mask_mode="none")
     assert cap["warnings"]
     with pytest.raises(ValueError, match="strength"):
-        M.remix(cap["recipe"], str(tmp_path/"s"), strength=7)
+        M.remix(cap["recipe"], str(tmp_path/"s"), strength=7, template="shapes")
     with pytest.raises(ValueError, match="color"):
-        M.remix(cap["recipe"], str(tmp_path/"s"), color="not-a-hex")
+        M.remix(cap["recipe"], str(tmp_path/"s"), color="not-a-hex", template="shapes")
     with pytest.raises(ValueError, match="canvas"):
-        M.remix(cap["recipe"], str(tmp_path/"s"), canvas=10)
+        M.remix(cap["recipe"], str(tmp_path/"s"), canvas=10, template="shapes")
 
 
 def test_capture_subsamples_entire_sequence_and_accepts_large_sources(tmp_path):
@@ -133,7 +133,7 @@ def test_frame_compare_is_exact_for_identical_source_and_writes_report(tmp_path)
     src = make_footage(tmp_path)
     cap = M.capture(str(src), str(tmp_path/"fx"), "known punch")
     report = V.compare(cap["recipe"], str(tmp_path/"review"),
-                       candidate_frames=str(src), candidate_fps=24, max_frames=20)
+                       candidate_frames=str(src), candidate_fps=24, max_frames=20, template="shapes")
     assert report["score"] > 99.9
     assert report["frames_compared"] == 20
     assert report["errors"]["visual_error"] < 0.001
@@ -153,7 +153,7 @@ def test_frame_compare_detects_differences_and_creates_corrected_next_build(tmp_
     cap = M.capture(str(src), str(tmp_path/"fx"), "fist impact")
     out = V.compare(cap["recipe"], str(tmp_path/"review"),
                     candidate_frames=str(candidate), candidate_fps=24, max_frames=35,
-                    style="anime", strength=1.5, canvas=1024)
+                    style="anime", strength=1.5, canvas=1024, template="shapes")
     assert out["score"] < 99
     assert out["errors"]["visual_error"] > .01
     assert out["errors"]["silhouette_iou"] < .9
@@ -167,7 +167,7 @@ def test_frame_compare_detects_differences_and_creates_corrected_next_build(tmp_
     assert "__RING_GAIN__" not in js
     assert "Math.sqrt(energy[i])*25*" in js
     again = V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(candidate),
-                      candidate_fps=24, iteration=2, tuning=out["tuning"], max_frames=35)
+                      candidate_fps=24, iteration=2, tuning=out["tuning"], max_frames=35, template="shapes")
     assert again["tuning"]["radius_gain"] > out["tuning"]["radius_gain"]
     assert Path(again["comparison"]).is_file()
 
@@ -176,16 +176,16 @@ def test_compare_rejects_missing_render_and_composite_without_plate(tmp_path):
     ref = make_footage(tmp_path)
     cap = M.capture(str(ref), str(tmp_path/"fx"), "punch")
     with pytest.raises(ValueError, match="exactly one"):
-        V.compare(cap["recipe"], str(tmp_path/"review"))
+        V.compare(cap["recipe"], str(tmp_path/"review"), template="shapes")
     with pytest.raises(ValueError, match="candidate_fps"):
-        V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(ref))
+        V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(ref), template="shapes")
     with pytest.raises(ValueError, match="comp"):
-        V.compare(cap["recipe"], str(tmp_path/"review"), aep="fake.aep")
+        V.compare(cap["recipe"], str(tmp_path/"review"), aep="fake.aep", template="shapes")
     with pytest.raises(ValueError, match="candidate_mode"):
         V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(ref),
-                  candidate_fps=24, candidate_mode="arbitrary")
+                  candidate_fps=24, candidate_mode="arbitrary", template="shapes")
     with pytest.raises(ValueError, match="unknown fit"):
-        M.remix(cap["recipe"], str(tmp_path/"review"), fit={"bad_key": 10})
+        M.remix(cap["recipe"], str(tmp_path/"review"), fit={"bad_key": 10}, template="shapes")
 
 
 def test_speed_changed_render_matches_rescaled_reference_times(tmp_path):
@@ -193,7 +193,7 @@ def test_speed_changed_render_matches_rescaled_reference_times(tmp_path):
     capture = M.capture(str(reference), str(tmp_path/"fx"), "fast")
     # Same source frames at 48fps are a precisely 2x faster edit of a 24fps reference.
     out = V.compare(capture["recipe"], str(tmp_path/"review"), candidate_frames=str(reference),
-                    candidate_fps=48, speed=2, max_frames=40)
+                    candidate_fps=48, speed=2, max_frames=40, template="shapes")
     assert out["score"] > 99.9
     assert out["matched_times"][-1] == pytest.approx(39/48, abs=.0001)
 
@@ -207,7 +207,7 @@ def test_ae_work_area_can_start_late_and_generates_named_next_project(tmp_path, 
         frames = sorted(reference.glob("*.png"))
     monkeypatch.setattr(V.ae_bridge, "render_comp", lambda *a, **k: StubRenderInfo)
     out = V.compare(cap["recipe"], str(tmp_path/"review"),
-                    aep=str(tmp_path/"simulated.aep"), comp="nonzero_premium", max_frames=40)
+                    aep=str(tmp_path/"simulated.aep"), comp="nonzero_premium", max_frames=40, template="shapes")
     assert out["score"] > 99.9
     assert out["next_aep"].endswith("nonzero_match_002.aep")
     jsx = Path(out["next_jsx"]).read_text()
@@ -222,7 +222,7 @@ def test_archived_footage_survives_original_being_removed(tmp_path):
     shutil.rmtree(original)
     report = V.compare(captured["recipe"], str(tmp_path/"matched"),
                        candidate_frames=str(candidate), candidate_fps=24,
-                       max_frames=40)
+                       max_frames=40, template="shapes")
     assert report["score"] > 99.9
     assert captured["archived"] is True
     assert Path(captured["stored_source"]).exists()
@@ -252,7 +252,7 @@ def test_keyframe_local_matching_handles_late_impact_drop(tmp_path):
     cap = M.capture(str(src), str(tmp_path/"fx"), "slow tail")
     res = V.compare(cap["recipe"], str(tmp_path/"review"),
                     candidate_frames=str(bad), candidate_fps=24,
-                    max_frames=44, style="premium")
+                    max_frames=44, style="premium", template="shapes")
     timeline = res["tuning"]["timeline"]
     assert len(timeline) >= 5
     assert any(abs(v["energy"] - 1.) > .005 for v in timeline)
@@ -267,10 +267,10 @@ def test_repeated_identical_render_stops_on_plateau(tmp_path):
     src = make_footage(tmp_path)
     cap = M.capture(str(src), str(tmp_path/"fx"), "perfect")
     first = V.compare(cap["recipe"], str(tmp_path/"review"),
-                      candidate_frames=str(src), candidate_fps=24, max_frames=20)
+                      candidate_frames=str(src), candidate_fps=24, max_frames=20, template="shapes")
     second = V.compare(cap["recipe"], str(tmp_path/"review"),
                        candidate_frames=str(src), candidate_fps=24,
-                       max_frames=20, iteration=2, tuning=first["tuning"])
+                       max_frames=20, iteration=2, tuning=first["tuning"], template="shapes")
     assert first["stop"] is True
     assert second["stop"] is True
     assert second["previous_score"] == first["score"]
@@ -279,52 +279,152 @@ def test_repeated_identical_render_stops_on_plateau(tmp_path):
 
 
 
-def test_ae_auto_fit_wrapper_guards_unrelated_open_projects(tmp_path):
-    wrapper = A._wrapper(tmp_path/"base.jsx", tmp_path/"autofit.aep",
-                         tmp_path/"done.json")
-    assert "new, empty, unsaved AE project" in wrapper
-    assert "p.numItems !== 0 || p.file" in wrapper
+def test_ae_auto_fit_wrapper_guards_unsaved_work_and_restores_the_open_project(tmp_path):
+    wrapper = A._wrapper(tmp_path/"base.jsx", tmp_path/"autofit.aep", tmp_path/"done.json")
+    assert "AE has unsaved changes" in wrapper                 # a dirty project is refused, never discarded
+    assert "app.newProject()" in wrapper                       # a saved one is left alone ...
+    assert "app.open(orig)" in wrapper                         # ... and reopened afterwards
     assert "$.evalFile(new File(" in wrapper
     assert "app.project.save" in wrapper
     assert "JSON.stringify" not in wrapper
     assert 'f.writeln(ok ? "OK" : "ERROR");' in wrapper
-    assert "__ACK__" not in wrapper
-    next_wrapper = A._wrapper(tmp_path/"next.jsx", tmp_path/"next.aep",
-                              tmp_path/"next.json", previous=tmp_path/"autofit.aep")
-    assert "Refusing" not in next_wrapper or "unrelated projects are protected" in next_wrapper
-    assert "new File(previous).fsName" in next_wrapper
+    assert "__ACK__" not in wrapper and "__PROJECT__" not in wrapper
 
 
-def test_ae_auto_fit_orchestrates_actual_render_feedback_without_ae(tmp_path, monkeypatch):
+def _fake_ae(tmp_path, monkeypatch, scores):
     from types import SimpleNamespace
-    src = make_footage(tmp_path)
-    cap = M.capture(str(src), str(tmp_path/"fx"), "auto flame")
-    monkeypatch.setattr(A, "_resolve_afterfx", lambda path="": tmp_path/"fake_afterfx.exe")
-    monkeypatch.setattr(A.ae_bridge, "find_aerender", lambda: tmp_path/"fake_aerender.exe")
-    launches = []
+    monkeypatch.setattr(A, "_resolve_afterfx", lambda path="": "Fake AE")
+    monkeypatch.setattr(A.ae_bridge, "find_aerender", lambda: tmp_path/"fake_aerender")
+    launches, compares = [], []
     def fake_execute(jsx, aep, ack, previous, binary, timeout_seconds):
-        launches.append({"jsx": jsx, "aep": aep, "previous": previous})
+        launches.append({"jsx": jsx, "aep": aep})
         aep.write_text("fake AEP")
     monkeypatch.setattr(A, "_execute", fake_execute)
-    monkeypatch.setattr(A.ae_bridge, "render_comp",
-                        lambda aep, comp, folder: SimpleNamespace(fps=24.))
-    def fake_compare(recipe, out_dir, candidate_frames, candidate_fps,
-                     reference, background, max_frames, iteration, style,
-                     canvas, strength, speed, tuning):
-        return {"score": [73, 84, 83][iteration-1],
-                "stop": False, "comparison": "composite.jpg",
-                "report": "compare.json", "next_jsx": f"auto_{iteration+1}.jsx",
-                "next_comp": f"auto_{iteration+1}",
-                "tuning": {"energy_gain": 1.15}}
+    monkeypatch.setattr(A.ae_bridge, "render_comp", lambda aep, comp, folder: SimpleNamespace(fps=24.))
+    def fake_compare(recipe, out_dir, candidate_frames, candidate_fps, iteration, tuning, **kw):
+        compares.append({"template": kw["template"], "iteration": iteration, "tuning": tuning})
+        score = scores[kw["template"]][iteration - 1]
+        return {"score": score, "stop": False, "comparison": "c.jpg", "report": "r.json",
+                "next_jsx": f"{kw['template']}_{iteration + 1}.jsx", "next_comp": f"{kw['template']}_{iteration + 1}",
+                "tuning": {"energy_gain": 1.1 * iteration}}
     monkeypatch.setattr(A.ae_fx_visual_match, "compare", fake_compare)
+    return launches, compares
+
+
+def test_ae_auto_fit_auditions_templates_then_tunes_the_winner(tmp_path, monkeypatch):
+    cap = M.capture(str(make_footage(tmp_path)), str(tmp_path/"fx"), "auto flame")
+    order = [r["template"] for r in A.ae_fx_template_fit.rank(json.loads(Path(cap["recipe"]).read_text()), 3)]
+    # the first candidate has the best PROBE but the second fits best once corrected: the fitted score decides
+    scores = {order[0]: [70, 71], order[1]: [55, 80, 79], order[2]: [65, 66]}
+    launches, compares = _fake_ae(tmp_path, monkeypatch, scores)
     result = A.auto_fit(cap["recipe"], str(tmp_path/"auto"), max_rounds=5)
-    assert result["rounds"] == 3
-    assert result["best"]["score"] == 84
-    assert result["best"]["iteration"] == 2
-    assert result["stopped_early"] is True
-    assert launches[0]["previous"] is None
-    assert launches[1]["previous"] == launches[0]["aep"]
+    assert [(c["template"], c["iteration"]) for c in compares[:6]] == [(n, i) for n in order for i in (1, 2)]
+    assert result["template"] == order[1]
+    assert [(c["template"], c["iteration"]) for c in compares[6:]] == [(order[1], 3)]   # only the winner is tuned
+    assert compares[6]["tuning"] == {"energy_gain": 2.2}           # from its own fitted round
+    assert result["best"]["score"] == 80 and result["best"]["iteration"] == 2
+    assert result["stopped_early"] is True                         # 80 -> 79 stalled
+    assert len(launches) == 7 and result["renders"] == 7
     assert (tmp_path/"auto"/"autofit_report.json").exists()
+
+
+def test_ae_auto_fit_named_template_skips_the_audition(tmp_path, monkeypatch):
+    cap = M.capture(str(make_footage(tmp_path)), str(tmp_path/"fx"), "auto flame")
+    launches, compares = _fake_ae(tmp_path, monkeypatch, {"shockwave": [50, 70, 71.0]})
+    result = A.auto_fit(cap["recipe"], str(tmp_path/"auto"), max_rounds=3, template="shockwave")
+    assert [c["template"] for c in compares] == ["shockwave"] * 3
+    assert result["auditioned"] == [{"template": "shockwave", "score": 50}]
+
+
+def test_template_remix_builds_the_stored_template_inside_a_fit_comp(tmp_path):
+    cap = M.capture(str(make_footage(tmp_path)), str(tmp_path/"FX_LIBRARY"), "Heavy Punch")
+    out = M.remix(cap["recipe"], str(tmp_path/"scripts"), template="shockwave", color="#2255ff",
+                  canvas=512, save_as=str(tmp_path/"hit.aep"))
+    js = Path(out["jsx"]).read_text()
+    assert out["template"] == "shockwave" and out["candidate_mode"] == "alpha"
+    assert "/*TEMPLATE" not in js or "AEFX" in js                  # the template's own code, unchanged
+    assert '"comp": "heavy_punch_shockwave_src"' in js             # template comp named for the wrapper
+    assert '"color": "2255FF"' in js                               # recoloured to the requested colour
+    assert "01_TEMPLATE_" in js and "ADBE Exposure2" in js and "00_FX_CONTROLS" in js
+    assert "app.project.save(" in js
+    assert not any(tok in js for tok in ("__COMP__", "__POS__", "__START__"))
+    auto = M.remix(cap["recipe"], str(tmp_path/"scripts2"))          # default = the best-ranked template
+    assert auto["template"] == auto["candidates"][0]
+    with pytest.raises(ValueError, match="unknown template"):
+        M.remix(cap["recipe"], str(tmp_path/"s"), template="no_such_template")
+
+
+def test_template_match_takes_scale_out_of_the_brightness_correction(tmp_path):
+    src = make_footage(tmp_path)
+    cap = M.capture(str(src), str(tmp_path/"fx"), "scale probe")
+    big = _alter_candidate(src, tmp_path/"big", scale=1.6, dx=0, dark=1.0)
+    out = V.compare(cap["recipe"], str(tmp_path/"review"), candidate_frames=str(big), candidate_fps=24,
+                    template="shockwave")
+    t = out["tuning"]
+    assert out["template"] == "shockwave" and Path(out["next_jsx"]).exists()
+    assert t["radius_gain"] < .8                                  # a too-big probe is shrunk in one step
+    assert t["energy_gain"] > .6                                  # not also darkened for the light it lost to area
+
+
+def test_shape_traits_tell_rays_and_hollow_rings_from_a_soft_glow():
+    from claude_spine.ae_fx_template_fit import shape_traits
+    yy, xx = np.mgrid[:128, :128] - 64.0
+    r, a = np.hypot(xx, yy), np.arctan2(yy, xx)
+    glow = np.exp(-(r / 30) ** 2)
+    ring = np.exp(-((r - 40) / 5) ** 2)
+    rays = (np.cos(a * 12) > .6) * (r > 12) * (r < 60) * 1.0
+    g, rg, ry = shape_traits(glow), shape_traits(ring), shape_traits(rays)
+    assert g["rays"] < .1 and g["hollow"] < .2
+    assert rg["hollow"] > .9 and rg["rays"] < .2
+    assert ry["rays"] > 1.0 and ry["hollow"] > .9
+
+
+def test_rank_uses_measured_template_traits(monkeypatch, tmp_path):
+    from claude_spine import ae_fx_template_fit as T
+    cap = M.capture(str(make_footage(tmp_path)), str(tmp_path/"fx"), "rank probe")
+    obj = json.loads(Path(cap["recipe"]).read_text())
+    me = {k: T.traits(obj)[k] for k in ("kind", "growth", "sat", "hue", "rise", "hot", "rays", "hollow")}
+    far = {**me, "kind": "loop", "rays": me["rays"] + 1.2, "hollow": 1 - me["hollow"]}
+    monkeypatch.setattr(T, "_measured", lambda: {name: (me if name == "splash" else far) for name in T.CANDIDATES})
+    assert T.rank(obj)[0]["template"] == "splash"
+    assert "shape" in obj["analysis"] and set(obj["analysis"]["shape"]) == {"rays", "hollow"}
+    assert cap["templates"] and cap["templates"][0]["template"] in T.CANDIDATES
+
+
+def test_capture_reads_an_animated_gif_on_its_own_frame_clock(tmp_path):
+    frames = [Image.fromarray(np.full((40, 40, 3), v, np.uint8)) for v in (0, 200, 255, 120, 0)]
+    gif = tmp_path / "hit.gif"
+    frames[0].save(gif, save_all=True, append_images=frames[1:], duration=[100, 100, 300, 100, 100], loop=0)
+    out = M.capture(str(gif), str(tmp_path/"lib"), "gif hit", fps=20, mask_mode="black")
+    recipe = json.loads(Path(out["recipe"]).read_text())
+    assert recipe["source"]["type"] == "video"
+    assert abs(recipe["analysis"]["duration"] - .65) < .06         # 0.7 s of delays sampled at 20 fps
+    assert .2 <= recipe["analysis"]["peak_at"] <= .5               # the long 255 frame, not frame index 2
+
+
+def test_mac_runner_names_the_app_not_its_render_engine(tmp_path, monkeypatch):
+    root = tmp_path / "Applications"
+    for d in ("Adobe After Effects 2025", "Adobe After Effects 2026"):
+        (root / d / f"{d}.app").mkdir(parents=True)
+        (root / d / f"Adobe After Effects Render Engine {d[-4:]}.app").mkdir()
+    real = Path
+    monkeypatch.setattr(A, "Path", lambda p="", *a: real(str(p).replace("/Applications", str(root)), *a))
+    monkeypatch.delenv("AE_APP_NAME", raising=False)
+    assert A._mac_app() == "Adobe After Effects 2026"
+
+
+def test_ae_lock_is_exclusive_and_takes_over_a_stale_owner(tmp_path, monkeypatch):
+    lock = tmp_path / "lock"
+    monkeypatch.setenv("AE_LOCK_DIR", str(lock))
+    with A._ae_lock("one"):
+        assert (lock / "owner").read_text().startswith("one ")
+        with pytest.raises(TimeoutError):
+            with A._ae_lock("two", wait=.6):
+                pass
+    assert not lock.exists()
+    lock.mkdir(); (lock / "owner").write_text("ghost 1")         # a crashed holder from long ago
+    with A._ae_lock("three", wait=2):
+        assert (lock / "owner").read_text().startswith("three ")
 
 
 def test_ae_auto_fit_rejects_unbounded_execution(tmp_path):

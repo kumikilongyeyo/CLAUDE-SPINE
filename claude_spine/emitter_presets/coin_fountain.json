@@ -1,0 +1,57 @@
+{
+ "doc": "Coins shot up in a fountain, tumbling, falling back past the start. Swap texture for your coin art (texture: your.png or a flipbook of a coin spin).",
+ "duration": 1.2,
+ "lifetime": [
+  1.0,
+  1.5
+ ],
+ "speed": [
+  700,
+  1050
+ ],
+ "size": [
+  34,
+  46
+ ],
+ "gravity": 1900,
+ "emission": {
+  "rate": 22,
+  "bursts": [
+   {
+    "time": 0,
+    "count": 6
+   }
+  ]
+ },
+ "shape": {
+  "type": "cone",
+  "radius": 30,
+  "angle": 90,
+  "spread": 40
+ },
+ "spin": [
+  -360,
+  360
+ ],
+ "renderer": {
+  "blend": "normal",
+  "flip": true
+ },
+ "color": "FFD040",
+ "alpha_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   0.85,
+   1
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "texture": "fx/mote",
+ "max_particles": 36
+}

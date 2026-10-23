@@ -1,0 +1,65 @@
+{
+ "doc": "Looping motes of light orbiting a subject and rising slowly, twinkling. Wild symbols, charged orbs, idle glow.",
+ "duration": 4.0,
+ "loop": true,
+ "lifetime": [
+  1.8,
+  3.2
+ ],
+ "speed": [
+  10,
+  30
+ ],
+ "size": [
+  6,
+  16
+ ],
+ "rotation": 0,
+ "emission": {
+  "rate": 7,
+  "bursts": []
+ },
+ "shape": {
+  "type": "ring",
+  "radius": 150,
+  "direction": "outward"
+ },
+ "velocity": {
+  "orbital": 40,
+  "y": 25
+ },
+ "noise": {
+  "strength": 20,
+  "frequency": 0.02,
+  "scroll": 0.5
+ },
+ "color": [
+  "A8E8FF",
+  "FFFFFF",
+  "C8A8FF"
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   0
+  ],
+  [
+   0.2,
+   1
+  ],
+  [
+   0.5,
+   0.5
+  ],
+  [
+   0.7,
+   1
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "texture": "fx/mote",
+ "max_particles": 30
+}

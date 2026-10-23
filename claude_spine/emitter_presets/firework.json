@@ -1,0 +1,97 @@
+{
+ "doc": "A rising shell that bursts into sparks at its death (sub-emitter), which fall and fade. Jackpot moments.",
+ "duration": 0.1,
+ "lifetime": 0.7,
+ "speed": 700,
+ "size": 12,
+ "gravity": 600,
+ "emission": {
+  "rate": 0,
+  "bursts": [
+   {
+    "time": 0,
+    "count": 1
+   }
+  ]
+ },
+ "shape": {
+  "type": "point",
+  "angle": 90,
+  "spread": 8
+ },
+ "renderer": {
+  "blend": "additive",
+  "align": "velocity",
+  "stretch": 0.03
+ },
+ "color": "FFE0A0",
+ "alpha_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   1,
+   1
+  ]
+ ],
+ "texture": "fx/spark",
+ "max_particles": 2,
+ "sub_emitters": [
+  {
+   "on": "death",
+   "emitter": {
+    "emission": {
+     "bursts": [
+      {
+       "count": 36
+      }
+     ]
+    },
+    "lifetime": [
+     0.8,
+     1.3
+    ],
+    "speed": [
+     160,
+     320
+    ],
+    "size": [
+     8,
+     14
+    ],
+    "gravity": 260,
+    "drag": 1.2,
+    "shape": {
+     "type": "point",
+     "spread": 360
+    },
+    "color": [
+     "FF6AA0",
+     "FFD060",
+     "80D8FF"
+    ],
+    "renderer": {
+     "align": "velocity",
+     "stretch": 0.02
+    },
+    "alpha_over_lifetime": [
+     [
+      0,
+      1
+     ],
+     [
+      0.7,
+      0.8
+     ],
+     [
+      1,
+      0
+     ]
+    ],
+    "texture": "fx/spark",
+    "max_particles": 40
+   }
+  }
+ ]
+}

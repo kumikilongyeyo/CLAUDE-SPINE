@@ -36,7 +36,9 @@ INSTRUCTIONS = """\
 RULE: start every effect from what is already stored here; never build an FX from zero.
 Before writing any After Effects or Spine FX code for a request:
 1. Look up the closest stored building blocks: ae_template (name="" lists them), ae_library (no names lists them),
-   fx_recipe (recipe="" lists them, recipe="guide" explains them), plus finished jobs the user already approved.
+   fx_recipe (recipe="" lists them, recipe="guide" explains them), fx_emitter (no project lists its particle
+   presets), plus finished jobs the user already approved. A reference clip: ae_fx_capture ranks the stored AE
+   templates closest to it, and ae_fx_remix / ae_fx_auto_fit rebuild it FROM one of them.
 2. Say which template / library effect / recipe you are starting from and what you will change.
 3. Build from it and modify only what the request needs (colour, size, timing, path, count, direction, look).
    Rescale a template's numbers to the target size instead of rewriting its technique.
@@ -474,11 +476,13 @@ def ae_fx_capture(source: str, library_dir: str, name: str, fps: float = 24.0,
 
     The capture stores an FX energy/timing curve, impact beats, center of motion, spread,
     dominant colors and reference contact sheet under library_dir/<name>/.
-    Source = video (ffmpeg installed) or image-sequence folder (supply fps).
+    Source = video (.mp4/.mov...: ffmpeg, or on macOS Apple's AVFoundation when ffmpeg is missing), an animated
+    GIF (its own frame delays), or an image-sequence folder (supply fps).
     mask_mode = auto|alpha|black|green|background|none. For footage shot over a
     scene, provide background=<clean plate PNG> and mask_mode=background.
     This estimates visible behavior, not unavailable original AE/particle settings.
-    Next: ae_fx_remix(recipe=returned recipe path)."""
+    The result lists `templates`: the stored AE templates whose measured look is closest (rays, hollow centre,
+    growth, rise, hit/build/loop). Next: ae_fx_auto_fit, or ae_fx_remix(recipe=returned recipe path)."""
     return ae_fx_memory.capture(source, library_dir, name, fps, mask_mode, background,
                                 max_frames, archive_source)
 
@@ -496,8 +500,14 @@ def ae_fx_library(library_dir: str, query: str = "") -> dict:
 @mcp.tool()
 def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
                 color: str = "", speed: float = 1.0, spark_count: int = -1,
-                comp_name: str = "", save_as: str = "", canvas: int = 1024) -> dict:
+                comp_name: str = "", save_as: str = "", canvas: int = 1024,
+                template: str = "auto", template_params: dict | None = None) -> dict:
     """Build a reusable editable native AE FX composition from a captured reference recipe.
+
+    Default (template="auto"): REBUILD FROM A STORED AE TEMPLATE, the closest one by measured look (or name one:
+    portal_ring, fire_aura, shockwave, burst, magic_glow ...; template_params= overrides its own parameters). The
+    template comp keeps all its controls; an outer comp holds the fit (position / scale / opacity / exposure keys)
+    that ae_fx_match tunes. template="shapes" = the plain core / halo / ring / spark layers described below.
 
     strength 0.25..3 boosts impact, scale and particle energy; style = stylized,
     premium, realistic, anime; color = #RRGGBB; speed 0.25..4 retimes the keyframes;
@@ -508,23 +518,26 @@ def ae_fx_remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "
     a single-layer .ffx can be saved inside AE via Animation > Save Animation Preset.
     This is a first-pass procedural rebuild, not an exact inverse render."""
     return ae_fx_memory.remix(recipe, out_dir, strength, style, color, speed,
-                              spark_count, comp_name, save_as, canvas)
+                              spark_count, comp_name, save_as, canvas,
+                              template=template, template_params=template_params)
 
 
 @mcp.tool()
 def ae_fx_match(recipe: str, out_dir: str, candidate_frames: str = "", candidate_fps: float = 0.0,
                 aep: str = "", comp: str = "", reference: str = "", background: str = "",
-                candidate_mode: str = "alpha", max_frames: int = 40,
+                candidate_mode: str = "auto", max_frames: int = 40,
                 iteration: int = 1, style: str = "premium",
                 strength: float = 1.0, color: str = "", speed: float = 1.0,
-                canvas: int = 1024, tuning: dict | None = None) -> dict:
+                canvas: int = 1024, tuning: dict | None = None,
+                template: str = "auto", template_params: dict | None = None) -> dict:
     """Compare the actual rendered AE effect with its captured reference, then AUTO-CORRECT
     the next editable After Effects build. Re-run after every AE render for a genuine feedback loop.
 
     Use candidate_frames (sequence + candidate_fps), OR saved .aep + comp
     (rendered with aerender). Reference footage path comes from ae_fx_capture's
     recipe; reference= overrides it if moved. background= clean plate for
-    original composite footage; candidate_mode=alpha|black|none.
+    original composite footage; candidate_mode=auto|alpha|black|none (auto: black for additive templates).
+    template / template_params = the same as the ae_fx_remix call that built the render.
 
     Reports frame-matched image/alpha/energy/size/position/timing/texture error,
     writes comparison JPG and JSON, calculates damped corrections and produces
@@ -537,7 +550,7 @@ def ae_fx_match(recipe: str, out_dir: str, candidate_frames: str = "", candidate
         candidate_fps=candidate_fps, aep=aep, comp=comp, reference=reference,
         background=background, candidate_mode=candidate_mode, max_frames=max_frames,
         iteration=iteration, style=style, strength=strength, color=color,
-        speed=speed, canvas=canvas, tuning=tuning)
+        speed=speed, canvas=canvas, tuning=tuning, template=template, template_params=template_params)
 
 
 @mcp.tool()
@@ -545,12 +558,16 @@ def ae_fx_auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
                    max_rounds: int = 3, timeout_seconds: float = 180.0,
                    style: str = "premium", canvas: int = 1024, reference: str = "",
                    background: str = "", min_improvement: float = 0.15,
-                   max_frames: int = 40) -> dict:
-    """Run the complete local AE FX matching loop on the artist's own workstation.
+                   max_frames: int = 40, template: str = "auto", audition: int = 3,
+                   template_params: dict | None = None) -> dict:
+    """Run the complete local AE FX matching loop on the artist's own workstation (macOS or Windows).
 
-    Requires installed AfterFX and aerender. FIRST: open a NEW EMPTY UNSAVED
-    After Effects project. This tool intentionally refuses unrelated projects.
-    It builds/editable JSX, runs it with AfterFX.exe -r, waits for explicit
+    Requires After Effects and aerender. Every round builds in a NEW project: a saved, clean open project is left
+    untouched and reopened afterwards; one with unsaved changes is refused (save it first). macOS runs the
+    script through AppleScript, Windows through AfterFX.exe -r (afterfx_bin / AFTERFX_BIN). Rounds take the
+    shared AE lock (AE_LOCK_DIR) so parallel agents never run two AE scripts at once.
+    template="auto" AUDITIONS the `audition` closest stored templates on a real render each and keeps the best
+    score; a template name skips the audition; "shapes" = the plain layer rebuild. Then it waits for explicit
     acknowledgment after saving AEP, renders via aerender, scores against
     reference, builds improved JSX, and repeats up to max_rounds (1..5).
     Stops when the score is sufficiently high or improvement stalls.
@@ -559,7 +576,8 @@ def ae_fx_auto_fit(recipe: str, out_dir: str, afterfx_bin: str = "",
     If AE is not installed, use ae_fx_match manually with exported frames."""
     return ae_fx_autofit.auto_fit(recipe, out_dir, afterfx_bin,
                                  max_rounds, timeout_seconds, style, canvas,
-                                 reference, background, min_improvement, max_frames)
+                                 reference, background, min_improvement, max_frames,
+                                 template=template, audition=audition, template_params=template_params)
 
 
 @mcp.tool()
@@ -982,6 +1000,7 @@ from . import tools_library  # noqa: E402,F401   ae_library, ae_library_textures
 from . import tools_coin  # noqa: E402,F401   rig_coin, coin_spin
 from . import tools_magic_puff  # noqa: E402,F401   magic_puff_ae, magic_puff_to_spine
 from . import tools_pipeline  # noqa: E402,F401   clean_project, secondary_motion_solver, ae_material_fx
+from . import tools_emitter  # noqa: E402,F401   fx_emitter
 
 
 def main() -> None:

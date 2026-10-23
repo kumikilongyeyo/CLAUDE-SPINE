@@ -1,0 +1,78 @@
+{
+ "doc": "Looping embers drifting up from a fire line, swirled by noise, flickering out. Braziers, torches, a burning frame edge.",
+ "duration": 3.0,
+ "loop": true,
+ "lifetime": [
+  1.4,
+  2.6
+ ],
+ "speed": [
+  40,
+  110
+ ],
+ "size": [
+  6,
+  13
+ ],
+ "emission": {
+  "rate": 9,
+  "bursts": []
+ },
+ "shape": {
+  "type": "edge",
+  "length": 220,
+  "angle": 90,
+  "spread": 30
+ },
+ "gravity": -60,
+ "drag": 0.6,
+ "noise": {
+  "strength": 45,
+  "frequency": 0.012,
+  "scroll": 0.4
+ },
+ "color_over_lifetime": [
+  [
+   0,
+   "FFE6A0"
+  ],
+  [
+   0.4,
+   "FF8A20"
+  ],
+  [
+   1,
+   "A02008"
+  ]
+ ],
+ "alpha_over_lifetime": [
+  [
+   0,
+   0
+  ],
+  [
+   0.1,
+   1
+  ],
+  [
+   0.6,
+   0.8
+  ],
+  [
+   1,
+   0
+  ]
+ ],
+ "size_over_lifetime": [
+  [
+   0,
+   1
+  ],
+  [
+   1,
+   0.3
+  ]
+ ],
+ "texture": "fx/mote",
+ "max_particles": 30
+}

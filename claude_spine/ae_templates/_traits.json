@@ -1,0 +1,142 @@
+{
+ "burst": {
+  "growth": 1.214,
+  "hollow": 0.3004,
+  "hot": 1.0,
+  "hue": 57.2,
+  "kind": "hit",
+  "rays": 0.9505,
+  "rise": 0.21,
+  "sat": 0.199
+ },
+ "energy_burst": {
+  "growth": 1.001,
+  "hollow": 0.0119,
+  "hot": 0.099,
+  "hue": 178.9,
+  "kind": "loop",
+  "rays": 0.0516,
+  "rise": 0.003,
+  "sat": 0.922
+ },
+ "fire_aura": {
+  "growth": 1.0,
+  "hollow": 1.0,
+  "hot": 0.459,
+  "hue": 47.2,
+  "kind": "loop",
+  "rays": 0.4359,
+  "rise": 0.0,
+  "sat": 0.543
+ },
+ "glow_pulse": {
+  "growth": 1.118,
+  "hollow": 0.0485,
+  "hot": 0.049,
+  "hue": 39.1,
+  "kind": "hit",
+  "rays": 0.0063,
+  "rise": 0.0,
+  "sat": 0.799
+ },
+ "lens_flare": {
+  "growth": 1.0,
+  "hollow": 0.089,
+  "hot": 0.178,
+  "hue": 358.8,
+  "kind": "hit",
+  "rays": 0.1063,
+  "rise": 0.0,
+  "sat": 0.276
+ },
+ "magic_glow": {
+  "growth": 1.001,
+  "hollow": 0.0,
+  "hot": 0.194,
+  "hue": 264.0,
+  "kind": "loop",
+  "rays": 0.159,
+  "rise": 0.014,
+  "sat": 0.31
+ },
+ "metal_sparks": {
+  "growth": 1.067,
+  "hollow": 0.0113,
+  "hot": 0.901,
+  "hue": 46.4,
+  "kind": "hit",
+  "rays": 0.3928,
+  "rise": 0.0,
+  "sat": 0.159
+ },
+ "portal_ring": {
+  "growth": 1.0,
+  "hollow": 1.0,
+  "hot": 0.132,
+  "hue": 191.3,
+  "kind": "loop",
+  "rays": 0.4063,
+  "rise": 0.055,
+  "sat": 0.587
+ },
+ "prism_glow": {
+  "growth": 1.011,
+  "hollow": 0.0,
+  "hot": 0.222,
+  "hue": 0.0,
+  "kind": "loop",
+  "rays": 0.4268,
+  "rise": 0.0,
+  "sat": 0.0
+ },
+ "ripple_glow": {
+  "growth": 1.228,
+  "hollow": 1.0,
+  "hot": 0.0,
+  "hue": 204.7,
+  "kind": "loop",
+  "rays": 0.2874,
+  "rise": 0.02,
+  "sat": 0.72
+ },
+ "shockwave": {
+  "growth": 1.226,
+  "hollow": 0.9914,
+  "hot": 1.0,
+  "hue": 59.2,
+  "kind": "hit",
+  "rays": 0.0491,
+  "rise": 0.0,
+  "sat": 0.081
+ },
+ "smoke_puff": {
+  "growth": 1.15,
+  "hollow": 0.0238,
+  "hot": 0.349,
+  "hue": 32.9,
+  "kind": "hit",
+  "rays": 0.3497,
+  "rise": 0.02,
+  "sat": 0.058
+ },
+ "sparkle": {
+  "growth": 1.009,
+  "hollow": 0.4951,
+  "hot": 1.0,
+  "hue": 48.7,
+  "kind": "hit",
+  "rays": 1.5818,
+  "rise": 0.0,
+  "sat": 0.243
+ },
+ "splash": {
+  "growth": 1.222,
+  "hollow": 0.2499,
+  "hot": 0.449,
+  "hue": 187.6,
+  "kind": "hit",
+  "rays": 0.914,
+  "rise": 0.033,
+  "sat": 0.175
+ }
+}

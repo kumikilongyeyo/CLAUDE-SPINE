@@ -12,13 +12,14 @@ import math
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from . import ae_look
+from . import ae_fx_template_fit, ae_look
 
 FORM = "claude-spine.fx-reference.v1"
 EXTENSIONS = {".png", ".tif", ".tiff", ".jpg", ".jpeg"}
@@ -50,10 +51,14 @@ def _frames(source: Path, fps: float, limit: int, folder: Path):
         else:
             selected, times = paths, [i / fps for i in range(len(paths))]
         return selected, times, fps
+    if source.is_file() and source.suffix.lower() == ".gif":
+        return _frames_gif(source, fps, limit, folder)
     if not source.is_file() or source.suffix.lower() not in VIDEO_EXTENSIONS:
-        raise ValueError("source must be a video or a directory of image frames")
+        raise ValueError("source must be a video, a GIF or a directory of image frames")
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
+        if sys.platform == "darwin":
+            return _frames_avfoundation(source, fps, limit, folder)
         raise RuntimeError("Install ffmpeg to analyze video, or supply an extracted PNG sequence")
     seconds = 0.0
     ffprobe = shutil.which("ffprobe")
@@ -78,6 +83,63 @@ def _frames(source: Path, fps: float, limit: int, folder: Path):
     if len(paths) < 3:
         raise ValueError("No usable frames extracted from the video")
     return paths, [i / chosen_fps for i in range(len(paths))], chosen_fps
+
+
+def _frames_gif(source: Path, fps: float, limit: int, folder: Path):
+    """An animated GIF on its own frame clock (per-frame delays), resampled to ``fps`` over the whole clip."""
+    from PIL import ImageSequence
+    with Image.open(source) as gif:
+        starts, total, frames = [], 0.0, []
+        for fr in ImageSequence.Iterator(gif):
+            starts.append(total)
+            total += max(fr.info.get("duration", 100), 10) / 1000.0
+            frames.append(fr.convert("RGBA"))
+    if len(frames) < 3:
+        raise ValueError("GIF needs at least 3 frames")
+    rate = min(fps if fps > 0 else 24.0, limit / total)
+    n = max(3, min(limit, int(total * rate)))
+    paths = []
+    for i in range(n):
+        t = i / rate
+        j = max(k for k in range(len(starts)) if starts[k] <= t + 1e-9)
+        im = frames[j]
+        if max(im.size) > 256:
+            k = 256 / max(im.size)
+            im = im.resize((round(im.width * k), round(im.height * k)), Image.Resampling.BILINEAR)
+        path = folder / f"f_{i + 1:06d}.png"
+        im.save(path)
+        paths.append(path)
+    return paths, [i / rate for i in range(n)], rate
+
+
+def _video_tool() -> Path:
+    """bin/video_frames.swift compiled once per source version (Apple's own swiftc, no download)."""
+    src = Path(__file__).resolve().parent / "bin" / "video_frames.swift"
+    tag = hashlib.sha256(src.read_bytes()).hexdigest()[:12]
+    exe = Path.home() / ".cache" / "claude-spine" / f"video_frames-{tag}"
+    if not exe.exists():
+        swiftc = shutil.which("swiftc") or "/usr/bin/swiftc"
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        p = subprocess.run([swiftc, "-O", str(src), "-o", str(exe) + ".tmp"], capture_output=True, text=True,
+                           timeout=300, check=False)
+        if p.returncode != 0:
+            raise RuntimeError("No ffmpeg, and the AVFoundation frame reader did not compile "
+                               "(install the Xcode command line tools, or ffmpeg):\n" + p.stderr[-600:])
+        Path(str(exe) + ".tmp").replace(exe)
+    return exe
+
+
+def _frames_avfoundation(source: Path, fps: float, limit: int, folder: Path):
+    """macOS without ffmpeg: AVFoundation samples the whole clip like the ffmpeg path does."""
+    p = subprocess.run([str(_video_tool()), str(source), str(folder), str(fps if fps > 0 else 24.0), "256",
+                        str(limit)], capture_output=True, text=True, timeout=300, check=False)
+    if p.returncode != 0:
+        raise RuntimeError(f"could not read {source.name}: {p.stderr.strip()[-400:]}")
+    info = json.loads(p.stdout.strip().splitlines()[-1])
+    paths = sorted(folder.glob("f_*.png"))
+    if len(paths) < 3:
+        raise ValueError("No usable frames extracted from the video")
+    return paths, [i / info["fps"] for i in range(len(paths))], info["fps"]
 
 
 def _array(path: Path, max_edge: int = 256) -> np.ndarray:
@@ -227,6 +289,14 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
         compacted = _compact(frames, key_positions)
         duration = max(1 / effective_fps, times[-1])
         main = frames[beats["peak"]]
+        # light structure (rays / hollow centre) over the frames round the peak, for picking a template
+        near = range(max(0, beats["peak"] - 2), min(len(paths), beats["peak"] + 3))
+        shapes = []
+        for i in near:
+            arr = _array(paths[i])
+            lum = arr[..., :3] @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+            shapes.append(ae_fx_template_fit.shape_traits(lum * _mask(arr, method, bg)))
+        shape = {k: round(float(np.mean([v[k] for v in shapes])), 4) for k in ("rays", "hollow")}
         light = np.array([f["color"] for f in frames])
         weights = np.asarray(raw_energies) + 1e-6
         avg = (light * weights[:, None]).sum(axis=0) / sum(weights)
@@ -252,7 +322,7 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
                          "direction": [round(frames[beats["hi"]]["x"] - frames[beats["lo"]]["x"], 4),
                                        round(frames[beats["hi"]]["y"] - frames[beats["lo"]]["y"], 4)],
                          "travel": round(speed, 4),
-                         "coverage_peak": main["coverage"],
+                         "coverage_peak": main["coverage"], "shape": shape,
                          "color": [round(float(v), 4) for v in avg],
                          "peak_energy": round(peak, 6)},
             "keys": [{"t": round(frames[i]["time"] / duration, 6),
@@ -312,7 +382,10 @@ def capture(source: str, library_dir: str, name: str, fps: float = 24.0,
             "beats": preset["analysis"]["beats"], "keys": len(preset["keys"]),
             "mask_mode": method, "archived": preset["source"]["archived"],
             "stored_source": preset["source"]["path"], "warnings": warnings,
-            "next": "ae_fx_remix recipe=<recipe path> out_dir=<output folder> strength=1.8 style=anime"}
+            "templates": [{k: r[k] for k in ("template", "score", "why")}
+                          for r in ae_fx_template_fit.rank(preset, 4)],
+            "next": "ae_fx_auto_fit recipe=<recipe path> out_dir=<output folder> (auditions the templates), or "
+                    "ae_fx_remix recipe=<recipe path> out_dir=<output folder> template=<one of templates>"}
 
 
 
@@ -361,9 +434,11 @@ def _js(value) -> str:
 def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premium",
           color: str = "", speed: float = 1.0, spark_count: int = -1,
           comp_name: str = "", save_as: str = "", canvas: int = 1024,
-          fit: dict | None = None) -> dict:
+          fit: dict | None = None, template: str = "auto", template_params: dict | None = None) -> dict:
     """Write editable JSX. Run via AE MCP ae_run_script or File > Scripts > Run Script File.
 
+    ``template`` = a stored AE template to rebuild from (``ae_fx_template_fit``; "auto" = the best-ranked one for
+    this recipe), or "shapes" for the plain core / halo / ring / spark layers.
     A .jsx builds a reusable multi-layer composition; it is NOT a .ffx preset.
     """
     if style not in ("stylized", "premium", "realistic", "anime"):
@@ -392,7 +467,7 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
     w, h = max(32, round(w * factor)), max(32, round(h * factor))
     col = _hex_color(color, obj["analysis"]["color"])
     bounds = {
-        "energy_gain": (.2, 4.), "radius_gain": (.35, 3.),
+        "energy_gain": (.05, 8.), "radius_gain": (.1, 4.),
         "halo_gain": (.2, 3.), "ring_gain": (.3, 3.),
         "offset_x": (-.45, .45), "offset_y": (-.45, .45),
         "time_shift": (-.4, .4), "roughness": (0., 65.), "timeline": (0., 1.),
@@ -425,6 +500,24 @@ def remix(recipe: str, out_dir: str, strength: float = 1.0, style: str = "premiu
             "dy": _clamp(float(entry.get("dy", 0)), -.35, .35),
         })
     fit["timeline"] = local
+    if template != "shapes":
+        ranked = ae_fx_template_fit.rank(obj)
+        chosen = ranked[0]["template"] if template == "auto" else template
+        name = _slug(comp_name or (obj["id"] + "_" + chosen))
+        built = ae_fx_template_fit.build(obj, chosen, name, path, w, h, fps, duration,
+                                         _hex_color(color, obj["analysis"]["color"]), fit, strength,
+                                         template_params, save_as)
+        return {**built, "duration": round(duration, 4), "fps": fps, "canvas": [w, h], "fit": fit,
+                "candidates": [r["template"] for r in ranked[:4]],
+                "control_sliders": ["Impact Strength", "Global Scale"],
+                "source_recipe": str(Path(recipe).expanduser().resolve()),
+                "save_as": str(Path(save_as).expanduser().resolve()) if save_as else None,
+                "candidate_mode": "black" if built["mode"] == "additive" else "alpha",
+                "run_with": "AE MCP ae_run_script or After Effects > File > Scripts > Run Script File",
+                "usage": "Outer comp = the fit (position / scale / opacity / exposure keys on one layer); the "
+                         "template comp inside it keeps every one of its own controls.",
+                "limits": "A stored template matched to the reference's timing, size, colour and energy, not an "
+                          "inverse render; try the other candidates (or ae_fx_auto_fit) when the look differs."}
     time_offset = fit["time_shift"] * duration
     time_keys = [round(max(0, _clamp(float(k["t"])) * duration + time_offset), 5) for k in keys]
     e = [_clamp(float(k["energy"]) * fit["energy_gain"] * local[i]["energy"])
