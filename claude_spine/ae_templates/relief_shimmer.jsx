@@ -20,7 +20,7 @@ for (var k = 0; k < 2; k++) {
   em.property("ADBE Emboss-0001").setValue(k ? 315 : 135);
   em.property("ADBE Emboss-0002").setValue(P.relief);
   em.property("ADBE Emboss-0003").setValue(P.contrast);
-  if (k) l.blendingMode = BlendingMode.ADD;
+  if (k) l.blendingMode = BlendingMode.LIGHTEN;   // not ADD: each Emboss is grey .5 on flat areas, .5 + .5 = white everywhere (a flat fill, no relief)
 }
 var adj = stack.layers.addSolid([1, 1, 1], "relief_levels", W, H, 1); adj.adjustmentLayer = true;
 var lv = AEFX.fx(adj, "ADBE Easy Levels2");

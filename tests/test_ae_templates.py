@@ -124,6 +124,16 @@ def test_magic_and_prism_templates_colour_once_so_they_stay_two_tone(tmp_path):
     assert '"spectrum":0.05' in prism and "var long" not in prism        # `long` is reserved in ExtendScript
 
 
+def test_relief_shimmer_emboss_layers_do_not_add(tmp_path):
+    """Each Emboss outputs mid-grey 0.5 on flat areas; ADD-ing the two directions made every flat pixel 1.0, so after
+    the levels threshold the whole art was one flat fill with no relief. The second emboss must combine with LIGHTEN."""
+    import re
+    src = open(ae_templates.build_script("relief_shimmer", {"image": "/x.png"}, tmp_path)["script"]).read()
+    stack = src[src.index('"_emboss"'):src.index('"relief_levels"')]
+    modes = re.findall(r"blendingMode\s*=\s*BlendingMode\.(\w+)", stack)
+    assert modes == ["LIGHTEN"], modes
+
+
 ES3_RESERVED = ("abstract boolean byte char class const debugger double enum export extends final float goto implements "
                 "import int interface long native package private protected public short static super synchronized "
                 "throws transient volatile").split()
