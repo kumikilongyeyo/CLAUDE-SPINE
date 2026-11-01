@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import numpy as np
 import pytest
@@ -94,7 +95,7 @@ def test_release_zips_round_trip_and_refuse_odd_paths(fake_books, tmp_path, monk
     import io
     import zipfile
     zips = F.pack_release(str(tmp_path / "rel"), str(fake_books))
-    assert sorted(p.split("/")[-1] for p in zips) == ["glow_pulse.zip", "win_aura.zip"]
+    assert sorted(os.path.basename(p) for p in zips) == ["glow_pulse.zip", "win_aura.zip"]
     cache = tmp_path / "cache"
     monkeypatch.setattr(F, "data_dir", lambda: cache)
 
