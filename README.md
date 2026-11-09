@@ -177,7 +177,7 @@ cheaper as one AE flipbook.
 ### Ready AE flipbooks: `fx_flipbook` (new)
 
 The non-particle After Effects templates rendered ONCE and stored, so they drop onto any asset with no After Effects:
-caustics, electric_frame, energy_burst, fire, fire_aura, fire_strip, flame_wisps, fog_roll, sand_roll, frost_creep,
+caustics, cel_smoke, cel_puff, cel_plume, electric_frame, energy_burst, fire, fire_aura, fire_strip, flame_wisps, fog_roll, sand_roll, frost_creep,
 glow_pulse, god_rays, lens_flare, lightning, magic_glow, magic_smoke, magic_smoke_dark, orbit_ribbons (back / front),
 portal_ring, prism_glow, ripple_glow, ripple_lines, shockwave, smoke_haze, smoke_puff, win_aura (in / loop / out).
 (The particle templates are `fx_emitter` presets `ae_*`; templates that need your art or text, such as

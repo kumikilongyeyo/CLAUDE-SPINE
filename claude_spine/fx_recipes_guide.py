@@ -1477,6 +1477,66 @@ Why it is built this way (each one was a visible fault first):
 | churning plasma edge, lightning, smoke, fire, painterly turbulence | no (needs noise every frame) | yes: `ae_template` fire / lightning / portal_ring / electric_frame, then `ae_fx_to_spine` |
 | a smoke glow sitting on a UI bar | the glow is Spine (additive soft ellipse) | the smoke body is AE (fractal noise, looped) |
 
+## Cel smoke: two flat tones that swell, hollow and break (AE `cel_smoke`)
+
+Learnt by reading the .aep of a commercial cel smoke pack (20 renders, 90 comps, 31 effects) with a script that dumps
+every layer, blend mode, effect value and key. No art or render from the pack is stored here: the template rebuilds
+the technique with built-in effects only.
+
+How the pack is made:
+
+- **One stack, reused everywhere.** A soft source goes through Transform (Scale Height keyed 46 -> 100: born flat,
+  springs up) -> CC Radial ScaleWipe (Completion 0 -> 0.33: a hole opens from the inside) -> Minimax Minimum (radius
+  0 -> 18: thins it) + Minimax Maximum (6 -> 0: fat start) -> Fast Box Blur that GROWS (0 -> 59) -> two Turbulent
+  Displace (Size 254, Complexity 1, Amount 0 -> 96 and 0 -> 181 at 50% effect opacity: big slow lumps) -> Extract on
+  alpha (black point 163, softness 10). The blur grows while the threshold stays, so the thinnest parts fall under it
+  first: the mass swells, hollows into a ring, the ring breaks into crescents, the crescents into slivers.
+- **Generations.** Every finished render is imported again as the SOURCE of the next effect: a soft fireball ->
+  Explosion simple -> Quick plume -> Floor plume -> Mini puff -> Single puff plume -> Cascade, Curl, S plume, Lrg
+  explosion, Mini nuke. Re-treating a render with new warps is how twenty effects come out of one fireball.
+- **Two tones, never a gradient.** Base A29072, light C1AE90 (on 303336). Base = a copy with Fill. Light = a copy
+  keyed to its own lighter part (Extract luminance 164-170) or an offset displaced copy, then Fast Box Blur + Curves
+  to round it, then matted inside the base, so a rim of base shows on the shadow side.
+- **A shape pass on top of every final comp.** Adjustment layers: Bulge (Bulge Height keyed 0 -> 1 ... 2.7) swells
+  the mass outward so the hole grows into a ring; Optics Compensation (FOV keyed 0 -> 115 -> 0) wobbles a puff;
+  Twirl (Angle 0 -> -76) curls a plume over; Mesh Warp and Liquify bend it; a parent null keys the scale.
+- **Texture from a soft blob** (the Lrg explosion base): big Fast Box Blur -> Turbulent Noise (Contrast 168) ->
+  Extract luminance 139. The noise cuts the angular notches a smooth blob never has.
+- **Extras:** Tint / Tritone / Hue-Saturation + Posterize recolour copies; Echo (22 echoes, decay 0.91) smears a shade
+  trail; CC Power Pin pins smoke copies along a rocket trail. Displacer Pro (a third-party plug-in) appears in a few
+  comps: Turbulent Displace replaces it here.
+
+Use it:
+
+    ae_template name=cel_smoke params={style: explosion, comp: cel_v1, save_as: x.aep}
+    ae_template name=cel_smoke params={style: puff, base: 6E5A8C, light: 9C86B8}
+    ae_template name=cel_smoke params={style: plume, twirl: -140, duration: 1.4}
+    ae_template name=cel_smoke params={source: /path/to/render.mov, comp: retreat_v1}   (re-treat any render)
+    ae_fx_to_spine aep=x.aep comp=cel_v1 mode=alpha
+
+`style`: explosion (a cluster bursts and hollows into crescents), puff (a round ball swells, wobbles and shrinks
+away, no hole), plume (a column pushed up from the floor curls over into a hook and thins to an arc). Knobs, all in
+the pack's own units (pixels on a 1080 comp, scaled to `size`): `hollow` (wipe completion, 0..1), `erode`, `round`
+(the growing blur), `wobble` (the two displace amounts), `lump` (displace size), `threshold` / `softness`, `swell`
+(Bulge height), `jag` (noise cuts, 0 = smooth), `squash`, `twirl`, `light_angle` / `highlight` / `highlight_erode`
+(where the light tone sits), `pace` (below 1 plays the stack faster), `grow` (share of the time the source takes to
+swell). `source` + `source_key` (alpha, or luma for a render on black) + `source_speed` (0 = the whole footage
+stretched onto the duration) re-treat footage the way the pack does.
+
+Traps found while rebuilding it:
+
+- Extract only REMOVES pixels below its threshold; the kept ones keep their blurred alpha, so the edge stays soft.
+  The pack hardens it with Curves (a Curves effect's data cannot be read by script); Levels on alpha around the
+  same threshold does the same job.
+- CC Radial ScaleWipe Completion is 0..1, not a percentage. Minimax Operation 1 = Minimum (erodes), 2 = Maximum.
+- Without a last strong erosion key the final sliver sits on screen to the end; the template eats everything by
+  90% of the duration.
+- A realistic fireball whose alpha fades makes a poor slowed-down source: a low threshold on it gives ghost bands.
+  Stretch it onto the duration (source_speed 0) and keep the threshold near 163.
+- The pack's renders are QuickTime Animation .mov, which macOS AVFoundation no longer decodes: read their frames
+  through After Effects (saveFrameToPng). Opening the converted project took longer than the AppleEvent timeout;
+  AE kept loading and finished.
+
 ## Fork: change a recipe
 
 - Recolour: `color=` (ring and flare bake a texture per colour: `fx/rune_ring_<HEX>`; the rest are white textures tinted

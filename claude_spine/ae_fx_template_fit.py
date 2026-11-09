@@ -40,6 +40,7 @@ CANDIDATES: dict[str, dict] = {
     "fire_aura":    {"kinds": {"loop"}, "grow": False, "warm": True, "rise": True, "mode": "alpha"},
     "portal_ring":  {"kinds": {"loop"}, "grow": False, "sat": True, "cool": True, "mode": "additive"},
     "lens_flare":   {"kinds": {"hit"}, "grow": False, "hot": True, "mode": "additive"},
+    "cel_smoke":    {"kinds": {"hit"}, "grow": True, "sat": False, "hot": False, "mode": "alpha"},
 }
 COUNT_PARAMS = ("n", "count", "motes", "droplets")
 
@@ -142,6 +143,7 @@ COLOR_ROLES = {
     "metal_sparks": {"hot": "hot", "cool": "base", "droplet_hot": "light", "droplet_cool": "deep"},
     "smoke_puff": {"light": "light", "mid": "base", "shadow": "deep"},
     "lens_flare": {"tint": "base"},
+    "cel_smoke": {"base": "base", "light": "light"},
 }
 _DEFAULT_ROLES = {"color": "base", "core_color": "hot", "color2": "light"}
 

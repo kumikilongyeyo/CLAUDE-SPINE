@@ -190,3 +190,29 @@ def test_win_aura_three_comps_one_colour_param_and_silhouette_precomp(tmp_path):
                                                        "core": ""}, tmp_path)["script"]).read()
     assert '"edge": ""' in art and "_silhouette" in art and "hug = src.layers.add(silc)" in art
     assert ".forEach" not in src and "JSON." not in src
+
+
+def test_cel_smoke_is_the_cel_pack_stack_in_two_flat_tones(tmp_path):
+    """cel_smoke: the stack read out of a commercial cel smoke pack (squash -> radial hole -> erode -> growing blur ->
+    hard alpha -> big lumps -> Extract), coloured as two flat tones, with a Bulge pass on top; three styles and a
+    re-treat mode that pushes any footage through the same stack."""
+    t = ae_templates.list_templates()
+    assert "cel_smoke" in t and "re-treat" in t["cel_smoke"]["doc"].lower()
+    d = t["cel_smoke"]["params"]
+    assert (d["base"], d["light"], d["threshold"], d["softness"], d["lump"]) == ("A29072", "C1AE90", 163, 10, 254)
+    assert d["hollow"] == 0.33 and d["squash"] == 46 and d["style"] == "explosion" and d["source"] == ""
+    src = open(ae_templates.build_script("cel_smoke", {}, tmp_path)["script"]).read()
+    order = [src.index(k) for k in ('"ADBE Geometry2"', '"CC Radial ScaleWipe"', '"ADBE Minimax"', '"ADBE Box Blur2"',
+                                    "harden(L)", '"ADBE Turbulent Displace"', '"ADBE Extract"', '"ADBE Fill"',
+                                    '"ADBE Bulge"')]
+    assert order == sorted(order)
+    for key in ('"Alpha Input Black"', "TrackMatteType.ALPHA", "BlendingMode.STENCIL_LUMA", '"ADBE Twirl"',
+                '"ADBE Optics Compensation"', '"mode":"alpha"', "P.hollow]", '"Operation", 1', '"Operation", 2'):
+        assert key in src, key
+    assert "P.hollow * 100" not in src                      # CC Radial ScaleWipe Completion is 0..1
+    assert ".forEach" not in src and "JSON." not in src and "PEDX" not in src   # built-in effects only
+    for style in ("puff", "plume"):
+        assert ae_templates.build_script("cel_smoke", {"style": style}, tmp_path / style)["params"]["style"] == style
+    r = ae_templates.build_script("cel_smoke", {"source": "/x/render.mov", "source_key": "luma"}, tmp_path / "re")
+    s = open(r["script"]).read()
+    assert '"source": "/x/render.mov"' in s and "AEFX.imp(P.source)" in s and '"Take Alpha From", 5' in s

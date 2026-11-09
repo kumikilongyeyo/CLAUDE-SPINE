@@ -17,7 +17,7 @@ def fx_flipbook(project: str = "", name: str = "", part: str = "", x: float = 0.
                 copies: list[list[float | None] | dict[str, Any]] | None = None, anchor: list[float] | None = None,
                 feather: float = 0.0, slot_name: str = "") -> dict:
     """Ready After Effects flipbooks: the non-particle AE templates rendered ONCE and stored in the rigger, so
-    they drop onto any asset with NO After Effects: caustics, electric_frame, energy_burst, fire, fire_aura,
+    they drop onto any asset with NO After Effects: caustics, cel_smoke, cel_puff, cel_plume, electric_frame, energy_burst, fire, fire_aura,
     fire_strip, flame_wisps, fog_roll, sand_roll, frost_creep, glow_pulse, god_rays, lens_flare, lightning,
     magic_glow, magic_smoke, magic_smoke_dark, orbit_ribbons (parts back / front), portal_ring, prism_glow,
     ripple_glow, ripple_lines, shockwave, smoke_haze, smoke_puff, win_aura (parts in / loop / out).

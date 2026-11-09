@@ -37,6 +37,11 @@ CATALOG: dict[str, dict] = {
     "electric_frame": {"template": "electric_frame", "doc": "Crackling electricity round a square frame. Feature cells, locked symbols."},
     "energy_burst":   {"template": "energy_burst", "doc": "Cyan energy-smoke pop round a button or symbol: pops in 2 frames, holds, falls to a haze. Button taps."},
     "fire":           {"template": "fire", "doc": "A soft rising flame, loops. Torches, braziers, a burning symbol."},
+    "cel_smoke":      {"template": "cel_smoke", "doc": "Cartoon two-tone smoke burst that hollows into crescents and slivers, one-shot. Cartoon hits, poofs."},
+    "cel_puff":       {"template": "cel_smoke", "params": {"style": "puff"},
+                       "doc": "Cartoon two-tone smoke ball that swells, wobbles and shrinks away, one-shot. Landings, appear / vanish."},
+    "cel_plume":      {"template": "cel_smoke", "params": {"style": "plume"},
+                       "doc": "Cartoon two-tone smoke plume pushed up from the floor, curling into a hook, one-shot. Skids, launches."},
     "fire_aura":      {"template": "fire_aura", "doc": "Flames shooting outward from a hole (power-up aura), loops. Behind a symbol or character."},
     "fire_strip":     {"template": "fire_strip", "doc": "A straight strip of flames rising from a base line, loops; bend it along a path with ae_fx_along_path frames_dir=."},
     "flame_wisps":    {"template": "flame_wisps", "doc": "Anamorphic flame wisps, one-shot, tintable. Spin buttons, banners."},
@@ -64,7 +69,7 @@ CATALOG: dict[str, dict] = {
                        "doc": "A symbol's win aura in three parts: flare in, smoky loop, dissolve out."},
 }
 ONCE = {"energy_burst", "flame_wisps", "frost_creep", "lens_flare", "lightning", "shockwave", "smoke_puff",
-        "glow_pulse"}
+        "glow_pulse", "cel_smoke", "cel_puff", "cel_plume"}
 
 
 def data_dir() -> Path:
